@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="890" viewBox="0 0 1500 890" role="img" aria-labelledby="t d">
+  <title id="t">3차 프로젝트 전체 아키텍처</title>
+  <desc id="d">사용자 경험, Application과 광고 서버의 책임, 독립적으로 준비되는 상품 데이터를 세 영역으로 구분한다.</desc>
+  <defs>
+    <style>text{font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif;fill:#19334c}.title{font-size:40px;font-weight:700}.sub{font-size:19px;fill:#617184}.section{font-size:21px;font-weight:700}.head{font-size:21px;font-weight:700}.body{font-size:17px;fill:#435b70}.foot{font-size:16px;fill:#617184}.a{stroke:#718499;stroke-width:3;fill:none;marker-end:url(#arrow)}.feed{stroke:#10968b;stroke-width:3;stroke-dasharray:8 7;fill:none;marker-end:url(#teal)}</style>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto"><path d="M1 1L10 5.5L1 10" fill="none" stroke="#718499" stroke-width="2"/></marker>
+    <marker id="teal" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto"><path d="M1 1L10 5.5L1 10" fill="none" stroke="#10968b" stroke-width="2"/></marker>
+  </defs>
+  <rect width="1500" height="890" fill="#f5f8fc"/><rect width="1500" height="10" fill="#2677ca"/>
+  <text class="title" x="58" y="72">스케치에서 실제 상품까지</text>
+  <text class="sub" x="59" y="108">템플릿 기반 공간 생성 · 별도 광고 서버의 유사 상품 추천 · 다나와 연결</text>
+
+  <rect x="40" y="140" width="1420" height="180" rx="20" fill="white" stroke="#d8e2ec" stroke-width="2"/>
+  <text class="section" x="63" y="177" fill="#2864ac">01  사용자 경험</text>
+  <g fill="#edf5ff" stroke="#bed3ea" stroke-width="1.5"><rect x="62" y="198" width="240" height="90" rx="14"/><rect x="346" y="198" width="240" height="90" rx="14"/><rect x="630" y="198" width="240" height="90" rx="14"/><rect x="914" y="198" width="240" height="90" rx="14"/><rect x="1198" y="198" width="240" height="90" rx="14"/></g>
+  <text class="head" x="82" y="234">입력</text><text class="body" x="82" y="262">사진 + 스케치/텍스트</text>
+  <text class="head" x="366" y="234">공간 이미지 생성</text><text class="body" x="366" y="262">템플릿 기반 결과</text>
+  <text class="head" x="650" y="234">물체 선택</text><text class="body" x="650" y="262">품목·영역 확인</text>
+  <text class="head" x="934" y="234">상품 비교</text><text class="body" x="934" y="262">실제 유사 상품</text>
+  <text class="head" x="1218" y="234">다나와에서 확인</text><text class="body" x="1218" y="262">검증된 연결 주소</text>
+  <path class="a" d="M307 243H335"/><path class="a" d="M591 243H619"/><path class="a" d="M875 243H903"/><path class="a" d="M1159 243H1187"/>
+
+  <rect x="40" y="346" width="1420" height="264" rx="20" fill="white" stroke="#d8e2ec" stroke-width="2"/>
+  <text class="section" x="63" y="383" fill="#7051ae">02  서비스 책임</text>
+  <rect x="62" y="404" width="635" height="170" rx="16" fill="#f4f1ff" stroke="#c1b5e8" stroke-width="2"/>
+  <text class="head" x="88" y="445">Application · Django</text>
+  <text class="body" x="88" y="480">입력 보존 → 외부 AI 호출 → 결과·물체 저장</text>
+  <text class="body" x="88" y="510">추천 요청 · 화면 응답 · 클릭 기록</text>
+  <text class="foot" x="88" y="548">생성 Consumer는 Application의 별도 프로세스</text>
+  <path class="a" d="M702 488H817"/><text class="foot" x="716" y="474">내부 API</text>
+  <rect x="832" y="404" width="606" height="170" rx="16" fill="#edf9f6" stroke="#a1d7cc" stroke-width="2"/>
+  <text class="head" x="858" y="445">광고 서버 · Django / FAISS</text>
+  <text class="body" x="858" y="480">선택 물체와 유사한 실제 상품 검색·정렬</text>
+  <text class="body" x="858" y="510">상품 카드와 다나와 이동 대상 결정</text>
+  <text class="foot" x="858" y="548">Application이 추천 이력과 사용자 이벤트 저장</text>
+
+  <rect x="40" y="636" width="1420" height="189" rx="20" fill="white" stroke="#d8e2ec" stroke-width="2"/>
+  <text class="section" x="63" y="673" fill="#a06a19">03  별도로 준비하는 상품 데이터</text>
+  <g fill="#fff8ed" stroke="#ecd5ad" stroke-width="1.5"><rect x="62" y="697" width="370" height="90" rx="14"/><rect x="565" y="697" width="370" height="90" rx="14"/><rect x="1068" y="697" width="370" height="90" rx="14"/></g>
+  <text class="head" x="84" y="733">원천·이미지 보존</text><text class="body" x="84" y="761">MongoDB · 이미지 저장소</text>
+  <text class="head" x="587" y="733">상품 정제·검증</text><text class="body" x="587" y="761">Kafka · Spark · Delta</text>
+  <text class="head" x="1090" y="733">서비스 자료 준비</text><text class="body" x="1090" y="761">MySQL · 상품 검색 인덱스</text>
+  <path class="a" d="M438 743H551"/><path class="a" d="M941 743H1054"/>
+  <path class="feed" d="M1240 689V588"/>
+  <text class="foot" x="58" y="862">상품 수집·정제는 사용자 요청과 독립적으로 실행됩니다. 추천이 실패해도 이미 생성된 공간 결과는 유지됩니다.</text>
+</svg>
