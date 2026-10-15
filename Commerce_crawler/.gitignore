@@ -1,0 +1,8 @@
+.local-deps/
+.venv/
+__pycache__/
+*.pyc
+*.log
+.env
+data/danawa/
+config/danawa_pagination.local.json

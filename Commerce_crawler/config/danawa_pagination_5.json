@@ -1,0 +1,250 @@
+{
+  "headers": {},
+  "categories": {
+    "15241194": {
+      "payload": [
+        {
+          "categoryCode": "41194",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11241",
+          "physicsCate3": "11242",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "headers": {
+        "Referer": "https://prod.danawa.com/list/?cate=15241194"
+      },
+      "metadata": {
+        "public_category_id": "15241194",
+        "category_name": "침대",
+        "categoryCode": "41194",
+        "physicsCate1": "1826",
+        "physicsCate2": "11241",
+        "physicsCate3": "11242",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      }
+    },
+    "15240504": {
+      "payload": [
+        {
+          "categoryCode": "40504",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11123",
+          "physicsCate3": "58840",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "headers": {
+        "Referer": "https://prod.danawa.com/list/?cate=15240504"
+      },
+      "metadata": {
+        "public_category_id": "15240504",
+        "category_name": "책상",
+        "categoryCode": "40504",
+        "physicsCate1": "1826",
+        "physicsCate2": "11123",
+        "physicsCate3": "58840",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      }
+    },
+    "1523647": {
+      "payload": [
+        {
+          "categoryCode": "3647",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "32303",
+          "physicsCate3": "32346",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "headers": {
+        "Referer": "https://prod.danawa.com/list/?cate=1523647"
+      },
+      "metadata": {
+        "public_category_id": "1523647",
+        "category_name": "학생/사무용의자",
+        "categoryCode": "3647",
+        "physicsCate1": "1826",
+        "physicsCate2": "32303",
+        "physicsCate3": "32346",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      }
+    },
+    "15241240": {
+      "payload": [
+        {
+          "categoryCode": "41240",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11287",
+          "physicsCate3": "59859",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "headers": {
+        "Referer": "https://prod.danawa.com/list/?cate=15241240"
+      },
+      "metadata": {
+        "public_category_id": "15241240",
+        "category_name": "식탁",
+        "categoryCode": "41240",
+        "physicsCate1": "1826",
+        "physicsCate2": "11287",
+        "physicsCate3": "59859",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      }
+    },
+    "15227279": {
+      "payload": [
+        {
+          "categoryCode": "27279",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11182",
+          "physicsCate3": "11186",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "headers": {
+        "Referer": "https://prod.danawa.com/list/?cate=15227279"
+      },
+      "metadata": {
+        "public_category_id": "15227279",
+        "category_name": "선반",
+        "categoryCode": "27279",
+        "physicsCate1": "1826",
+        "physicsCate2": "11182",
+        "physicsCate3": "11186",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      }
+    }
+  }
+}
