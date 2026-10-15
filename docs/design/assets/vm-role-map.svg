@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="770" viewBox="0 0 1440 770" role="img" aria-labelledby="title desc">
+<title id="title">로컬 인프라의 역할 구성</title>
+<desc id="desc">사용자 서비스, 상품 준비와 처리, 데이터 저장, 접근 관리의 역할을 묶은 구성도입니다. VM 대수와 IP는 문서의 배치표에서 관리합니다.</desc>
+<defs>
+<style>
+text{font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif;fill:#17324b}
+.title{font-size:37px;font-weight:700}.sub{font-size:18px;fill:#596e80}
+.lane-title{font-size:21px;font-weight:700}.card-title{font-size:20px;font-weight:700}
+.card-body{font-size:16px;fill:#52697d}.note{font-size:16px;fill:#576e80}
+</style>
+</defs>
+<rect width="1440" height="770" fill="#f6f9fc"/>
+<rect width="1440" height="9" fill="#218f83"/>
+<text class="title" x="52" y="66">로컬 인프라의 역할 구성</text>
+<text class="sub" x="53" y="103">역할별로 묶은 그림입니다. VM 대수와 IP는 문서의 배치표에서 관리합니다.</text>
+
+<rect x="38" y="128" width="1364" height="132" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
+<rect x="55" y="144" width="7" height="28" rx="3" fill="#176b63"/>
+<text class="lane-title" x="76" y="166">A  사용자 서비스 · 추천</text>
+<rect x="80" y="184" width="570" height="61" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
+<text class="card-title" x="100" y="210">Application</text>
+<text class="card-body" x="100" y="233">Django 웹 · AI Consumer · 직접 발행</text>
+<rect x="790" y="184" width="570" height="61" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
+<text class="card-title" x="810" y="210">광고 서버</text>
+<text class="card-body" x="810" y="233">상품 검색 · 추천 · 링크 결정</text>
+
+<rect x="38" y="276" width="1364" height="132" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
+<rect x="55" y="292" width="7" height="28" rx="3" fill="#285d9b"/>
+<text class="lane-title" x="76" y="314">B  상품 준비 · 분산 처리</text>
+<rect x="80" y="332" width="360" height="61" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
+<text class="card-title" x="100" y="358">NiFi</text>
+<text class="card-body" x="100" y="381">원천 수집 · 이미지 준비</text>
+<rect x="540" y="332" width="360" height="61" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
+<text class="card-title" x="560" y="358">Kafka</text>
+<text class="card-body" x="560" y="381">이벤트 전달 · 처리 분리</text>
+<rect x="1000" y="332" width="360" height="61" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
+<text class="card-title" x="1020" y="358">Spark</text>
+<text class="card-body" x="1020" y="381">Bronze · Silver · Gold 처리</text>
+
+<rect x="38" y="424" width="1364" height="132" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
+<rect x="55" y="440" width="7" height="28" rx="3" fill="#9a6422"/>
+<text class="lane-title" x="76" y="462">C  데이터 저장</text>
+<rect x="62" y="480" width="292" height="61" rx="13" fill="#fff5e8" stroke="#e2bc80" stroke-width="1.5"/>
+<text class="card-title" x="79" y="506">MongoDB</text>
+<text class="card-body" x="79" y="529">상품 원천 문서</text>
+<rect x="396" y="480" width="292" height="61" rx="13" fill="#fff5e8" stroke="#e2bc80" stroke-width="1.5"/>
+<text class="card-title" x="413" y="506">MySQL</text>
+<text class="card-body" x="413" y="529">서비스 · 추천 이력</text>
+<rect x="730" y="480" width="292" height="61" rx="13" fill="#fff5e8" stroke="#e2bc80" stroke-width="1.5"/>
+<text class="card-title" x="747" y="506">이미지 저장소</text>
+<text class="card-body" x="747" y="529">상품 · 템플릿 · 결과</text>
+<rect x="1064" y="480" width="292" height="61" rx="13" fill="#fff5e8" stroke="#e2bc80" stroke-width="1.5"/>
+<text class="card-title" x="1081" y="506">Delta 저장소</text>
+<text class="card-body" x="1081" y="529">테이블 · checkpoint</text>
+
+<rect x="38" y="572" width="1364" height="132" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
+<rect x="55" y="588" width="7" height="28" rx="3" fill="#69648e"/>
+<text class="lane-title" x="76" y="610">D  접근 · 구성 관리</text>
+<rect x="320" y="628" width="800" height="61" rx="13" fill="#f1eff8" stroke="#aaa1cb" stroke-width="1.5"/>
+<text class="card-title" x="340" y="654">Bastion · Ansible</text>
+<text class="card-body" x="340" y="677">관리자 접근 · 서비스 구성 배포</text>
+
+<text class="note" x="53" y="746">그림은 기능적 역할을 표시합니다. 실제 대수 · 실행 위치 · 물리 배치는 배치표와 검증 결과를 따릅니다.</text>
+</svg>
