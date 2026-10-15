@@ -40,7 +40,7 @@
 
 서비스는 기존 생성 실행·AI 분석 결과 및 jobs.input_refs_json의 불변 출력 참조와 checksum으로 계획/검사를 연결한다. 이번 정책은 신규 DB 컬럼·테이블을 추가하지 않는다. 정책 버전, 입력/원본/참조 checksum, 모델·분석 스키마·전처리 버전과 계획을 생성 실행에 고정한다. 실제 서비스 분석 유형·JSON 저장 배치는 통합 시 확정한다.
 
-로컬 웹 MVP는 scene-context-scale-v4를 사용한다. 참조 구조 분석 후 scale 단계에서 Gemini를 한 번 추가 호출하며 원본 사진·선택 참조 두 장을 전달한다. scale.json은 불변 단계 출력이며 generation_request.json에 같은 scale_plan과 api_scale_bounds를 고정한다. 비교는 기존 3장 호출에 scale_check를 추가한다. 호출 응답·시도·latency·출력 checksum은 기존 단계 보존 방식을 따른다. 전용 깊이/카메라 보정 모델 또는 실측 엔진 구현을 뜻하지 않는다.
+로컬 웹 MVP의 새 요청은 scene-context-local-v5와 로컬 정책 semantic-results-v1을 사용한다. v4에서 도입한 참조 구조 분석 후 scale 단계 Gemini 호출과 원본 사진·선택 참조 두 장은 유지한다. scale.json은 불변 단계 출력이며 generation_request.json에 같은 scale_plan과 api_scale_bounds를 고정한다. 비교는 기존 3장 호출의 scale_check를 사용한다. 수치 범위 대조·선택 가능 여부·대표 검토 상태는 코드에서 결정하고 compare.json.local_processing에 원래 visual_scale_status·gates·status·duration_ms를 기록한다. API 원응답은 receipt에 보존하며 원근 판정의 불확실성은 수치 통과로 해소하지 않는다. 호출 응답·시도·latency·출력 checksum은 기존 단계 보존 방식을 따른다. 전용 깊이/카메라 보정 모델 또는 실측 엔진 구현을 뜻하지 않는다.
 
 | JSON | 의미 |
 |---|---|
@@ -52,7 +52,7 @@
 | api_scale_bounds | 여백 사본 기준으로 변환한 폭/높이 비율 범위 |
 | scale_check | status, room_geometry, findings, reason; 수치 비교 가능 시 observed_api_ratios·expected_api_bounds 추가 |
 
-LOW 계획으로도 생성 예시는 제공할 수 있으나 공간 비례는 미확인으로 남고 추천 선택은 보류된다. 이전 버전 실행은 재작성하지 않는다. 새 생성 정책은 새 요청부터 적용하며, 이전 실행의 비교 재시도에는 고정 계획이 없으므로 크기 판정을 보류한다. CLI 및 일괄 임베딩에는 이번 웹 정책을 적용하지 않는다. 로컬 MVP의 다나와 참조 사용은 별도 시험 범위이며 서비스용 템플릿/상품 분리 원칙을 변경하지 않는다.
+LOW 계획으로도 생성 예시는 제공할 수 있으나 공간 비례는 미확인으로 남고 추천 선택은 보류된다. 이전 버전 실행은 재작성하지 않는다. 새 준비·생성 정책은 새 요청부터 적용한다. v4 결과의 명시적 비교 재시도는 기존 고정 크기 계획을 재사용하고, 더 이전의 계획 없는 결과는 크기 판정을 보류한다. CLI 및 일괄 임베딩에는 이번 웹 정책을 적용하지 않는다. 로컬 MVP의 다나와 참조 사용은 별도 시험 범위이며 서비스용 템플릿/상품 분리 원칙을 변경하지 않는다.
 
 ## 인수 기준
 

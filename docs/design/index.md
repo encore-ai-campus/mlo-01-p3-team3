@@ -49,4 +49,10 @@
 
 ## 공간 대비 크기 작업 읽는 순서
 
+기존 공간 크기 작업의 순서는 아래와 같다. 해석 이후 계산을 수정할 때는 다음 절의 코드 처리 문서도 확인한다.
+
 BRD·PRD → [공간 크기 정책](11-scale-policy.md) → [템플릿·좌표](08-template-generation.md) → [Application](04-application-ai.md) → [복구](05-kafka-jobs.md) → [운영 검증](06-operations-migration.md) 순서로 읽는다. 크기 계획은 원본 주변 물체의 통상 치수 범위와 원근에 근거하며 과대·과소·판단 불가를 구분한다.
+
+## 해석 이후 코드 처리 작업 읽는 순서
+
+먼저 BRD·PRD와 [AI와 코드 책임](04-application-ai.md#ai와-해석-이후-코드의-책임)을 읽는다. 함께 [추천·순위](07-ad-server.md#해석-결과의-검색과-정렬), [좌표·프롬프트](08-template-generation.md#해석-결과의-좌표와-프롬프트-조립), [크기 검증](11-scale-policy.md), [성능·복구 검증](06-operations-migration.md#해석-이후-코드-처리-검증)을 확인한다. 기존 사용자 절차·외부 임베딩·시각 해석은 유지한다. 코드 정책 변경 시 버전·receipt와 가공 출력·캐시·이전 실행의 재시도 경계를 함께 갱신하고 서비스 설계와 로컬 구현 상태를 구분한다.
