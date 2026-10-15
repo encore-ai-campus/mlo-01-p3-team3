@@ -8,7 +8,7 @@ MongoDB는 불변 원천과 수집기 보조 운영 데이터를, MySQL은 최�
 
 ## DB 복제와 데이터 접근
 
-MySQL Primary·Replica 두 노드는 같은 서비스 스키마와 UUID PK·FK를 복제한다. MongoDB 세 멤버도 같은 원천 컬렉션과 ObjectId를 복제한다. 복제본별 엔터티를 ERD에 추가하지 않고 기존 테이블·컬럼·쓰기 담당을 유지한다.
+MySQL Primary 1대·Replica 2대는 같은 서비스 스키마와 UUID PK·FK를 복제한다. MongoDB 세 멤버도 같은 원천 컬렉션과 ObjectId를 복제한다. 복제본별 엔터티를 ERD에 추가하지 않고 기존 테이블·컬럼·쓰기 담당을 유지한다.
 
 초기 MySQL 업무 읽기·쓰기는 현재 Primary에 연결한다. MongoDB 원천 저장은 writeConcern={w: majority, j: true}, Spark 원천 조회는 readPreference=primary·readConcern=majority를 사용한다. DB 장애 전환과 결과 미확인 재시도에서도 원천 ID·업무 키·event_id를 유지한다. 물리 구성·연결 설정은 [DB 다중화 계약](01-infrastructure.md#db-다중화와-접속-계약), 복구·손실 대조는 [운영](06-operations-migration.md#db-복제와-장애-복구)을 따른다.
 

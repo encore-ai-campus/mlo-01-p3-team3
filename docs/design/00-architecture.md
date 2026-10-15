@@ -32,9 +32,9 @@ Application은 템플릿 기반 공간 이미지를 만들고, 별도 광고 서
 
 ## DB 다중화 결정
 
-사용자 지정으로 MySQL은 Primary 1대·Replica 1대, MongoDB는 데이터 보관·투표 멤버 3대의 Replica Set을 구성한다. MySQL 초기안은 GTID 기반 비동기 복제와 수동 장애 전환, MongoDB는 과반수 유지 시 자동 Primary 선출이다. MySQL 읽기·쓰기는 현재 Primary, MongoDB 원천 저장은 majority 확인 후 이벤트 발행을 기준으로 한다.
+사용자 지정으로 MySQL은 Primary 1대·Replica 2대, MongoDB는 데이터 보관·투표 멤버 3대의 Replica Set을 구성한다. MySQL 초기안은 GTID 기반 비동기 복제와 수동 장애 전환, MongoDB는 과반수 유지 시 자동 Primary 선출이다. MySQL 읽기·쓰기는 현재 Primary, MongoDB 원천 저장은 majority 확인 후 이벤트 발행을 기준으로 한다.
 
-이 구성의 로컬 VM은 18대이며 이미지·Delta 저장 VM만 S3로 대체하면 같은 역할 배치의 EC2는 16대다. 상세 대수·사양·접속 계약은 [인프라](01-infrastructure.md#db-다중화와-접속-계약), 장애 전환·복원 검증은 [운영](06-operations-migration.md#db-복제와-장애-복구)에 둔다. 현재 문서는 구축·성능·복구 시험 완료를 뜻하지 않는다.
+이 구성의 로컬 VM은 19대이며 이미지·Delta 저장 VM만 S3로 대체하면 같은 역할 배치의 EC2는 17대다. 상세 대수·사양·접속 계약은 [인프라](01-infrastructure.md#db-다중화와-접속-계약), 장애 전환·복원 검증은 [운영](06-operations-migration.md#db-복제와-장애-복구)에 둔다. 현재 문서는 구축·성능·복구 시험 완료를 뜻하지 않는다.
 
 ## 사용자 흐름
 

@@ -5,7 +5,7 @@
 | 작업 | 문서 |
 |---|---|
 | 전체 경계와 요구사항 | [아키텍처](00-architecture.md) |
-| DB 2+3대 복제·접속·장애 전환 | [인프라 DB 계약](01-infrastructure.md#db-다중화와-접속-계약), [운영 복구](06-operations-migration.md#db-복제와-장애-복구) |
+| DB 3+3대 복제·접속·장애 전환 | [인프라 DB 계약](01-infrastructure.md#db-다중화와-접속-계약), [운영 복구](06-operations-migration.md#db-복제와-장애-복구) |
 | VMware·서비스 배치·저장소·AWS 이전 | [인프라](01-infrastructure.md) |
 | 상품 자료 준비·Spark·Gold·반응 집계 | [파이프라인](02-data-pipeline.md) |
 | 상품·판매처·원천·입력·이미지 연결 키 | [데이터 모델](03-data-model.md), [속성 사전](data-dictionary/index.md) |

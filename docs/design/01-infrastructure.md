@@ -6,7 +6,7 @@ VMware 기반 로컬 VM에 서비스를 배치하고 검증 후 AWS로 이전한
 
 ## 기반 사양과 증설 상태
 
-현재 설계는 로컬 VM 18대이며 실제 설치·자원 검증 완료를 뜻하지 않는다. Application과 광고 서버는 분리하고 이미지·Delta 저장소도 각각 둔다. 이 문서의 서버명은 역할을 구분하기 위한 논리 이름이다. 실제 IP·서브넷·서버명과 주소의 대응표는 저장소 밖의 환경별 배포 설정에서 관리한다.
+현재 설계는 로컬 VM 19대이며 실제 설치·자원 검증 완료를 뜻하지 않는다. Application과 광고 서버는 분리하고 이미지·Delta 저장소도 각각 둔다. 이 문서의 서버명은 역할을 구분하기 위한 논리 이름이다. 실제 IP·서브넷·서버명과 주소의 대응표는 저장소 밖의 환경별 배포 설정에서 관리한다.
 
 | 영역 | 현재 역할 | VM 수 | 논리 서버명 |
 |---|---|---|---|
@@ -16,7 +16,7 @@ VMware 기반 로컬 VM에 서비스를 배치하고 검증 후 AWS로 이전한
 | 메시지 | Kafka Broker·KRaft Controller | 3 | kafka-01~kafka-03 |
 | 분산 처리 | Spark Master/Driver·Workers | 4 | spark-master-01, spark-worker-01~spark-worker-03 |
 | 상품 준비 | NiFi | 1 | nifi-01 |
-| MySQL | Primary·Replica | 2 | mysql-01, mysql-02 |
+| MySQL | Primary 1대·Replica 2대 | 3 | mysql-01, mysql-02, mysql-03 |
 | MongoDB | 3노드 Replica Set | 3 | mongo-01, mongo-02, mongo-03 |
 | 파일 | 이미지용·Delta용 Object Storage | 2 | media-storage-01, lake-storage-01 |
 
@@ -54,15 +54,15 @@ VMware 기반 로컬 VM에 서비스를 배치하고 검증 후 AWS로 이전한
 
 </details>
 
-## AI API 방식과 18대 초기 구성
+## AI API 방식과 19대 초기 구성
 
-- 광고 서버의 논리 이름은 ad-01이다. MySQL 2대·MongoDB 3대와 이미지·Delta 저장 VM을 포함해 초기 운영은 18대로 계획한다.
+- 광고 서버의 논리 이름은 ad-01이다. MySQL 3대·MongoDB 3대와 이미지·Delta 저장 VM을 포함해 초기 운영은 19대로 계획한다.
 - 작업 상태와 오류는 MySQL 및 Django 운영 화면으로 확인하고 상세 로그는 서비스별 파일 또는 systemd·컨테이너 로그로 관리한다.
 - spark-worker-01~spark-worker-03의 Spark Worker 세 대는 유지한다. AI 전용 VM을 추가하거나 Spark VM을 AI 서버로 전환하지 않는다.
 - app-01에서 Django 웹, AI API Consumer, 작업 복구를 별도 프로세스 또는 컨테이너로 실행한다. 웹 서버 시작 훅에 Consumer를 포함하지 않는다.
 - 모델 추론은 외부 API가 수행한다. app-01에는 모델 가중치나 GPU를 배치하지 않는다. 이미지 읽기·변환에 사용하는 RAM과 동시 요청 수를 제한하고 웹 응답 지연을 측정한다.
 - Application 서버는 이미지 저장소·Kafka·MySQL과 통신하며 외부 모델 API로 나가는 HTTPS 연결이 필요하다. 웹과 Consumer는 별도로 재시작할 수 있지만 서버 장애는 공유한다.
-- AWS에서 이미지용과 Delta용 저장 VM을 S3로 대체하면 EC2는 16대다. AI API Consumer는 Django EC2 안에서 실행한다.
+- AWS에서 이미지용과 Delta용 저장 VM을 S3로 대체하면 EC2는 17대다. AI API Consumer는 Django EC2 안에서 실행한다.
 
 ### 작업 프로세스의 자원 경계
 
@@ -70,31 +70,32 @@ VMware 기반 로컬 VM에 서비스를 배치하고 검증 후 AWS로 이전한
 
 ## DB 다중화와 접속 계약
 
-MySQL 2대와 MongoDB 3대를 각각 별도 VM으로 배치한다. 기존 DB 2대에 MySQL 1대·MongoDB 2대를 추가한다. DB의 논리 스키마·원천 식별자·쓰기 담당은 유지하며 복제본별 테이블이나 컬렉션을 새로 설계하지 않는다. 설치·복제·장애 전환 검증 완료를 뜻하지 않는다.
+MySQL 3대와 MongoDB 3대를 각각 별도 VM으로 배치한다. 기존 DB 2대에 MySQL 2대·MongoDB 2대를 추가한다. DB의 논리 스키마·원천 식별자·쓰기 담당은 유지하며 복제본별 테이블이나 컬렉션을 새로 설계하지 않는다. 설치·복제·장애 전환 검증 완료를 뜻하지 않는다.
 
 | 노드 | 역할 | 초기 사양 후보 |
 |---|---|---|
 | mysql-01 | 초기 Primary, 서비스 읽기·쓰기 | 2 vCPU·RAM 4GB부터 |
 | mysql-02 | 읽기 전용 Replica, 수동 승격 대상 | 2 vCPU·RAM 4GB부터 |
+| mysql-03 | 읽기 전용 Replica, 수동 승격 대상 | 2 vCPU·RAM 4GB부터 |
 | mongo-01 | 데이터·투표 멤버, 초기 Primary 후보 | 2 vCPU·RAM 4GB부터 |
 | mongo-02 | 데이터·투표 멤버, 초기 Secondary 후보 | 2 vCPU·RAM 4GB부터 |
 | mongo-03 | 데이터·투표 멤버, 초기 Secondary 후보 | 2 vCPU·RAM 4GB부터 |
 
-실제 주소는 저장소 밖의 환경별 배포 설정에서 사용 여부·DHCP 충돌을 확인한 뒤 배정하고 논리 서버명의 DNS/호스트 매핑도 함께 확정한다. MySQL 두 VM은 서로 다른 노트북, MongoDB 세 VM은 각각 다른 노트북에 배치한다. 장애 후 승격될 노드도 정상 쓰기 부하를 감당하도록 사양을 정한다. 데이터 디스크는 DB 전체 데이터·인덱스·MySQL binlog·MongoDB oplog·초기 동기화 여유로 산정한다. 추가 VM 3대의 초기 자원 후보는 6 vCPU·RAM 12GB·OS 디스크 90GB이며 데이터 디스크·호스트 여유는 별도다.
+실제 주소는 저장소 밖의 환경별 배포 설정에서 사용 여부·DHCP 충돌을 확인한 뒤 배정하고 논리 서버명의 DNS/호스트 매핑도 함께 확정한다. MySQL 세 VM은 각각 서로 다른 노트북, MongoDB 세 VM은 각각 다른 노트북에 배치한다. 장애 후 승격될 노드도 정상 쓰기 부하를 감당하도록 사양을 정한다. 데이터 디스크는 DB 전체 데이터·인덱스·MySQL binlog·MongoDB oplog·초기 동기화 여유로 산정한다. 추가 VM 4대의 초기 자원 후보는 8 vCPU·RAM 16GB·OS 디스크 120GB이며 데이터 디스크·호스트 여유는 별도다.
 
 ### MySQL Primary와 Replica
 
-초기안은 InnoDB의 GTID 기반 비동기 복제다. 서로 다른 server_id·server_uuid, binlog 활성화·ROW 형식, GTID 설정과 복제 전용 계정을 사용한다. Replica는 read_only·super_read_only로 애플리케이션 쓰기를 차단한다. 두 노드 구성에 자동 선출·무중단·데이터 손실 0을 보장한다고 표시하지 않는다. 복제 방식의 제품 버전별 설정과 승격 절차는 구축 시 검증한다. [MySQL GTID 복제](https://dev.mysql.com/doc/refman/8.4/en/replication-gtids.html)
+초기안은 InnoDB의 GTID 기반 비동기 복제다. 서로 다른 server_id·server_uuid, binlog 활성화·ROW 형식, GTID 설정과 복제 전용 계정을 사용한다. Replica는 read_only·super_read_only로 애플리케이션 쓰기를 차단한다. Primary 1대와 Replica 2대의 비동기 복제 구성은 기존 수동 장애 전환 방식을 유지한다. 대수 증가를 자동 선출·무중단·데이터 손실 0 보장으로 표시하지 않는다. 복제 방식의 제품 버전별 설정과 승격 절차는 구축 시 검증한다. [MySQL GTID 복제](https://dev.mysql.com/doc/refman/8.4/en/replication-gtids.html)
 
 Django·AI Consumer·작업 복구·광고 서버·Spark 검수 조회 및 MySQL 반영은 초기에는 현재 Primary에서 읽고 쓴다. Replica 읽기 분산은 복제 지연에 따른 상태 불일치를 검증한 후 별도 결정한다. 공통 MySQL 쓰기 접속 주소를 환경 설정으로 관리하고 수동 승격 후 각 프로세스의 설정·연결 풀을 새 Primary로 전환한다. 초기 구성에 별도 Router·VIP 서버는 추가하지 않는다.
 
-장애 전환은 기존 Primary의 쓰기 차단·격리 → Replica의 GTID·적용 상태 대조 → 허용 손실 판단과 수동 승격 → 접속 설정 갱신·재연결 → 쓰기 검증·작업 복구 순서다. 기존 Primary가 복귀하면 그대로 쓰기 서버로 재개하지 않고 새 Primary 기준으로 재동기화해 Replica로 합류시킨다. 상세 검증은 [DB 복제와 장애 복구](06-operations-migration.md#db-복제와-장애-복구)를 따른다.
+장애 전환은 기존 Primary의 쓰기 차단·격리 → Replica 두 대의 GTID·적용 상태 대조 및 승격 후보 선정 → 허용 손실 판단과 수동 승격 → 접속 설정 갱신·재연결 → 쓰기 검증·작업 복구 순서다. 기존 Primary가 복귀하면 그대로 쓰기 서버로 재개하지 않고 새 Primary 기준으로 재동기화해 Replica로 합류시킨다. 승격되지 않은 기존 Replica도 새 Primary를 복제하도록 연결·동기화 상태를 확인한다. 상세 검증은 [DB 복제와 장애 복구](06-operations-migration.md#db-복제와-장애-복구)를 따른다.
 
 ### MongoDB 3노드 Replica Set
 
 세 노드 모두 데이터를 보관하고 투표하는 Primary-Secondary-Secondary 구성으로 같은 Replica Set에 등록한다. Arbiter는 두지 않는다. 초기 Primary 후보는 고정 Primary가 아니며 선출 후 역할이 바뀔 수 있다. 세 노드 중 두 노드가 통신하고 선출 조건을 충족하면 한 노드 장애 시 새 Primary를 선출할 수 있다. 두 노드가 중단돼 과반수를 잃으면 쓰기를 대기시키며 단독 노드를 강제 Primary로 만들어 진행하지 않는다. [MongoDB 3노드 구성](https://www.mongodb.com/docs/manual/core/replica-set-architecture-three-members/)
 
-연결 설정 후보는 mongodb://mongo-01:27017,mongo-02:27017,mongo-03:27017/{db}?replicaSet=rs-products&readPreference=primary&w=majority&journal=true다. DB 이름과 Replica Set 이름은 배포 설정에서 고정하고 인증정보는 비밀 설정으로 주입한다. advertised 멤버 이름은 NiFi/Python·Spark와 모든 MongoDB 멤버에서 해석·접근 가능해야 한다. 멤버 간 인증과 접근 제어를 적용하고 TLS 인증서·클라이언트 호환을 검증한다.
+연결 설정은 mongo-01·mongo-02·mongo-03 멤버와 replicaSet=rs-products, readPreference=primary, w=majority, journal=true를 포함한다. 실제 접속 URI는 저장소 밖의 환경별 배포 설정으로 주입한다. DB 이름과 Replica Set 이름은 배포 설정에서 고정하고 인증정보는 비밀 설정으로 주입한다. advertised 멤버 이름은 NiFi/Python·Spark와 모든 MongoDB 멤버에서 해석·접근 가능해야 한다. 멤버 간 인증과 접근 제어를 적용하고 TLS 인증서·클라이언트 호환을 검증한다.
 
 원천 저장은 writeConcern={w: majority, j: true} 확인 후 성공으로 집계하고 Kafka 발행을 허용한다. 초기 Spark 원천 조회는 readPreference=primary·readConcern=majority로 통일한다. 복제 지연이 있는 Secondary를 임의로 읽지 않는다. 쓰기 확인·서버 선택·네트워크 timeout은 운영 설정으로 제한한다. 확인 실패는 실제 미저장을 뜻하지 않으므로 동일 원천 ID·중복 키로 상태를 대조하고 과반수 보존을 다시 확인한 뒤 재발행한다. [MongoDB 쓰기 확인](https://www.mongodb.com/docs/manual/reference/write-concern/)
 
@@ -110,23 +111,23 @@ Application(app-01)에서 템플릿 제작·임베딩 준비·해석·공간 생
 
 ## 물리 배치와 네트워크
 
-Kafka 세 대와 MongoDB 세 멤버는 각각 서로 다른 노트북에 분산하고, MySQL Primary·Replica도 서로 다른 노트북에 둔다. 이미지용과 Delta용 Object Storage도 가능하면 다른 노트북과 물리 디스크를 사용한다. 같은 노트북의 VM 분리는 프로세스와 설정을 분리하지만 물리 장애와 디스크 부하는 공유한다.
+Kafka 세 대와 MongoDB 세 멤버는 각각 서로 다른 노트북에 분산하고, MySQL Primary·Replica 세 VM도 각각 서로 다른 노트북에 둔다. 이미지용과 Delta용 Object Storage도 가능하면 다른 노트북과 물리 디스크를 사용한다. 같은 노트북의 VM 분리는 프로세스와 설정을 분리하지만 물리 장애와 디스크 부하는 공유한다.
 
 실제 IP 대역은 환경별 배포 설정에서 정한다. 대역폭은 유선 또는 무선 링크 속도로 따로 기록한다. 여러 노트북의 VM은 Bridged 네트워크 또는 라우팅된 네트워크로 연결한다. 노트북마다 같은 NAT 대역을 만드는 것만으로 VM들이 연결되지는 않는다.
 
-| 서비스 | 포트 초안 | 접근 범위 |
-|---|---|---|
-| SSH | 22 | 관리자와 Bastion |
-| 사용자 웹 접속 | 80, 443 후보 | 사용자. 실제 배포 접속 구성은 별도 확정 |
-| Django 내부 접속 | 8000 예시 | 허용된 내부 호출자, 외부 직접 공개 여부는 별도 확정 |
-| 광고 서버 API | 8001 예시 | Application과 운영 조회 프록시 |
-| MySQL | 3306 | Application, 광고 서버의 제한 계정, AI, 반영 작업, DB 간 복제·관리 |
-| MongoDB | 27017 | NiFi/Python, Spark, 관리자, Replica Set 멤버 간 통신 |
-| Kafka | 9092, Controller 9093 예시 | 내부 클라이언트와 Kafka |
-| Spark | Master 7077, UI 8080과 8081, Driver와 Executor 고정 포트 | 내부 처리와 관리자 |
-| SeaweedFS S3 | 8333 후보 | Spark와 관리자 |
+| 서비스 | 접근 범위 |
+|---|---|
+| SSH | 관리자와 Bastion |
+| 사용자 웹 접속 | 사용자. 실제 배포 접속 구성은 별도 확정 |
+| Django 내부 접속 | 허용된 내부 호출자, 외부 직접 공개 여부는 별도 확정 |
+| 광고 서버 API | Application과 운영 조회 프록시 |
+| MySQL | Application, 광고 서버의 제한 계정, AI, 반영 작업, DB 간 복제·관리 |
+| MongoDB | NiFi/Python, Spark, 관리자, Replica Set 멤버 간 통신 |
+| Kafka | 내부 클라이언트와 Kafka |
+| Spark | 내부 처리와 관리자 |
+| SeaweedFS S3 | Spark와 관리자 |
 
-NiFi HTTPS, 저장소 관리 UI, Spark 통신 포트는 제품 버전과 실제 설정에 맞춰 확정한다. 서비스 이름을 DNS 또는 공통 호스트 설정으로 관리한다. Kafka advertised.listeners와 MongoDB 및 Spark 접속 주소가 클라이언트에서 실제로 접근 가능해야 한다.
+실제 서비스 접속 주소·포트·인증정보는 저장소 밖의 환경별 배포 설정에서 관리한다. 서비스 이름을 DNS 또는 공통 호스트 설정으로 관리한다. Kafka advertised.listeners와 MongoDB 및 Spark 접속 주소가 클라이언트에서 실제로 접근 가능해야 한다.
 
 ## Object Storage (Delta용) VM 구축안
 
@@ -155,7 +156,7 @@ project-checkpoints/
   mysql-publishing/
 ```
 
-접속 주소 예시는 http://lake-storage-01:8333이며 테이블 경로는 s3a://project-lake/silver/normalized_offers/다. S3 경로와 서버 파일시스템 경로는 다르며 실제 내부 파일 배치는 저장소가 관리한다.
+접속 endpoint는 환경별 배포 설정에서 주입하며 테이블 경로 예시는 s3a://project-lake/silver/normalized_offers/다. S3 경로와 서버 파일시스템 경로는 다르며 실제 내부 파일 배치는 저장소가 관리한다.
 
 Spark Driver와 Workers 모두 저장소에 접근할 수 있어야 한다. Spark와 Delta 호환 버전, Hadoop에 맞는 hadoop-aws 및 의존성, endpoint, path-style, 인증과 TLS를 설정한다. 초기에는 테이블마다 쓰기 담당 Driver를 하나로 제한한다. Worker 여러 대가 같은 Driver의 실행에 참여하는 것은 가능하다.
 
