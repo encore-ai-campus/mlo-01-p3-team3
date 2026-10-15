@@ -206,7 +206,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
         raise ValueError("workers must be a positive integer")
     detail_interval = client.interval
     adapter.validate_categories(categories)
-    records, previous = checkpoint.restore() if checkpoint else ({}, {})
+    records, previous = checkpoint.restore(copy_records=False) if checkpoint else ({}, {})
     previous_requests = previous.get("requests", [])
     previous_categories = {c["category_id"]: c for c in previous.get("categories", [])}
     job_id = checkpoint.job_id if checkpoint else str(uuid4())
@@ -320,6 +320,8 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
                                     'categories': [], 'payload': {'listings': [], 'detail': None},
                                     'detail_status': 'not_requested' if collect_details else 'disabled', 'detail_error': None}
                                 outcome['new_products'] += 1
+                            elif checkpoint:
+                                records[key] = copy.deepcopy(records[key])
                             record = records[key]
                             membership = {**category.as_dict(), 'observed_category_name': diagnostics.get('observed_category_name')}
                             if not any(c['category_id'] == category.category_id for c in record['categories']):
@@ -364,8 +366,15 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
                           "product_id": record["product_id"], "status": record["detail_status"], "cached": True})
             continue
         if not collect_details:
-            record["detail_status"] = "disabled"
+            if record['detail_status'] != 'disabled':
+                record = copy.deepcopy(record)
+                records[(record['source'], record['product_id'])] = record
+                record['detail_status'] = 'disabled'
+                persist([record])
             continue
+        if checkpoint:
+            record = copy.deepcopy(record)
+            records[(record['source'], record['product_id'])] = record
         if not adapter.needs_detail(listing):
             record["detail_status"] = "not_needed"
             persist([record])

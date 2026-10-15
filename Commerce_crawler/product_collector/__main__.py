@@ -19,7 +19,16 @@ PRINT_LOCK = threading.Lock()
 
 def show_progress(event):
     stage = event['stage']
-    if stage == 'request':
+    if stage == 'checkpoint_read':
+        total = event['total']
+        percent = 100 * event['completed'] / total if total else 100
+        text = f"[이력 복원] {percent:.1f}% / {event['completed'] / 1048576:.1f}/{total / 1048576:.1f} MB / 상품 {event['products']}개 / {event['elapsed']:.1f}초"
+    elif stage == 'checkpoint_files':
+        text = (f"[상품 파일 복구] {event['completed']}/{event['total']}개 / {event['elapsed']:.1f}초"
+                if event['total'] else '[상품 파일 복구] 대상 없음 / 저장 완료한 파일 검사 생략')
+    elif stage == 'checkpoint_ready':
+        text = f"[복원 완료] 상품 {event['products']}개 / {event['elapsed']:.1f}초"
+    elif stage == 'request':
         text = f"[요청 {event['number']}] {event['method']} {event['url']}"
     elif stage == 'category':
         text = f"[카테고리 {event['index']}/{event['total']}] {event['name'] or ''} ({event['category_id']})"
@@ -54,6 +63,7 @@ def main() -> int:
     parser.add_argument("--max-image-requests", type=parse_limit, default=None)
     parser.add_argument("--resume-from", type=Path, help="지정한 작업의 저장 지점에서 재개")
     parser.add_argument("--new-run", action="store_true", help="미완료 작업 재개 대신 새 작업 시작")
+    parser.add_argument("--repair-files", action="store_true", help="개별 상품 JSON 전체 검사·복구. 외부 삭제·손상 시 사용하며 재개 준비가 오래 걸릴 수 있음")
     parser.add_argument("--export-from", type=Path, help="진행 중/중단된 체크포인트를 JSONL로 내보내기. 수집 요청 없음")
     args = parser.parse_args()
     if args.export_from:
@@ -63,6 +73,12 @@ def main() -> int:
         parser.error("--resume-from and --new-run cannot be combined")
     if args.download_images and (args.listing_only or args.reprocess_from):
         parser.error("--download-images requires live detail collection; use gallery_assets for saved runs")
+    if args.download_images:
+        try:
+            from .media import ImageFetcher, localize_images
+            from .validation import verify_assets
+        except ModuleNotFoundError as exc:
+            parser.error(f"이미지 다운로드 의존성이 없습니다: {exc.name}. 실행에 사용하는 Python으로 python -m pip install -r requirements-collector.txt 를 먼저 실행해주세요.")
     if args.reprocess_from:
         try:
             raw, normalized, report = reprocess_run(args.reprocess_from)
@@ -93,9 +109,10 @@ def main() -> int:
               "total_limit": args.total_limit, "collect_details": not args.listing_only,
               "pagination_payloads": {key: value["payload"] for key, value in templates.categories.items()} if templates else {}}
     try:
-        with open_collection(args.output, adapter, config, args.resume_from, args.new_run) as checkpoint:
+        with open_collection(args.output, adapter, config, args.resume_from, args.new_run,
+                             progress=show_progress, repair_files=args.repair_files) as checkpoint:
             destination = checkpoint.directory
-            _, previous = checkpoint.restore()
+            previous = checkpoint.current_report()
             adapter.restore_pagination(previous)
             print(f"[시작] 카테고리 {len(categories)}개 / 목록 작업자 {args.workers}개 / 상품 한도 {args.total_limit or '없음'} / 요청 한도 {args.max_requests or '없음'} / 목록 간격 {args.listing_interval}초 / 상세·다운로드 간격 {args.interval}초", flush=True)
             print(f"[실시간 저장] {destination.resolve()}", flush=True)
@@ -117,8 +134,6 @@ def main() -> int:
     finally:
         client.close()
     if args.download_images:
-        from .media import ImageFetcher, localize_images
-        from .validation import verify_assets
         fetcher = ImageFetcher(args.interval, args.timeout)
         try:
             media_report = localize_images(destination / "products.jsonl", destination / "media", fetcher,

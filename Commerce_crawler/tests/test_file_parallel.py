@@ -72,7 +72,7 @@ class FileParallelTests(unittest.TestCase):
             (directory / 'products/danawa_11.json').unlink()
             with (directory / 'checkpoint_events.jsonl').open('ab') as stream:
                 stream.write(b'{"event":')
-            restored = CollectionCheckpoint(directory, adapter, {})
+            restored = CollectionCheckpoint(directory, adapter, {}, repair_files=True)
             self.assertEqual(len(restored.restore()[0]), 1)
             self.assertTrue((directory / 'products/danawa_11.json').is_file())
             restored.save([], restored.current_report(), [])

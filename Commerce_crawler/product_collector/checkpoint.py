@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 from uuid import uuid4
 
 from .storage import atomic_json, write_jsonl
@@ -44,8 +45,10 @@ def writer_lock(path):
 
 
 class CollectionCheckpoint:
-    def __init__(self, directory, adapter=None, config=None, readonly=False):
+    def __init__(self, directory, adapter=None, config=None, readonly=False, progress=None, repair_files=False):
         self.directory, self.adapter = Path(directory), adapter
+        self.progress = progress
+        started = time.monotonic()
         self.manifest = self.directory / 'run_config.json'
         self.journal = self.directory / 'checkpoint_events.jsonl'
         if self.manifest.exists():
@@ -62,12 +65,24 @@ class CollectionCheckpoint:
         self.records, self.normalized, self.categories, self.requests = {}, {}, {}, {}
         self.report, self.sequence = {}, 0
         self.status = 'running'
+        files_commit = 0
         state = self.directory / 'checkpoint_state.json'
         if state.exists():
-            self.status = json.loads(state.read_text(encoding='utf-8'))['status']
+            saved_state = json.loads(state.read_text(encoding='utf-8'))
+            self.status = saved_state['status']
+            # Legacy writers also saved state only AFTER both product files.
+            if saved_state.get('job_id') == self.job_id:
+                files_commit = saved_state.get('commit', 0)
+            if type(files_commit) is not int or files_commit < 0:
+                raise ValueError('체크포인트 저장 완료 지점이 올바르지 않습니다.')
+        pending_files = set()
         if self.journal.exists():
+            total_bytes = self.journal.stat().st_size
+            read_bytes, last_progress = 0, started
+            self._notify('checkpoint_read', completed=0, total=total_bytes, elapsed=0)
             with self.journal.open('rb') as stream:
                 for line in stream:
+                    read_bytes += len(line)
                     if not line.strip():
                         continue
                     try:
@@ -78,11 +93,34 @@ class CollectionCheckpoint:
                     if event['seq'] != self.sequence + 1 or hashlib.sha256(encoded(event).encode()).hexdigest() != envelope['sha256']:
                         raise ValueError('체크포인트 이력의 순서 또는 해시가 맞지 않습니다.')
                     self._apply(event)
+                    if not readonly and event['seq'] > files_commit:
+                        pending_files.update(self.key(row['raw']) for row in event['records'])
+                    now = time.monotonic()
+                    if now - last_progress >= 1:
+                        self._notify('checkpoint_read', completed=read_bytes, total=total_bytes,
+                                     elapsed=now - started)
+                        last_progress = now
+            self._notify('checkpoint_read', completed=read_bytes, total=total_bytes,
+                         elapsed=time.monotonic() - started)
+        if files_commit > self.sequence:
+            raise ValueError('저장 완료 지점보다 체크포인트 이력이 짧습니다. 기존 파일을 확인해주세요.')
         self.request_base = max(self.requests, default=0)
         self.attempt_versions = {}
         self.category_versions = {key: encoded(value) for key, value in self.categories.items()}
+        self._pending_files = pending_files
         if not readonly:
-            self._materialize(self.records)
+            # The journal is authoritative. Completed mirrors need no startup reads.
+            # --repair-files also checks externally removed/corrupted old mirrors.
+            self._materialize(self.records if repair_files else pending_files,
+                              check_existing=True, show_progress=True)
+            if pending_files or repair_files:
+                self.state(self.status)
+            self._pending_files.clear()
+        self._notify('checkpoint_ready', elapsed=time.monotonic() - started)
+
+    def _notify(self, stage, **values):
+        if self.progress:
+            self.progress({'stage': stage, 'products': len(self.records), 'commit': self.sequence, **values})
 
     @staticmethod
     def key(raw):
@@ -102,19 +140,31 @@ class CollectionCheckpoint:
         self.report = event['report']
         self.sequence = event['seq']
 
-    def _materialize(self, keys):
-        for key in keys:
+    def _materialize(self, keys, check_existing=False, show_progress=False):
+        total = len(keys) if show_progress else 0
+        started = last_progress = time.monotonic()
+        if show_progress:
+            self._notify('checkpoint_files', completed=0, total=total, elapsed=0)
+            if total == 0:
+                return
+        for index, key in enumerate(keys, 1):
             name = f'{key[0]}_{key[1]}.json'
-            for folder, value, hash_key in (('product_raw', self.records[key], 'payload_hash'),
-                                           ('products', self.normalized[key], 'raw_payload_hash')):
+            for folder, value in (('product_raw', self.records[key]), ('products', self.normalized[key])):
                 path = self.directory / folder / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    if json.loads(path.read_text(encoding='utf-8')).get(hash_key) == value.get(hash_key):
-                        continue
-                except (OSError, ValueError):
-                    pass
+                if check_existing:
+                    try:
+                        if json.loads(path.read_text(encoding='utf-8')) == value:
+                            continue
+                    except (OSError, ValueError):
+                        pass
                 atomic_json(path, value)
+            now = time.monotonic()
+            if show_progress and now - last_progress >= 1:
+                self._notify('checkpoint_files', completed=index, total=total, elapsed=now - started)
+                last_progress = now
+        if show_progress:
+            self._notify('checkpoint_files', completed=total, total=total, elapsed=time.monotonic() - started)
 
     def current_report(self):
         report = copy.deepcopy(self.report)
@@ -123,8 +173,10 @@ class CollectionCheckpoint:
                       request_count=len(self.requests), product_count=len(self.records), checkpoint_status=self.status)
         return report
 
-    def restore(self):
-        return copy.deepcopy(self.records), self.current_report()
+    def restore(self, copy_records=True):
+        # The collector copies only products it is about to mutate. Other callers
+        # retain the original isolated snapshot behavior by default.
+        return (copy.deepcopy(self.records) if copy_records else dict(self.records)), self.current_report()
 
     def save(self, changed, report, attempts):
         from .core import payload_hash
@@ -150,7 +202,9 @@ class CollectionCheckpoint:
             os.fsync(stream.fileno())
         self._apply(frozen)
         self.attempt_versions, self.category_versions = versions, category_versions
-        self._materialize(self.key(row['raw']) for row in frozen['records'])
+        self._pending_files.update(self.key(row['raw']) for row in frozen['records'])
+        self._materialize(self._pending_files)
+        self._pending_files.clear()
         self.state('running')
 
     def state(self, status, error=None):
@@ -184,7 +238,7 @@ class CollectionCheckpoint:
 
 
 @contextmanager
-def open_collection(output, adapter, config, resume_from=None, new_run=False):
+def open_collection(output, adapter, config, resume_from=None, new_run=False, progress=None, repair_files=False):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     with writer_lock(output / '.collection.lock'):
@@ -197,7 +251,7 @@ def open_collection(output, adapter, config, resume_from=None, new_run=False):
         elif not (directory / 'run_config.json').is_file():
             raise ValueError(f'파일 체크포인트가 없습니다. 기존 자료는 보존되며 --new-run으로 새 작업을 시작할 수 있습니다: {directory}')
         with writer_lock(directory / 'writer.lock'):
-            store = CollectionCheckpoint(directory, adapter, config)
+            store = CollectionCheckpoint(directory, adapter, config, progress=progress, repair_files=repair_files)
             atomic_json(active, {'directory': str(directory.resolve())})
             try:
                 yield store
