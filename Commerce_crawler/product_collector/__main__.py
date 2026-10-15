@@ -26,7 +26,13 @@ def main() -> int:
     parser.add_argument("--start-page", type=int, help="설정의 시작 페이지를 일괄 재정의")
     parser.add_argument("--max-pages", type=int, help="설정의 최대 페이지 수를 일괄 재정의")
     parser.add_argument("--listing-only", action="store_true", help="상세 요청 없이 목록만 수집")
+    parser.add_argument("--download-images", action="store_true", help="상세 갤러리 다운로드와 상품·파일 연결 검증까지 실행")
+    parser.add_argument("--max-image-requests", type=int, default=3000)
     args = parser.parse_args()
+    if args.download_images and (args.listing_only or args.reprocess_from):
+        parser.error("--download-images requires live detail collection; use gallery_assets for saved runs")
+    if args.max_image_requests < 1:
+        parser.error("max-image-requests must be positive")
     if args.reprocess_from:
         try:
             raw, normalized, report = reprocess_run(args.reprocess_from)
@@ -55,6 +61,21 @@ def main() -> int:
         destination = save_run(args.output, raw, normalized, report)
     finally:
         client.close()
+    if args.download_images:
+        from .media import ImageFetcher, localize_images
+        from .validation import verify_assets
+        fetcher = ImageFetcher(args.interval, args.timeout)
+        try:
+            media_report = localize_images(destination / "products.jsonl", destination / "media", fetcher,
+                                           args.max_image_requests)
+        finally:
+            fetcher.close()
+        verified = verify_assets(destination / "media/products_with_local_images.jsonl", destination / "media")
+        from .storage import atomic_json
+        report["image_download"] = {"result": media_report["result"], "verification": verified["result"]}
+        if media_report["result"] != "completed" or verified["result"] != "completed":
+            report["result"] = "partial"
+        atomic_json(destination / "run_report.json", report)
     print(json.dumps({"output": str(destination.resolve()), "products": len(raw),
                       "requests": report["request_count"], "result": report["result"]}, ensure_ascii=False))
     return 0 if report["result"] == "completed" else 2
