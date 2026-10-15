@@ -1,21 +1,22 @@
-# 데이터 파이프라인: 직접 추천과 오프라인 평가
+# 데이터 파이프라인: 직접 추천과 사전 상품 벡터
 
-2026-10-15 현행. [직접 추천 계약](12-direct-recommendation.md)과 [속성 변경안](data-dictionary/09-direct-recommendation.md)을 따른다. 생성·템플릿 벡터·생성물 분석 경로는 신규 처리에서 제외한다.
-
-## 현행 데이터 경로
+[직접 추천 계약](12-direct-recommendation.md) · [속성](data-dictionary/09-direct-recommendation.md)
 
 | 경로 | 처리 |
 |---|---|
-| 상품 | 원천 MongoDB·이미지 저장→Bronze→Silver 규격/품목/권한/링크 정제→Gold/서비스 MySQL. 상품 이미지 임베딩은 사전 계산→Silver 벡터 확인→광고 서버 CPU 인덱스 |
-| 사용자 | 입력 버전·파일 보존→Delta Bronze 확인→멀티모달 맥락→코드 검증→질의 임베딩/상품 검색·scikit-learn 모델 순위→추천 저장 |
-| 반응 | 실제 노출·선택·명시적 거절·링크 클릭→Bronze→연결/중복/지연 검증 Silver→반응 Gold |
-| 학습·배포 | 승인된 후보/특징 스냅샷 + 사람 평가/검증된 반응→버전 export→scikit-learn Pipeline 학습/평가→호환/품질/CPU 검증→명시적 운영 활성화 |
+| 상품 | 원천 MongoDB/이미지→Bronze→Silver 품목/규격/상품 이미지 대응·이용 조건·링크 정제→Gold/서비스 MySQL |
+| 벡터 | 상품 이미지 임베딩 사전 계산→모델/차원/전처리·상품/행 대응·checksum 고정→CPU 카탈로그 준비 |
+| 사용자 | 입력 버전/Bronze 확인→멀티모달 해석→코드 검사→질의 임베딩→scikit-learn 유사도·수동 가중합→추천 저장 |
+| 반응 | 실제 노출·선택·명시적 거절·클릭→Bronze→연결/중복/지연 검증 Silver→Gold. 초기 추천 학습의 선행 조건 아님 |
+| 후속 실험 | 축적된 실제 반응·소규모 요청별 평가로 초기 가중치/지도학습 비교. 미노출·미클릭 일괄 부적합 처리 금지 |
 
-상품/입력/행동의 원문·실패 기록, 단일 Delta 쓰기 Driver·checkpoint 분리·멱등 적재·Gold 게시 검증은 기존 공통 계약을 유지한다. 다른 상품·옵션의 규격을 합치지 않고 축/단위/측정 대상·미제공을 구분한다. 새로운 추정값을 상품 실측 원장에 쓰지 않는다.
+초기 추천은 라벨 없이 scikit-learn `cosine_similarity`와 수동 초기 가중치로 수행한다. `weighted-content-v1`은 선호 색상이 있으면 `0.85 × 유사도 + 0.15 × 색상 일치`, 없으면 유사도만 사용한다. 필수 조건 불일치는 제외하고 결측·미지원 필수 조건은 UNKNOWN 목록으로 분리한다. 가중치는 학습값이 아니며 점수는 확률이 아니다. 사람의 6만 이미지 전수 적합/부적합 라벨링·LogisticRegression 학습·직렬화 모델 파일은 초기 실행 조건이 아니다. 반응 자료를 충분히 확보한 뒤 지도학습을 별도 평가한다.
 
-오프라인 특징은 요청 당시 자료로 고정하고 반응은 별도 라벨이다. 후보 생성과 실제 노출을 구분하고 미클릭을 일괄 부적합으로 만들지 않는다. export는 버전/행 수/소스 참조/checksum·접근/보관/삭제를 관리하며 Delta 테이블과 일반 export 파일을 구분한다. 요청은 이미 활성화한 모델로 추론하고 매 요청 학습하지 않는다. 모델 미준비/비호환/추론 오류는 구분하며 교체 검증 실패 시 기존 활성 모델을 유지한다.
+원천 ID·상품·이미지·옵션·규격·시점을 보존하고 AI 추정치를 상품 원장에 쓰지 않는다. 원천 보존·단일 Delta Driver·checkpoint·멱등 적재·Gold 게시 검증의 공통 계약은 유지한다.
 
-기존 SVG의 사용자 생성·추천 줄과 템플릿 경로는 역사 그림이다. 현재 담당별 흐름은 [새 다이어그램](12-direct-recommendation.md#담당별-추천-흐름)을 사용한다.
+로컬 `python -m interior_recommender.product_catalog`는 기존 embed-directory 인덱스를 다시 API 호출하지 않고 NPY+상품 manifest로 export한다. 메타데이터는 수집/정제 원장의 image_id→product_id 대응·품목/속성/규격/출처로 보강한다. 연결되지 않은 행은 미확인으로 남긴다. 일회성 export와 시작 검증은 온라인 요청 밖에서 수행하며 기존 로더의 메모리도 측정한다.
+
+로컬 구현은 `src/interior_recommender/recommendation.py`와 `src/interior_recommender/web/direct.py`다. `python -m interior_recommender.web` 기본 경로가 직접 추천이며 기존 Canvas의 `POST /api/runs`를 재사용한다. 해석 1회와 질의 임베딩 1회를 기본으로 하며 성공 receipt를 재사용한다. 별도 입력 절차·템플릿 선택·이미지 생성은 없다. 실제 DB·Kafka·Delta Bronze·광고 서버 HTTP·FAISS·상품 링크 검증 API 통합 및 운영 배포는 아직 미구현이다. 논리 서비스 계약을 로컬 파일 구현 완료와 혼동하지 않는다.
 
 <details>
 <summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
