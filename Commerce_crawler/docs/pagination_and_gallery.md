@@ -19,7 +19,7 @@ Next-Action, Accept=text/x-component, Origin, Referer를 포함한 요청 헤더
 - run_report.categories[].pages[]에 요청한 페이지, 선택 수, 응답 상품 수, 오류를 기록한다.
 - --listing-only에서는 상세 요청을 하지 않고 detail_status=disabled로 표시한다. 일반 수집은 갤러리를 얻기 위해 상품당 상세 요청을 최대 한 번 수행한다.
 - 템플릿이 없는 기본 첫 페이지 GET은 기존 HTML 선택자를 유지한다. 템플릿이 있는 카테고리는 시작 페이지부터 구조화된 POST 응답을 사용한다.
-- 저장은 실행 종료 시점이다. 페이지별 체크포인트·프로세스 강제 종료 후 자동 재개·실행 간 upsert는 미구현이다. 대량 전체 순회 완료를 보장한 것은 아니다.
+- 기본 CLI는 목록 페이지·상세 상품 단위 JSON/JSONL 체크포인트를 저장한다. 강제 종료 후 마지막 완료 지점에서 재개할 수 있으며, 실행 중 JSONL 내보내기도 지원한다. 다른 작업 ID 사이의 전역 upsert는 구현하지 않았다. 대량 전체 순회 완료를 보장한 것은 아니다. [체크포인트 문서](checkpoint.md)를 따른다.
 
 POST 상품의 productCode, name.full/maker/brand/model, description.pc.raw, price.min, image.url, dates.register는 실제 응답에서 확인한 경로만 매핑한다. 전체 상품 객체는 payload.listings[].api_product에 보존한다. 날짜 make 필드의 의미를 등록일로 단정하지 않으며 두 자리 등록 연도도 세기를 추측하지 않는다. API 목록 이미지는 갤러리 배열에 합치지 않는다.
 
@@ -49,3 +49,7 @@ images[]에는 url, role, order, origin, selector, observed_url, resolution_stat
 이후 기본 5개 각각의 1→2페이지 실 검증을 보완했다. 메타데이터 확인 GET 5회+페이지 POST 10회로 총 300개 상품을 확보했고 실사이트 테스트 6개가 통과했다. 5개 실제 요청 메타데이터를 공용 템플릿과 작은 회귀 표본으로 보존했다. 상세 내용은 [5개 카테고리 검증](five_category_pagination_validation.md)을 따른다.
 
 71개 후보는 config/danawa_categories_71.json으로 분리했다. 기본 5개 설정을 유지하고 71개 전체 실행은 수행하지 않았다. 상위/세부 분류 중복과 제외 대상 혼입은 별도 판정이 필요하다. 마지막 페이지까지 또는 71개 모두의 페이지 순회를 검증한 것은 아니다.
+
+## 71개 기본 실행
+
+기본 CLI는 config/danawa_categories_71.json을 읽어 71개 전부를 대상으로 한다. 상품·페이지·요청 상한은 없다. 명시적 템플릿이 없는 카테고리는 첫 목록 HTML에서 자신의 분류 메타데이터를 읽고 공통 요청 인자에 해당 값을 반영한 뒤 POST 페이지를 순회한다. 메타데이터를 찾지 못하면 파싱 실패로 기록한다. 이 자동 준비 경로는 기본 CLI에서 활성화되며, 수동 DanawaAdapter의 기본값은 기존 명시적 템플릿 검증을 유지한다. 실사이트 수집을 실행하지 않고 71개 합성 카테고리 응답의 매개변수와 빈 페이지 종료를 검증했다.

@@ -122,7 +122,7 @@ python -m venv .venv
 
 ## 카테고리 추가와 수집량 조절
 
-카테고리는 5개로 고정되어 있지 않다. `config/danawa_categories.json` 배열에 새로운 항목을 추가하면 입력 순서대로 처리한다. category_id는 숫자 문자열, category_name은 문자열 또는 null, limit은 양의 정수다. 같은 코드의 중복 설정은 거부한다. 이름을 아직 확인하지 못했다면 null로 두고 실행 보고서의 observed_category_name과 제목을 확인한다.
+카테고리는 5개로 고정되어 있지 않다. `config/danawa_categories.json` 배열에 새로운 항목을 추가하면 입력 순서대로 처리한다. category_id는 숫자 문자열, category_name은 문자열 또는 null, limit은 양의 정수 또는 null(무제한)이다. max_pages도 null이면 빈/반복 페이지까지 순회한다. 같은 코드의 중복 설정은 거부한다. 이름을 아직 확인하지 못했다면 null로 두고 실행 보고서의 observed_category_name과 제목을 확인한다.
 
 카테고리별 limit만 늘려서는 다음 페이지로 이동하지 않는다. start_page/max_pages와 해당 카테고리의 POST 템플릿을 함께 설정한다. 새 카테고리를 넣어도 기본 전체 10개·요청 15회 제한은 그대로다. 전체 한도 도달 시 뒤쪽 카테고리가 생략될 수 있고 예산 소진 시 목록 데이터만 저장될 수 있다. total-limit/max-requests를 함께 조정하며 카테고리별 pages/status/reason과 상세 상태를 확인한다. 71개 별도 후보 설정은 config/danawa_categories_71.json에 있고 기본 설정은 5개다.
 
@@ -175,3 +175,9 @@ python -m venv .venv
 ## 협업 안내
 
 `GITHUB_GUIDE.md`의 Issue → 별도 브랜치 → Commit → Push → PR → 팀원 리뷰 → Merge 절차, main 직접 Push 금지, PR 목적·테스트 결과 기재, 민감정보·대용량 데이터 제외 규칙을 준수해야 한다. 사용자가 승인한 범위에서 기능·테스트·문서를 논리적인 로컬 커밋으로 나누며 푸시는 하지 않는다. 로컬 작업 브랜치는 `feature/danawa-multi-category`이며 Issue 번호는 임의로 붙이지 않았다. 향후 사용자가 협업 절차를 진행할 때 실제 Issue 번호를 브랜치명에 반영하고 담당자·완료 조건을 기록해야 한다.
+
+## 기본 실행의 제한 해제
+
+run_collector.cmd와 인자 없는 모듈 실행은 기본 71개 카테고리 설정의 limit/max_pages=null, 전체 상품·요청 한도 없음으로 작동한다. 0으로 지정한 CLI 한도도 무제한이다. 유한한 기존 테스트용 설정과 CLI 한도는 계속 사용할 수 있다. 상세 갤러리 URL을 확보하며 사진 파일은 --download-images를 지정한 경우에만 내려받는다. 실제 대량 수집은 이번 변경에서 실행하지 않았다.
+
+71개 기본 목록은 config/danawa_categories_71.json이다. 현재 로컬에 없는 카테고리별 POST 분류 매개변수는 실행 중 해당 카테고리 HTML의 viewModel에서 관측해 구성한다. 분류 메타데이터가 없으면 다른 카테고리 값으로 요청하지 않고 실패를 기록한다. 71개 전체 순회는 합성 응답으로 검사했으며 실사이트 71개 전체 검증을 했다는 뜻은 아니다.
