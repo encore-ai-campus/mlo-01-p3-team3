@@ -1,3 +1,24 @@
+# 핵심 데이터 관계: 직접 추천
+
+2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 그림/필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.
+
+```mermaid
+erDiagram
+    projects ||--o{ input_revisions : owns
+    input_revisions ||--o{ recommendation_contexts : interpreted
+    input_revisions ||--o{ recommendation_runs : requested
+    recommendation_contexts |o--o{ recommendation_runs : searched_with
+    recommendation_runs ||--o{ recommendation_items : returns
+    products ||--o{ recommendation_items : matched
+    recommendation_items ||--o{ recommendation_impressions : shown
+    recommendation_impressions ||--o{ user_events : responded
+```
+
+접수 중에는 context_id가 NULL일 수 있고 검색 전에는 확정 맥락이 필요하다. 후보 전체/특징/버전은 run의 manifest로, 반환 항목 설명은 item 스냅샷으로 연결하며 반응 라벨은 실제 impression에 연결한다. 원천/벡터/작업의 나머지 공통 관계는 기존 목록을 유지한다.
+
+<details>
+<summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
+
 # 핵심 데이터 관계
 
 입력에서 생성 결과와 상품 추천까지 이어지는 핵심 관계만 표시한다. 전체 필드와 나머지 관계는 [업무별 ERD](03-erd-full.md), 용어는 [데이터 모델](03-data-model.md)을 따른다.
@@ -26,3 +47,5 @@
 그림은 DB 관계이며 서버 호출 순서가 아니다. 비로그인 프로젝트는 user_id가 없을 수 있다. 사진은 필수이고 스케치 또는 텍스트를 입력 버전에 연결한다. 생성 후 물체별로 추천을 요청하며 재추천은 완료된 공간 이미지를 유지한다.
 
 파일·템플릿 연결, 판매 snapshot, 노출, 작업·검수·공통 FK와 상세 속성은 생략했다. 관계를 생략한 것이므로 이 그림만으로 DDL을 작성하지 않는다. 신규 흐름에서 사용하지 않는 placements는 전체 문서의 이전 배치안에서만 확인한다.
+
+</details>

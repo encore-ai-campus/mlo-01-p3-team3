@@ -1,3 +1,31 @@
+# Kafka와 작업 관리: 입력 기반 직접 추천
+
+2026-10-15 현행. [직접 추천의 요청·실패 계약](12-direct-recommendation.md#요청작업실패-계약)을 따른다. 실제 v2 스키마/Consumer/마이그레이션 구현은 별도다.
+
+## 입력 Bronze와 직접 추천 단계 계약
+
+입력 파일/checksum·input_revision·recommendation_run·보존 job을 저장하고 DB 커밋 확인 후 user.input.received를 발행한다. Spark Bronze commit·checksum 대조 후 user.input.bronze.persisted를 발행하며 Application이 보존 확인과 해석 job을 원자적으로 등록한다. Bronze 미확인 상태에서 해석을 시작하지 않는다.
+
+v2 입력/보존/해석 메시지는 input_revision_id·recommendation_run_id·input_hash·고정 파일/텍스트 참조·schema_version을 사용한다. generation_run_id는 신규 필수가 아니다. 기존 생성 스키마와 혼합하지 않도록 새 version/호환 Consumer 전환을 구현한다. 이미 저장된 v1 실행은 원래 참조로 복구하고 v2로 조용히 바꾸지 않는다.
+
+## 신규 사용 토픽과 단계
+
+- user.input.received / user.input.bronze.persisted / input.interpretation.requested: v2 스키마 정의 후 직접 추천에 사용.
+- product.embedding.requested/completed, product.search-index.refresh.requested: 승인 상품 사전 임베딩·적재 확인·인덱스 교체 유지.
+- user.action.recorded 및 기존 원천/실패 전달: 실제 노출·반응·링크/상품 공통 계약 유지.
+- scene.generation.requested, scene.objects.analysis.requested, template.*: 신규 직접 추천에서 발행하지 않음.
+
+해석→코드 검증/맥락 확정→Application Consumer의 광고 서버 내부 HTTP→결과 저장 순서다. 질의/상품 벡터 생성 책임은 광고 서버, 추천 이력과 사용자 이벤트 쓰기는 Application이다. 오프라인 scikit-learn 작업은 신규 사용자 요청의 선행 단계가 아니다.
+
+## 발행과 복구
+
+DB 커밋 후 직접 발행·업무 기록 기반 누락 복구·같은 ID 재발행·입력 hash 대조·단계 고유 키·lease_token·offset 완료 추적을 유지한다. API/검색/파일 처리 중 DB 잠금을 유지하지 않는다. 전달 미확인과 실제 미실행을 구분한다. 코드/저장 실패는 원응답·완료 벡터로 복구하며 요청 변경과 실패 재시도를 구분한다. 미노출 후보를 행동으로 만들지 않고 늦은 run이 최신 추천을 덮어쓰지 않게 한다.
+
+아래의 ‘입력 Bronze와 생성 단계 계약’ 및 생성 토픽 표는 이전 이력이다. 그 안의 Bronze/중복/lease/offset 공통 복구 원칙은 새 ID 계약과 충돌하지 않는 범위에서 준용한다.
+
+<details>
+<summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
+
 # Kafka와 비동기 작업 관리
 
 Kafka는 메시지를 보관하고 전달한다. 상품 데이터 처리는 Spark가 수행하고 AI 요청은 Application 서버의 Python Consumer가 외부 API로 전달한다. 전용 AI 서버 없이 웹과 별도 프로세스로 실행하며 업무 상태와 재시도는 MySQL로 관리한다. 초기 설계에 Celery와 작업 큐용 Redis는 포함하지 않는다.
@@ -182,3 +210,5 @@ Application Consumer가 광고 서버의 추천 내부 API를 호출하고 결�
 ## 크기 계획·검사의 복구 경계
 
 [공간 크기 정책](11-scale-policy.md)의 계획은 원본·입력·템플릿·정책 버전과 함께 생성 실행에 고정한다. 기존 jobs.input_refs_json과 AI 결과 참조/checksum을 사용하며 새 토픽·DB 컬럼을 이번 정책만으로 추가하지 않는다. 계획 준비 실패는 생성 전 단계 실패, 크기 부적정/불확실은 검토 상태로 구분한다. 비교 실패·재시도는 동일 생성 이미지·고정 계획으로 분석만 수행하며 생성 API를 재호출하지 않는다. 사용자 명시적 재생성은 새 입력/실행이다. 로컬 MVP의 scale/compare 파일 구현은 서비스 Kafka 통합 완료를 뜻하지 않는다.
+
+</details>

@@ -1,7 +1,7 @@
 # MLOps 3차 프로젝트 - Team 3
 
 ## 프로젝트 소개
-프로젝트 내용 작성 예정
+사진·텍스트·스케치의 공간 맥락과 크기 근거를 해석해 이미지 생성 없이 실제 상품을 추천한다. 이번 scikit-learn은 오프라인 실험이며 운영 모델 내재화는 후속 프로젝트 범위다. 문서 설계와 기존 생성 MVP 코드 구현 상태를 구분한다.
 
 ## 팀 구성
 - 팀원 5명
@@ -22,3 +22,7 @@
 ## 설계 문서
 
 [역할별 설계 안내](docs/design/index.md) · [데이터 모델과 ERD](docs/design/03-data-model.md) · [광고 서버](docs/design/07-ad-server.md) · [상품 추천·다나와 연결](docs/design/09-product-links.md)
+
+## 직접 추천 현행 설계
+
+[문서 안내](docs/README.md) · [담당별 다이어그램·내재화 단계](docs/design/12-direct-recommendation.md). 이미지 생성 중심 문서는 접힘 영역에 이력으로 보존한다.

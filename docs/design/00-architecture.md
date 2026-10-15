@@ -1,3 +1,20 @@
+# 전체 아키텍처: 직접 상품 추천
+
+2026-10-15부터 신규 흐름은 사진·텍스트·스케치→공간/요구/배치/크기 해석→코드 검증→임베딩→상품 검색·규칙 순위→상품 표시다. 이미지 생성·템플릿·생성물 분석은 제외한다. 역할별 Mermaid는 [직접 추천 흐름](12-direct-recommendation.md#담당별-추천-흐름)을 기준으로 한다.
+
+| 구성 | 현행 책임 |
+|---|---|
+| Application·작업 Consumer | 입력·Bronze 게이트·멀티모달 API·형식/참조 검증·맥락 고정·권한·응답/이벤트 |
+| 광고 서버 | 질의 임베딩 API·CPU FAISS·현재 상품 검증·특징/규칙 순위·링크 |
+| Spark·Delta | 원천·입력·벡터·행동 정제/집계와 승인된 오프라인 데이터 export |
+| scikit-learn 오프라인 작업 | 기준 모델 학습·순위 비교, 운영 순위에 미연결 |
+| MySQL·MongoDB·저장소·Kafka | 기존 업무/원천/파일/전달 책임 유지 |
+
+인프라는 MySQL 3대·MongoDB 3대, 로컬 19대/저장 VM의 S3 대체 시 17대 후보를 유지하며 실제 사양과 자원은 [인프라](01-infrastructure.md)에서 검증한다. 운영 자체 모델·GPU는 추가하지 않는다. 신규 추천은 생성 실행 대신 입력 버전·추천 맥락에 연결하며 [데이터 계약](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 따른다. 기존 보존·중복/복구·소유권·링크·DB 승격 경계는 유지한다. 신규 설계의 코드/배포 완료를 뜻하지 않는다.
+
+<details>
+<summary>이전 설계 이력 — 이미지 생성 중심 흐름과 당시 계약</summary>
+
 # 전체 아키텍처
 
 Application은 템플릿 기반 공간 이미지를 만들고, 별도 광고 서버는 생성 결과와 유사한 실제 상품 추천 및 다나와 연결을 담당한다.
@@ -88,3 +105,5 @@ BRD의 대상 카테고리에서 다나와 상품정보·이미지를 확보한�
 ## 상세 설계
 
 [인프라](01-infrastructure.md) · [파이프라인](02-data-pipeline.md) · [모델](03-data-model.md) · [AI](04-application-ai.md) · [Kafka](05-kafka-jobs.md) · [운영](06-operations-migration.md) · [광고 서버](07-ad-server.md) · [템플릿](08-template-generation.md) · [상품 연결](09-product-links.md) · [템플릿 자료](10-domeggook-reuse.md)
+
+</details>

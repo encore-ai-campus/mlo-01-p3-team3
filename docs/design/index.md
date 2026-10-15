@@ -1,58 +1,24 @@
 # 설계 문서 안내
 
-[BRD](../BRD_3차.md)와 [PRD](../PRD_3차_초안.md)를 먼저 읽고 담당 영역의 설계를 확인한다. 모든 문서는 구현 완료 기록과 구분한다.
+2026-10-15 현행 흐름은 direct-recommendation-v1이다. 먼저 [BRD](../BRD_3차.md)·[PRD](../PRD_3차_초안.md)와 [담당별 추천 다이어그램](12-direct-recommendation.md#담당별-추천-흐름)을 읽는다. 문서 변경과 실제 구현 완료를 구분한다.
 
-| 작업 | 문서 |
-|---|---|
-| 전체 경계와 요구사항 | [아키텍처](00-architecture.md) |
-| DB 3+3대 복제·접속·장애 전환 | [인프라 DB 계약](01-infrastructure.md#db-다중화와-접속-계약), [운영 복구](06-operations-migration.md#db-복제와-장애-복구) |
-| VMware·서비스 배치·저장소·AWS 이전 | [인프라](01-infrastructure.md) |
-| 상품 자료 준비·Spark·Gold·반응 집계 | [파이프라인](02-data-pipeline.md) |
-| 상품·판매처·원천·입력·이미지 연결 키 | [데이터 모델](03-data-model.md), [속성 사전](data-dictionary/index.md) |
-| 업무별 관계·전체 필드·핵심 흐름 | [전체 ERD](03-erd-full.md), [간략 ERD](03-erd-summary.md) |
-| Django·Cloudflare 생성·Gemini 해석/임베딩·비교/구매 API | [Application과 AI](04-application-ai.md) |
-| 직접 이벤트 발행·중복 방지·단계별 복구 | [Kafka](05-kafka-jobs.md) |
-| 인수 조건·원문/파일 보존·미구현 경계 | [운영](06-operations-migration.md) |
-| 실제 상품 추천·인덱스·비교/구매 클릭·광고 효과 | [추천/광고 서버](07-ad-server.md) |
-| 생성 API·출력 해상도·무료 한도 | [생성 계약](08-template-generation.md#생성-api와-해상도-계약) |
-| 템플릿·입력 버전·생성·좌표·재시도 | [템플릿](08-template-generation.md) |
-| 상품 출처·이미지·다나와 연결·링크 정책 | [상품 연결](09-product-links.md) |
-| 기존 도매꾹 이미지의 템플릿 제작 자료 활용 | [템플릿 자료](10-domeggook-reuse.md) |
+| 작업 | 먼저 읽을 문서 | 함께 확인할 문서 |
+|---|---|---|
+| 전체 경계·변경 범위 | [직접 추천 계약](12-direct-recommendation.md) | [아키텍처](00-architecture.md) |
+| AI 입력 해석·코드 검증 | [Application](04-application-ai.md) | [크기 근거](11-scale-policy.md), [작업](05-kafka-jobs.md) |
+| 상품 검색·규칙 순위·오프라인 실험 | [광고 서버](07-ad-server.md) | [파이프라인](02-data-pipeline.md), [평가 계약](12-direct-recommendation.md#이번-scikit-learn과-후속-내재화) |
+| 데이터·ORM/DDL 계획 | [직접 추천 속성](data-dictionary/09-direct-recommendation.md) | [데이터 모델](03-data-model.md), [전체 ERD](03-erd-full.md), [간략 ERD](03-erd-summary.md) |
+| Bronze·메시지·실패 복구 | [Kafka](05-kafka-jobs.md) | [운영](06-operations-migration.md) |
+| 상품 출처·규격·가격·URL | [상품 연결](09-product-links.md) | [속성 사전](data-dictionary/index.md) |
+| 인프라·DB 복제·이전 | [인프라](01-infrastructure.md) | [DB 복구](06-operations-migration.md#db-복제와-장애-복구) |
+| 생성 경로 폐기·기존 데이터 | [전환 경계](08-template-generation.md) | [이전 도매꾹 자료](10-domeggook-reuse.md), [운영](06-operations-migration.md) |
 
-그림으로 먼저 보려면 [전체 아키텍처 이미지](assets/architecture-overview.svg), [데이터 파이프라인 이미지](assets/data-pipeline-overview.svg), [핵심 데이터 관계 이미지](assets/erd-core-overview.svg)를 확인한다. 상세 계약과 구현 기준은 위 문서에 둔다.
+## 설계 갱신 규칙
 
-이번 개정 기준 문서는 docs/BRD_3차.md·docs/PRD_3차_초안.md다. 기존 파일명으로 내용을 갱신하고 다른 설계 문서는 docs/design/에서 확인한다.
+작업 범위가 바뀌면 해당 라우팅을 다시 확인한다. 요구사항은 BRD·PRD, 새 흐름의 통합 계약은 12-direct-recommendation.md, 상세 역할/스키마는 각 문서에 함께 반영한다. 변경한 스키마·API·메시지를 이미 배포한 것으로 표현하지 않는다. 사용자 절차를 추가하지 않고 요청 조건과 공간 관찰·실측과 추정·운영과 오프라인 실험을 구분한다.
 
+이전 접힘 영역의 생성·템플릿·scene_object 필수 연결과 SVG/PNG를 현행 흐름의 기준으로 사용하지 않는다. 기존 링크/DB/원천 보존 공통 계약은 충돌하지 않는 범위에서 유지한다. 파일명/기존 앵커는 이력 링크를 위해 보존한다.
 
-## 실행 방식 설계 읽는 순서
+## 후속 내재화
 
-접수된 작업의 [비동기 I/O·스레드풀·동기 트랜잭션 분류](04-application-ai.md#비동기-io스레드풀동기-트랜잭션-처리-경계) → [작업 동시 실행과 offset 관리](05-kafka-jobs.md#작업-내부-동시-실행과-offset-관리) → [광고 검색 실행 경계](07-ad-server.md#비동기-호출과-동기-검색-처리) → [성능·복구 검증](06-operations-migration.md#작업-내부-동시-처리-검증) 순서로 읽는다. HTTP 트래픽 분산·웹 워커 증설·서버 추가는 이번 작업 내부 실행 설계의 범위가 아니다.
-
-## 읽는 순서와 기준
-
-1. BRD·PRD에서 목표·완료 기준을 확인한다.
-2. 아키텍처에서 서비스 책임, 인프라에서 현재 배치 후보를 확인한다.
-3. 파이프라인에서 상품 준비 경로, 광고 서버에서 추천·클릭 호출 순서를 확인한다.
-4. 업무별 ERD → 데이터 모델 → 필드 사전 순서로 구현 데이터를 확인한다.
-
-| 계약 | 기준 문서 |
-|---|---|
-| 입력 Bronze 확인·AI 시작·메시지 중복 | Kafka |
-| 템플릿 선택·생성·좌표 | 템플릿 |
-| 추천·노출·클릭·검색 인덱스 | 광고 서버 |
-| 상품 출처·연결 URL·판매 조건 | 상품 연결 |
-| DB 물리 복제·접속 / 장애 전환·복원 | 인프라 / 운영 |
-| 컬럼·관계·키 | 데이터 모델·업무별 ERD·속성 사전 |
-
-그림은 한 장에 한 질문만 설명한다. 이용 순서는 흐름도, 서버 간 호출은 시퀀스, 데이터 연결은 ERD, 상태·필드·운영 조건은 표로 구분한다. 상세 필드·토픽·예외를 개요 그림에 모두 표시하지 않는다.
-
-
-## 공간 대비 크기 작업 읽는 순서
-
-기존 공간 크기 작업의 순서는 아래와 같다. 해석 이후 계산을 수정할 때는 다음 절의 코드 처리 문서도 확인한다.
-
-BRD·PRD → [공간 크기 정책](11-scale-policy.md) → [템플릿·좌표](08-template-generation.md) → [Application](04-application-ai.md) → [복구](05-kafka-jobs.md) → [운영 검증](06-operations-migration.md) 순서로 읽는다. 크기 계획은 원본 주변 물체의 통상 치수 범위와 원근에 근거하며 과대·과소·판단 불가를 구분한다.
-
-## 해석 이후 코드 처리 작업 읽는 순서
-
-먼저 BRD·PRD와 [AI와 코드 책임](04-application-ai.md#ai와-해석-이후-코드의-책임)을 읽는다. 함께 [추천·순위](07-ad-server.md#해석-결과의-검색과-정렬), [좌표·프롬프트](08-template-generation.md#해석-결과의-좌표와-프롬프트-조립), [크기 검증](11-scale-policy.md), [성능·복구 검증](06-operations-migration.md#해석-이후-코드-처리-검증)을 확인한다. 기존 사용자 절차·외부 임베딩·시각 해석은 유지한다. 코드 정책 변경 시 버전·receipt와 가공 출력·캐시·이전 실행의 재시도 경계를 함께 갱신하고 서비스 설계와 로컬 구현 상태를 구분한다.
+이번에는 scikit-learn 오프라인 비교를 준비한다. 다음 프로젝트에서 추천 재정렬 CPU 운영 배포→임베딩 모델/인덱스 교체→멀티모달 입력 해석 확장 순으로 검증한다. 이미지 생성은 내재화 대상에서 제외한다. 라이브러리 도입을 내재화 완료로 표현하지 않는다.

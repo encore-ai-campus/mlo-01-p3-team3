@@ -1,3 +1,16 @@
+# 데이터 모델: 직접 추천 변경안과 기존 원장
+
+2026-10-15 현행 변경안은 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)과 [논리 ERD](12-direct-recommendation.md#논리-데이터와-erd-변경안)다. 구현/DDL 반영 완료가 아니다.
+
+신규 입력 버전→추천 맥락→추천 run→항목→노출/행동으로 연결한다. run 접수 시 context_id는 비어 있을 수 있으나 검색 전에는 같은 입력의 확정 맥락을 요구한다. generation_run/scene_object/template FK는 신규 추천 선행 조건이 아니다. 프로젝트 최신 추천 FK는 입력 순번과 완료 상태를 대조해 갱신한다.
+
+기존 상품/Offer/이미지/원천/링크/인덱스·입력 버전·AI 호출·작업·이벤트의 UUID·시점·보존/권한 원칙은 유지한다. 요청 조건/공간 관찰/배치/크기 근거/코드 검증·정책과 요청 당시 후보/특징을 별도 보존한다. 실험 라벨은 요청 당시 특징과 분리한다. AI 추정 치수를 상품 규격 원장에 쓰지 않는다.
+
+아래 상세 목록은 기존 컬럼의 출처를 보존한 자료다. 특히 recommendation_runs의 생성물 필수 연결·projects.latest_generation_run_id·생성 엔터티는 신규 v2 명세로 사용하지 않는다. 실제 마이그레이션과 구버전 이력 조회/제약 전환은 별도 구현한다.
+
+<details>
+<summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
+
 # 원천과 서비스 데이터 모델
 
 MongoDB는 불변 원천과 수집기 보조 운영 데이터를, MySQL은 최종 서비스 원장과 업무 상태를 관리한다. 이미지와 Delta 파일은 각각 별도 저장소에 두고 DB에는 참조와 메타데이터를 저장한다. 아래 스키마는 DDL 작성 전의 논리 설계 초안이다.
@@ -218,3 +231,5 @@ Bronze는 [raw_document_id](data-dictionary/01-raw-delta.md#bronze-raw_document_
 ## 시각적 크기 계획과 상품 규격의 분리
 
 [공간 크기 정책](11-scale-policy.md)의 통상 mm 범위·투영 비율·판단 근거는 생성 실행에 연결한 AI 분석 출력과 기존 jobs.input_refs_json의 불변 참조/checksum으로 보존한다. 이번 정책은 DB 컬럼·관계를 추가하지 않으며 ERD의 상품 규격 필드를 변경하지 않는다. 상품의 width_mm·depth_mm·height_mm에는 확인된 상품/옵션 규격만 저장한다. 서비스 분석 유형과 JSON 출력 저장 배치는 통합 시 확정한다.
+
+</details>

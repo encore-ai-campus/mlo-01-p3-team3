@@ -1,3 +1,24 @@
+# 전체 ERD: 직접 추천
+
+2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 그림/필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.
+
+```mermaid
+erDiagram
+    projects ||--o{ input_revisions : owns
+    input_revisions ||--o{ recommendation_contexts : interpreted
+    input_revisions ||--o{ recommendation_runs : requested
+    recommendation_contexts |o--o{ recommendation_runs : searched_with
+    recommendation_runs ||--o{ recommendation_items : returns
+    products ||--o{ recommendation_items : matched
+    recommendation_items ||--o{ recommendation_impressions : shown
+    recommendation_impressions ||--o{ user_events : responded
+```
+
+접수 중에는 context_id가 NULL일 수 있고 검색 전에는 확정 맥락이 필요하다. 후보 전체/특징/버전은 run의 manifest로, 반환 항목 설명은 item 스냅샷으로 연결하며 반응 라벨은 실제 impression에 연결한다. 원천/벡터/작업의 나머지 공통 관계는 기존 목록을 유지한다.
+
+<details>
+<summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
+
 # 업무별 데이터 관계와 전체 필드
 
 현행 설계를 업무별 관계도로 나누고 전체 필드를 표로 제공한다. 현행 34개 엔터티의 필드를 제공하며, 신규 흐름에 사용하지 않는 placements는 이전 배치안으로 구분한다. 구현 완료나 DDL 확정을 뜻하지 않는다.
@@ -840,3 +861,5 @@ MongoDB 원천은 단일 문서 구조이므로 관계도 대신 [원천 필드 
 | MySQL assets → 이미지 파일 | bucket · object_key · checksum |
 
 이는 원천 추적 관계이며 서로 다른 저장소 간 FK가 아니다. 처리 순서는 [파이프라인](02-data-pipeline.md)을 따른다.
+
+</details>

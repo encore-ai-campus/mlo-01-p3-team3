@@ -1,23 +1,22 @@
 # 3차 프로젝트 문서
 
-사진·스케치·텍스트를 템플릿 기반 공간 이미지로 만들고, 별도 광고 서버가 유사한 실제 상품을 추천하여 다나와로 연결하는 설계다.
+2026-10-15부터 **이미지 생성 없이 사진·텍스트·스케치의 공간 맥락·크기 추정으로 실제 상품을 직접 추천**한다. 이번 scikit-learn은 오프라인 실험이며 운영 순위는 코드 규칙이다. 모델 내재화는 후속 프로젝트 범위다. 기존 생성 MVP 코드·실행은 이번 문서 작업에서 바꾸지 않았다.
 
-| 문서 | 역할 |
-|---|---|
-| [BRD](BRD_3차.md) | 사업 목표와 사용자 요구사항 |
-| [PRD](PRD_3차_초안.md) | 기능·화면·인수 조건 |
-| [설계 안내](design/index.md) | 아키텍처·파이프라인·ERD·필드 사전 |
-| [광고 서버](design/07-ad-server.md) | 상품 검색·추천 순위·연결 대상 결정·반응 분석 |
-| [상품 추천과 다나와 연결](design/09-product-links.md) | 상품 출처와 연결 URL의 구분, 링크 검증·실패 처리 |
-| [템플릿 제작 자료](design/10-domeggook-reuse.md) | 기존 도매꾹 이미지를 서비스 상품과 분리해 템플릿 제작에 활용하는 기준 |
+| 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
+|---|---|---|
+| 사업·사용자 범위 | [BRD](BRD_3차.md) | [PRD](PRD_3차_초안.md) |
+| 전체 흐름·담당·내재화 단계 | [직접 추천 계약·다이어그램](design/12-direct-recommendation.md) | [아키텍처](design/00-architecture.md) |
+| 역할별 기술 작업 | [설계 라우팅](design/index.md) | 담당 상세 문서 |
+| AI와 코드 검증 | [Application](design/04-application-ai.md) | [크기 정책](design/11-scale-policy.md) |
+| 검색·규칙 순위·scikit-learn 실험 | [추천 서버](design/07-ad-server.md) | [파이프라인](design/02-data-pipeline.md), [운영](design/06-operations-migration.md) |
+| 데이터 변경 | [직접 추천 속성](design/data-dictionary/09-direct-recommendation.md) | [모델](design/03-data-model.md), [ERD](design/03-erd-full.md) |
+| 상품·링크 | [상품 연결](design/09-product-links.md) | [광고 서버](design/07-ad-server.md) |
+| 인프라·보존·복구 | [인프라](design/01-infrastructure.md) | [Kafka](design/05-kafka-jobs.md), [운영](design/06-operations-migration.md) |
 
-기준 문서는 이 폴더의 BRD_3차.md·PRD_3차_초안.md다. 본문은 구현을 위한 설계이며 실제 기능의 완료 상태를 뜻하지 않는다. 현재 설계의 서비스 상품 원천은 다나와이며, 다나와 상품정보·이미지를 준비한 뒤 같은 상품의 확인된 페이지로 연결한다. 실제 수집 필드와 이용 조건은 구현 전에 검증한다.
+## 현행 설계와 구현 상태
 
+기준 요구사항은 이 폴더의 BRD·PRD이며 후속 기술 계약은 direct-recommendation-v1이다. 기존 문서의 ‘이전 설계’ 접힘 영역과 SVG/PNG는 생성 중심 이력이다. 상품/링크/DB/보존/이벤트 공통 규칙은 새 흐름과 충돌하지 않는 범위에서 유지한다. 명시적으로 역사 자료로 표시한 생성 스키마를 신규 필수 계약으로 구현하지 않는다.
 
-## 공간 대비 가구 크기
+크기 근거 부족·상품 규격 누락은 미확인으로 남기고 추가 실측을 강제하지 않는다. 코드가 AI 해석의 사실 여부를 자동 확인한다고 설명하지 않는다. 응답·처리량·모델 품질은 별도 검증 대상이다.
 
-과대·과소 생성 방지, 통상 치수·원근 기반 추정, 결과 검토와 구현 경계는 [공간 크기 정책](design/11-scale-policy.md)을 따른다. 실제 상품 규격·설치 가능 판단과 구분한다.
-
-## 해석 이후 코드 처리
-
-2026-10-15: 사용자 절차를 추가하지 않고 의미 해석 결과의 검색 문장·좌표·프롬프트·벡터 순위·수치 검증·선택 판정을 코드로 처리한다. 먼저 [AI와 코드 책임](design/04-application-ai.md#ai와-해석-이후-코드의-책임)을 읽고 [추천](design/07-ad-server.md#해석-결과의-검색과-정렬), [생성](design/08-template-generation.md#해석-결과의-좌표와-프롬프트-조립), [크기 정책](design/11-scale-policy.md), [운영 검증](design/06-operations-migration.md#해석-이후-코드-처리-검증)을 함께 확인한다. 서비스 설계와 [로컬 MVP 구현](../../ai_mvp/README.md)은 구분한다. 의미 해석·임베딩·생성·시각 검사는 외부 AI로 유지한다.
+[기존 생성 MVP 안내](../../ai_mvp/README.md)는 현재 코드 실행 문서다. 직접 추천·scikit-learn·신규 FK·v2 API/메시지의 구현 완료를 뜻하지 않는다. 다른 협업용 사본과 별도 원본 BRD는 이번 갱신 대상이 아니다.

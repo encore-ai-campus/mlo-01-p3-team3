@@ -1,3 +1,12 @@
+# 광고와 추천 속성 사전 — 직접 추천 변경 안내
+
+2026-10-15 신규 직접 추천의 필드/관계는 [직접 추천 속성](09-direct-recommendation.md)과 [통합 계약](../12-direct-recommendation.md)을 먼저 따른다. 기존 입력·상품·노출/행동·작업 공통 컬럼은 유지하되 아래의 생성/scene_object/template 필수 연결·생성 이벤트는 신규 흐름에 적용하지 않는다. 이전 필드 목록은 이력/공통 참조를 위해 보존하며 실제 DDL 전환 완료를 뜻하지 않는다.
+
+신규 run은 input_revision_id와 검증된 context_id를 사용하고 크기 추정·관찰과 명시 요구·상품 실측·행동 라벨을 분리한다. scikit-learn 데이터/모델은 오프라인 실험이며 운영 순위에 연결하지 않는다.
+
+<details>
+<summary>이전 상세 필드 — 공통 속성과 생성 중심 이력</summary>
+
 # 광고와 추천 속성 사전
 
 선택 물체에서 상품 검색·실제 노출·반응 집계까지 연결하는 속성을 설명한다. UUID PK와 FK는 기존 공통 규칙을 따르며 상세 NULL·삭제 정책은 DDL에서 확정한다. placements는 이전 실제 상품 배치안의 이력으로 초기 신규 흐름에서는 생성하지 않는다.
@@ -401,3 +410,5 @@ Delta Silver 벡터 행을 찾는 참조.
 - 형식: 정수
 - 예시: `3`
 - 해석: COMPARISON_LINK_CLICKED 기준. PURCHASE_LINK_CLICKED의 link_click_count와 별도이며 반복 클릭·재전달은 노출당 한 번 집계한다. 구매 완료가 아니다.
+
+</details>
