@@ -8,6 +8,9 @@
 
 아래 상세 목록은 기존 컬럼의 출처를 보존한 자료다. 특히 recommendation_runs의 생성물 필수 연결·projects.latest_generation_run_id·생성 엔터티는 신규 v2 명세로 사용하지 않는다. 실제 마이그레이션과 구버전 이력 조회/제약 전환은 별도 구현한다.
 
+
+운영 scikit-learn 추천은 run별 ranking_model_ref_json·feature_schema_version·ranking_version·인덱스 버전을 고정하고 item별 model_score를 보존한다. 모델 artifact/전처리/특징·실행 환경의 호환성과 checksum을 배포 전 확인한다. 기존 원장을 덮어쓰지 않고 새 run이 활성 모델을 사용하며 미준비/추론 오류는 별도 상태다. 상세 필드와 학습/배포 계약은 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)을 따른다. 실제 코드/DDL 도입은 별도 작업이다.
+
 <details>
 <summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
 

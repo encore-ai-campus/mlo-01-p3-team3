@@ -70,3 +70,5 @@ MongoDB raw_products._id를 문자열로 기록한 원천 추적 값이다. DB �
 ## 그림과 필드 설명의 연결
 
 업무별 ERD는 핵심 관계를 먼저 보여주고 전체 필드는 접힌 표로 제공한다. 생략된 공통 FK·업무 간 관계는 전체 관계 목록에서 확인한다. 이 사전의 필드는 그림의 표시 여부와 관계없이 유지한다. placements는 이전 배치안 참고이며 신규 생성·추천 흐름에서는 사용하지 않는다.
+
+운영 scikit-learn 추천은 run별 ranking_model_ref_json·feature_schema_version·ranking_version·인덱스 버전을 고정하고 item별 model_score를 보존한다. 모델 artifact/전처리/특징·실행 환경의 호환성과 checksum을 배포 전 확인한다. 기존 원장을 덮어쓰지 않고 새 run이 활성 모델을 사용하며 미준비/추론 오류는 별도 상태다. 상세 필드와 학습/배포 계약은 [직접 추천 속성](09-direct-recommendation.md)을 따른다. 실제 코드/DDL 도입은 별도 작업이다.
