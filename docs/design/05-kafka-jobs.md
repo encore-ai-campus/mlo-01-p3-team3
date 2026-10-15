@@ -177,3 +177,8 @@ product.raw.collected는 다나와 수집 원천의 source_code=danawa, 확인�
 Application Consumer가 광고 서버의 추천 내부 API를 호출하고 결과를 같은 run에 저장한다. 링크 요청은 광고 서버의 resolve API에 추천 항목 ID·링크 종류를 전달한다. 링크 클릭은 user.action.recorded로 전달하며 scene.generation.requested를 발행하지 않는다. 내부 API의 역할은 [광고 서버](07-ad-server.md)를 따른다.
 
 생성 단계의 provider·model·output_width·output_height·전처리·참조 목록은 접수 시 고정하고 재시도에서 운영 설정의 새 값으로 바꾸지 않는다. Cloudflare 일일 무료 한도 소진은 BUDGET_WAIT로 대기하며 한국 09:00의 할당 초기화 후 기존 실행을 재개한다. 계정 공통 한도·실제 사용 대조는 [생성 무료 한도](08-template-generation.md#생성-무료-한도와-용량-추정)를 따른다. 결과 저장·물체 분석·검색만 실패했을 때 생성 API를 다시 호출하지 않는 정책은 유지한다.
+
+
+## 크기 계획·검사의 복구 경계
+
+[공간 크기 정책](11-scale-policy.md)의 계획은 원본·입력·템플릿·정책 버전과 함께 생성 실행에 고정한다. 기존 jobs.input_refs_json과 AI 결과 참조/checksum을 사용하며 새 토픽·DB 컬럼을 이번 정책만으로 추가하지 않는다. 계획 준비 실패는 생성 전 단계 실패, 크기 부적정/불확실은 검토 상태로 구분한다. 비교 실패·재시도는 동일 생성 이미지·고정 계획으로 분석만 수행하며 생성 API를 재호출하지 않는다. 사용자 명시적 재생성은 새 입력/실행이다. 로컬 MVP의 scale/compare 파일 구현은 서비스 Kafka 통합 완료를 뜻하지 않는다.

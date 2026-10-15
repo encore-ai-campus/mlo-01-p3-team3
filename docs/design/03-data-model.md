@@ -213,3 +213,8 @@ Application이 입력·템플릿 검수·생성 실행·최신 실행 연결을 
 ## Delta 테이블 필드
 
 Bronze는 [raw_document_id](data-dictionary/01-raw-delta.md#bronze-raw_document_id), [payload_json](data-dictionary/01-raw-delta.md#bronze-payload_json), [collected_at](data-dictionary/01-raw-delta.md#bronze-collected_at), [ingested_at](data-dictionary/01-raw-delta.md#bronze-ingested_at)을 갖는다. Silver는 [offer_key](data-dictionary/01-raw-delta.md#silver-offer_key), 표준 필드, [normalizer_version](data-dictionary/01-raw-delta.md#silver-normalizer_version), [processing_run_id](data-dictionary/01-raw-delta.md#silver-processing_run_id)를 갖는다. Gold는 [product_key](data-dictionary/01-raw-delta.md#gold-product_key), [offer_key](data-dictionary/01-raw-delta.md#gold-offer_key), [eligible](data-dictionary/01-raw-delta.md#gold-eligible), 최신성과 검수 상태를 갖는다. 각 결과에서 원천과 처리 실행까지 추적 가능한 필드를 남긴다. 실제 DDL과 Delta 스키마는 이 논리 설계를 바탕으로 작성한다.
+
+
+## 시각적 크기 계획과 상품 규격의 분리
+
+[공간 크기 정책](11-scale-policy.md)의 통상 mm 범위·투영 비율·판단 근거는 생성 실행에 연결한 AI 분석 출력과 기존 jobs.input_refs_json의 불변 참조/checksum으로 보존한다. 이번 정책은 DB 컬럼·관계를 추가하지 않으며 ERD의 상품 규격 필드를 변경하지 않는다. 상품의 width_mm·depth_mm·height_mm에는 확인된 상품/옵션 규격만 저장한다. 서비스 분석 유형과 JSON 출력 저장 배치는 통합 시 확정한다.

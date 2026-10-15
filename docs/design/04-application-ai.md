@@ -210,3 +210,8 @@ PRODUCT_IMPRESSION, TEXT_UPDATED, SCENE_GENERATION_REQUESTED, SCENE_OBJECT_SELEC
 생성 모델은 Cloudflare Workers AI의 @cf/black-forest-labs/flux-2-klein-4b로 변경했다. [공식 모델 문서](https://developers.cloudflare.com/workers-ai/models/flux-2-klein-4b/)와 [REST 입력 계약](https://developers.cloudflare.com/changelog/post/2026-01-15-flux-2-klein-4b-workers-ai/)을 확인했다. Gemini 해석·임베딩은 기존 선택을 유지한다. 실제 팀 계정의 Cloudflare·Google 호출·권한·쿼터는 미검증이며 모델 선택과 호출 성공을 구분한다.
 
 임베딩은 공식 [가이드](https://ai.google.dev/gemini-api/docs/embeddings)의 gemini-embedding-2와 모델 목록의 gemini-embedding-2-preview 표기가 일치하지 않아, 계정의 모델 조회와 소량 호출로 정확한 model_id를 확인한다. 선택한 model_id·SDK 버전·전처리·차원을 고정하며 기존 다른 버전 벡터와 혼합하지 않는다. 계정 검증 전 변경된 모델이 실행된 것으로 기록하지 않는다. 요금은 호출 당시 공식 기준과 실제 usage를 사용한다.
+
+
+## 공간 크기 계획과 비교 책임
+
+Application Consumer는 [공간 크기 정책](11-scale-policy.md)에 따라 고정 원본·선택 템플릿으로 크기 계획을 준비하고 생성에 전달한다. 생성 후 비교에서 과소·과대·판단 보류를 구분하고 구조·주석 검사와 함께 추천 선택 조건을 검증한다. 광고 서버가 추정 치수를 상품 실측 규격으로 사용하지 않도록 경계를 유지한다. 로컬 웹 MVP는 참조 분석 뒤 scale 단계 Gemini 호출 1회를 추가하고 기존 3장 비교 응답을 확장했으며 전용 깊이 모델·서비스 큐/DB 통합은 구현하지 않았다. 비용·시도·실패와 결과 참조는 기존 작업 보존 계약을 따른다.
