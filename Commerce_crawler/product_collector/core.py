@@ -1,11 +1,13 @@
 """Site-independent request budget, category orchestration and local storage."""
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
 import re
 import time
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,18 +29,18 @@ def utc_now() -> str:
 class Category:
     category_id: str
     category_name: str | None = None
-    limit: int = 2
+    limit: int | None = 2
     start_page: int = 1
-    max_pages: int = 1
+    max_pages: int | None = 1
 
     def __post_init__(self) -> None:
         if not isinstance(self.category_id, str) or not re.fullmatch(r"[0-9]+", self.category_id):
             raise ValueError("category_id must be a nonempty ASCII digit string (not fixed to 8 digits)")
         if self.category_name is not None and not isinstance(self.category_name, str):
             raise ValueError("category_name must be a string or null")
-        if type(self.limit) is not int or self.limit < 1:
+        if self.limit is not None and (type(self.limit) is not int or self.limit < 1):
             raise ValueError("category limit must be a positive integer")
-        if any(type(value) is not int or value < 1 for value in (self.start_page, self.max_pages)):
+        if type(self.start_page) is not int or self.start_page < 1 or (self.max_pages is not None and (type(self.max_pages) is not int or self.max_pages < 1)):
             raise ValueError("start_page/max_pages must be positive integers")
 
     def as_dict(self) -> dict:
@@ -69,6 +71,18 @@ def field_coverage(rows: list[dict]) -> dict:
             for field in fields}
 
 
+def limit_reached(current: int, maximum: int | None) -> bool:
+    return maximum is not None and current >= maximum
+
+
+def parse_limit(value: str) -> int | None:
+    """CLI: zero means unlimited; positive values restore a finite cap."""
+    result = int(value)
+    if result < 0:
+        raise ValueError("limit must be zero (unlimited) or positive")
+    return result or None
+
+
 class BudgetExhausted(Exception):
     pass
 
@@ -76,10 +90,10 @@ class BudgetExhausted(Exception):
 class RequestClient:
     """One get attempt = one budget unit, including failures. No redirects/retries."""
 
-    def __init__(self, max_requests: int = 15, interval: float = 1.0,
+    def __init__(self, max_requests: int | None = 15, interval: float = 1.0,
                  timeout: float = 20.0, session: Any = None,
-                 clock=time.monotonic, sleep=time.sleep):
-        if type(max_requests) is not int or max_requests < 1:
+                 clock=time.monotonic, sleep=time.sleep, progress=None, session_factory=None):
+        if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
             raise ValueError("max_requests must be a positive integer")
         if not math.isfinite(interval) or interval < 0 or not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("interval must be finite and nonnegative; timeout must be finite and positive")
@@ -93,6 +107,14 @@ class RequestClient:
         self.clock, self.sleep = clock, sleep
         self.last_started: float | None = None
         self.attempts: list[dict] = []
+        self.halt_reason: str | None = None
+        self.progress = progress
+        self._request_lock = threading.Lock()
+        self._local = threading.local()
+        self._owner = threading.get_ident()
+        self._session_factory = session_factory or requests.Session
+        self._sessions = [self.session]
+        self._cancelled = threading.Event()
 
     def get(self, url: str) -> str:
         return self.request("GET", url)
@@ -104,21 +126,29 @@ class RequestClient:
         parsed = urlparse(url)
         if parsed.scheme != "https" or parsed.netloc != "prod.danawa.com":
             raise ValueError("only https://prod.danawa.com requests are allowed in this collector")
-        if len(self.attempts) >= self.max_requests:
-            raise BudgetExhausted("request_limit")
-        if self.last_started is not None:
-            self.sleep(max(0.0, self.interval - (self.clock() - self.last_started)))
-        self.last_started = self.clock()
-        attempt = {"method": method, "url": url, "requested_at": utc_now(), "status_code": None, "error": None}
-        if payload is not None:
-            attempt["payload"] = payload
-        self.attempts.append(attempt)
+        with self._request_lock:
+            if self.halt_reason or self._cancelled.is_set():
+                raise BudgetExhausted(self.halt_reason or "interrupted")
+            if limit_reached(len(self.attempts), self.max_requests):
+                raise BudgetExhausted("request_limit")
+            if self.last_started is not None:
+                self.sleep(max(0.0, self.interval - (self.clock() - self.last_started)))
+            if self.halt_reason or self._cancelled.is_set():
+                raise BudgetExhausted(self.halt_reason or "interrupted")
+            self.last_started = self.clock()
+            attempt = {"method": method, "url": url, "requested_at": utc_now(), "status_code": None, "error": None}
+            if payload is not None:
+                attempt["payload"] = payload
+            self.attempts.append(attempt)
+            if self.progress:
+                self.progress({"stage": "request", "number": len(self.attempts), "method": method, "url": url})
+        session = self._thread_session()
         try:
             if method == "POST":
-                response = self.session.post(url, data=json.dumps(payload, ensure_ascii=False), headers=headers,
+                response = session.post(url, data=json.dumps(payload, ensure_ascii=False), headers=headers,
                                              timeout=self.timeout, allow_redirects=False)
             else:
-                response = self.session.get(url, timeout=self.timeout, allow_redirects=False)
+                response = session.get(url, timeout=self.timeout, allow_redirects=False)
             attempt["status_code"] = response.status_code
             response.raise_for_status()
             if 300 <= response.status_code < 400:
@@ -129,16 +159,35 @@ class RequestClient:
             return response.text
         except requests.RequestException as exc:
             attempt["error"] = f"{type(exc).__name__}: {exc}"
+            if isinstance(exc, requests.HTTPError) and exc.response is not None and exc.response.status_code in {403, 429}:
+                self.halt_reason = f"http_{exc.response.status_code}"
+                self._cancelled.set()
             raise
 
+    def _thread_session(self):
+        if threading.get_ident() == self._owner:
+            return self.session
+        if not hasattr(self._local, 'session'):
+            session = self._session_factory()
+            session.mount("https://", HTTPAdapter(max_retries=0))
+            session.headers.update(self.session.headers)
+            self._local.session = session
+            with self._request_lock:
+                self._sessions.append(session)
+        return self._local.session
+
+    def cancel(self):
+        self._cancelled.set()
+
     def close(self) -> None:
-        self.session.close()
+        for session in self._sessions:
+            session.close()
 
 
 class Adapter(Protocol):
     source: str
     def category_url(self, category_id: str) -> str: ...
-    def parse_listing(self, html: str, limit: int) -> tuple[list[dict], dict]: ...
+    def parse_listing(self, html: str, limit: int | None) -> tuple[list[dict], dict]: ...
     def needs_detail(self, listing: dict) -> bool: ...
     def parse_detail(self, html: str, listing: dict) -> dict: ...
     def normalize(self, raw: dict) -> dict: ...
@@ -147,122 +196,210 @@ class Adapter(Protocol):
 
 
 def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
-            total_limit: int = 10, collect_details: bool = True) -> tuple[list[dict], list[dict], dict]:
-    if type(total_limit) is not int or total_limit < 1:
+            total_limit: int | None = 10, collect_details: bool = True, progress=None, checkpoint=None,
+            listing_interval: float | None = None, workers: int = 1) -> tuple[list[dict], list[dict], dict]:
+    if total_limit is not None and (type(total_limit) is not int or total_limit < 1):
         raise ValueError("total_limit must be a positive integer")
+    if listing_interval is not None and (not math.isfinite(listing_interval) or listing_interval < 0):
+        raise ValueError("listing_interval must be finite and nonnegative")
+    if type(workers) is not int or workers < 1:
+        raise ValueError("workers must be a positive integer")
+    detail_interval = client.interval
     adapter.validate_categories(categories)
-    job_id = str(uuid4())
+    records, previous = checkpoint.restore() if checkpoint else ({}, {})
+    previous_requests = previous.get("requests", [])
+    previous_categories = {c["category_id"]: c for c in previous.get("categories", [])}
+    job_id = checkpoint.job_id if checkpoint else str(uuid4())
     report = {"job_id": job_id, "started_at": utc_now(), "source": adapter.source, "execution_mode": "live",
               "limits": {"total_products": total_limit, "requests": client.max_requests,
                          "interval_seconds": client.interval, "timeout_seconds": client.timeout,
+                         "listing_interval_seconds": listing_interval if listing_interval is not None else client.interval,
+                         "listing_workers": workers,
                          "collect_details": collect_details},
               "categories": [], "errors": [], "stop_reason": None}
-    records: dict[tuple[str, str], dict] = {}
-    # Listings first: default budgets leave room for all five categories before details.
-    for category in categories:
-        url = adapter.category_url(category.category_id)
-        outcome = {**category.as_dict(), "limit": category.limit, "url": url,
-                   "status": "not_requested", "selected": 0, "new_products": 0,
-                   "start_page": category.start_page, "max_pages": category.max_pages, "pages": []}
-        report["categories"].append(outcome)
-        if len(records) >= total_limit:
-            outcome["reason"] = "total_limit"
-            report["stop_reason"] = "total_limit"
-            continue
-        seen_category = set()
-        for page in range(category.start_page, category.start_page + category.max_pages):
-            if len(seen_category) >= category.limit or len(records) >= total_limit:
-                outcome["reason"] = "category_limit" if len(seen_category) >= category.limit else "total_limit"
-                break
-            page_outcome = {"page": page, "status": "not_requested", "selected": 0}
-            outcome["pages"].append(page_outcome)
-            try:
-                rows, diagnostics = adapter.fetch_listing_page(client, category, page)
-            except BudgetExhausted:
-                page_outcome["reason"] = outcome["reason"] = "request_limit"
-                report["stop_reason"] = "request_limit"
-                break
-            except (requests.RequestException, ValueError) as exc:
-                outcome.update(status="request_failed" if isinstance(exc, requests.RequestException) else "parse_failed", reason=str(exc))
-                page_outcome.update(status=outcome["status"], reason=str(exc))
-                report["errors"].append({"stage": "listing", "url": url, "page": page, "reason": str(exc)})
-                break
-            outcome["diagnostics"] = diagnostics
-            outcome["observed_category_name"] = diagnostics.get("observed_category_name")
-            page_outcome["diagnostics"] = diagnostics
-            if not rows:
-                page_outcome["status"] = "empty"
-                outcome["reason"] = "empty_page"
-                if diagnostics.get("format") == "action_products" and diagnostics.get("response_product_count") == 0:
-                    outcome["status"] = "ok"
-                else:
-                    outcome["status"] = "no_products"
-                    report["errors"].append({"stage": "listing", "url": url, "page": page,
-                                             "reason": "no_products_or_parser_mismatch"})
-                break
-            page_outcome["status"] = outcome["status"] = "ok"
-            new_ids = {row["product_id"] for row in rows} - seen_category
-            if not new_ids:
-                outcome["reason"] = page_outcome["reason"] = "repeated_products"
-                break
-            for row in rows:
-                if row["product_id"] in seen_category or len(seen_category) >= category.limit:
-                    continue
-                key = (adapter.source, row["product_id"])
-                if key not in records:
-                    if len(records) >= total_limit:
-                        report["stop_reason"] = "total_limit"
-                        continue
-                    records[key] = {"source": adapter.source, "product_id": row["product_id"],
-                                    "collected_at": utc_now(), "job_id": job_id,
-                                    "schema_version": "1.2", "extractor_version": "0.3",
-                                    "categories": [], "payload": {"listings": [], "detail": None},
-                                    "detail_status": "not_requested", "detail_error": None}
-                    outcome["new_products"] += 1
-                record = records[key]
-                membership = {**category.as_dict(), "observed_category_name": diagnostics.get("observed_category_name")}
-                if not any(c["category_id"] == category.category_id for c in record["categories"]):
-                    record["categories"].append(membership)
-                record["payload"]["listings"].append({"category": membership,
-                                                        "url": url, "page": page, "collected_at": utc_now(), **row})
-                seen_category.add(row["product_id"])
-                outcome["selected"] += 1
-                page_outcome["selected"] += 1
-        else:
-            outcome["reason"] = "max_pages"
+    if previous.get('categories') or records:
+        report["resumed_at"] = utc_now()
+        report["started_at"] = previous.get("started_at", report["started_at"])
+        report["previous_errors"] = previous.get("previous_errors", []) + previous.get("errors", [])
 
-    for record in records.values():
+    def persist(changed=()):
+        if checkpoint:
+            report["product_count"] = len(records)
+            checkpoint.save(changed, report, client.attempts)
+
+    for category in categories:
+        outcome = copy.deepcopy(previous_categories.get(category.category_id))
+        if outcome is None:
+            outcome = {**category.as_dict(), "limit": category.limit, "url": adapter.category_url(category.category_id),
+                       "status": "not_requested", "selected": 0, "new_products": 0,
+                       "start_page": category.start_page, "max_pages": category.max_pages, "pages": []}
+        report["categories"].append(outcome)
+    persist()
+    if listing_interval is not None:
+        client.interval = listing_interval
+    # Fetchers own no product/report/checkpoint state. This thread is the only writer.
+    from .parallel import page_results
+    category_order = {c.category_id: i for i, c in enumerate(categories)}
+    states = []
+    for index, category in enumerate(categories):
+        outcome = report["categories"][index]
+        if outcome.get("reason") in {"empty_page", "repeated_products", "max_pages", "category_limit", "total_limit"}:
+            continue
+        outcome["pages"] = [p for p in outcome["pages"] if p["status"] in {"ok", "empty"}]
+        outcome.pop("reason", None)
+        seen = {r["product_id"] for r in records.values() if any(c["category_id"] == category.category_id for c in r["categories"])}
+        next_page = max((p["page"] for p in outcome["pages"]), default=category.start_page - 1) + 1
+        state = {"category": category, "index": index, "outcome": outcome, "seen": seen,
+                 "page": next_page, "done": False}
+        if limit_reached(len(seen), category.limit):
+            outcome['reason'], state['done'] = 'category_limit', True
+        elif category.max_pages is not None and next_page >= category.start_page + category.max_pages:
+            outcome['reason'], state['done'] = 'max_pages', True
+        states.append(state)
+
+    def stop_reason():
+        if client.halt_reason:
+            return client.halt_reason
+        if limit_reached(len(records), total_limit):
+            return 'total_limit'
+        if limit_reached(len(client.attempts), client.max_requests):
+            return 'request_limit'
+        return None
+
+    def started(state):
+        if progress:
+            c = state['category']
+            progress({'stage': 'category', 'index': state['index'] + 1, 'total': len(categories),
+                      'category_id': c.category_id, 'name': c.category_name})
+
+    stream = page_results(adapter, client, [s for s in states if not s['done']], workers, stop_reason, started)
+    try:
+        for state, result, error in stream:
+            category, outcome, page = state['category'], state['outcome'], state['page']
+            page_outcome = {'page': page, 'status': 'not_requested', 'selected': 0}
+            outcome['pages'].append(page_outcome)
+            changed = []
+            if error is not None:
+                state['done'] = True
+                if isinstance(error, BudgetExhausted):
+                    outcome['reason'] = page_outcome['reason'] = report['stop_reason'] = str(error)
+                elif isinstance(error, (requests.RequestException, ValueError)):
+                    outcome.update(status='request_failed' if isinstance(error, requests.RequestException) else 'parse_failed', reason=str(error))
+                    page_outcome.update(status=outcome['status'], reason=str(error))
+                    report['errors'].append({'stage': 'listing', 'url': outcome['url'], 'page': page, 'reason': str(error)})
+                    if progress:
+                        progress({'stage': 'error', 'category_id': category.category_id, 'page': page, 'reason': str(error)})
+                else:
+                    raise error
+            else:
+                rows, diagnostics = result
+                outcome['diagnostics'] = diagnostics
+                outcome['observed_category_name'] = diagnostics.get('observed_category_name')
+                page_outcome['diagnostics'] = diagnostics
+                if not rows:
+                    page_outcome['status'] = 'empty'
+                    outcome['reason'], state['done'] = 'empty_page', True
+                    outcome['status'] = 'ok' if diagnostics.get('format') == 'action_products' and diagnostics.get('response_product_count') == 0 else 'no_products'
+                    if outcome['status'] != 'ok':
+                        report['errors'].append({'stage': 'listing', 'url': outcome['url'], 'page': page, 'reason': 'no_products_or_parser_mismatch'})
+                else:
+                    outcome['status'] = page_outcome['status'] = 'ok'
+                    if not ({r['product_id'] for r in rows} - state['seen']):
+                        outcome['reason'] = page_outcome['reason'] = 'repeated_products'
+                        state['done'] = True
+                    else:
+                        for row in rows:
+                            if row['product_id'] in state['seen'] or limit_reached(len(state['seen']), category.limit):
+                                continue
+                            key = (adapter.source, row['product_id'])
+                            if key not in records:
+                                if limit_reached(len(records), total_limit):
+                                    continue
+                                records[key] = {'source': adapter.source, 'product_id': row['product_id'],
+                                    'collected_at': utc_now(), 'job_id': job_id, 'schema_version': '1.2', 'extractor_version': '0.3',
+                                    'categories': [], 'payload': {'listings': [], 'detail': None},
+                                    'detail_status': 'not_requested' if collect_details else 'disabled', 'detail_error': None}
+                                outcome['new_products'] += 1
+                            record = records[key]
+                            membership = {**category.as_dict(), 'observed_category_name': diagnostics.get('observed_category_name')}
+                            if not any(c['category_id'] == category.category_id for c in record['categories']):
+                                record['categories'].append(membership)
+                            record['payload']['listings'].append({'category': membership, 'url': outcome['url'],
+                                                                 'page': page, 'collected_at': utc_now(), **row})
+                            record['categories'].sort(key=lambda c: category_order[c['category_id']])
+                            record['payload']['listings'].sort(key=lambda r: (category_order[r['category']['category_id']], r['page']))
+                            state['seen'].add(row['product_id'])
+                            outcome['selected'] += 1
+                            page_outcome['selected'] += 1
+                            changed.append(record)
+                        if limit_reached(len(state['seen']), category.limit):
+                            outcome['reason'], state['done'] = 'category_limit', True
+                if not state['done']:
+                    state['page'] += 1
+                    if category.max_pages is not None and state['page'] >= category.start_page + category.max_pages:
+                        outcome['reason'], state['done'] = 'max_pages', True
+                persist(changed)
+                if progress:
+                    progress({'stage': 'page', 'category_id': category.category_id, 'page': page, 'products': len(rows)})
+            if error is not None:
+                persist()
+    finally:
+        stream.close()
+    reason = stop_reason()
+    if reason:
+        report['stop_reason'] = reason
+        for state in states:
+            if not state['done']:
+                state['outcome']['reason'] = reason
+    persist()
+
+    client.interval = detail_interval
+    if progress and collect_details:
+        progress({"stage": "details_start", "total": len(records)})
+    for detail_index, record in enumerate(records.values(), 1):
         listing = record["payload"]["listings"][0]
+        if checkpoint and record["detail_status"] in {"ok", "not_needed"}:
+            if progress:
+                progress({"stage": "detail", "index": detail_index, "total": len(records),
+                          "product_id": record["product_id"], "status": record["detail_status"], "cached": True})
+            continue
         if not collect_details:
             record["detail_status"] = "disabled"
             continue
         if not adapter.needs_detail(listing):
             record["detail_status"] = "not_needed"
+            persist([record])
             continue
         try:
             html = client.get(listing["product_url"])
             record["payload"]["detail"] = {"url": listing["product_url"], "collected_at": utc_now(),
                                                **adapter.parse_detail(html, listing)}
             record["detail_status"] = record["payload"]["detail"]["status"]
-        except BudgetExhausted:
+            record["detail_error"] = None
+        except BudgetExhausted as exc:
             record["detail_status"] = "budget_exhausted"
-            report["stop_reason"] = "request_limit"
+            report["stop_reason"] = str(exc)
         except requests.RequestException as exc:
             record["detail_status"] = "request_failed"
             record["detail_error"] = str(exc)
             report["errors"].append({"stage": "detail", "url": listing["product_url"], "reason": str(exc)})
+        persist([record])
+        if progress:
+            progress({"stage": "detail", "index": detail_index, "total": len(records),
+                      "product_id": record["product_id"], "status": record["detail_status"]})
 
     raw = list(records.values())
     normalized = []
     for record in raw:
         record["payload_hash"] = payload_hash(record["payload"])
         normalized.append(adapter.normalize(record))
-    report.update(finished_at=utc_now(), product_count=len(raw), request_count=len(client.attempts),
-                  requests=list(client.attempts), field_coverage=field_coverage(normalized),
+    report.update(finished_at=utc_now(), product_count=len(raw), request_count=len(previous_requests) + len(client.attempts),
+                  requests=previous_requests + list(client.attempts), field_coverage=field_coverage(normalized),
                   result="partial" if report["errors"] or any(
                       r["detail_status"] in {"budget_exhausted", "request_failed", "unrecognized"} for r in raw
                   ) or any(c["status"] == "not_requested" or c.get("reason") == "request_limit"
                            for c in report["categories"]) else "completed")
+    persist()
     return raw, normalized, report
 
 

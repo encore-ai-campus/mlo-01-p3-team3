@@ -119,7 +119,7 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(report["result"], "partial")
 
     def test_category_error_does_not_prevent_next_category(self):
-        pages = {self.adapter.category_url("1"): (403, "Forbidden"),
+        pages = {self.adapter.category_url("1"): (500, "Server error"),
                  self.adapter.category_url("2"): listing("11"),
                  "https://prod.danawa.com/info/?pcode=11": detail("11")}
         raw, _, report, _ = self.pipeline(pages, [Category("1"), Category("2")])

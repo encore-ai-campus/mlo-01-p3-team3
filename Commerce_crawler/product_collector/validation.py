@@ -43,6 +43,15 @@ def image_errors(product: dict, root: Path | None = None) -> list[dict]:
             errors.append({"reason": "product_link_mismatch", "url": url})
         if root is not None:
             local = image.get("local_path")
+            if 'category_paths' in image or (local and local.startswith('categories/')):
+                paths = image.get('category_paths') or {}
+                expected = {c['category_id'] for c in product.get('categories') or []} or {'_uncategorized'}
+                if set(paths) != expected or local not in paths.values():
+                    errors.append({'reason': 'category_link_mismatch', 'url': url})
+                for code, path in paths.items():
+                    expected_path = (Path('categories') / code / product['source'] / str(product['product_id']) / (image.get('filename') or '')).as_posix()
+                    if path != expected_path or not cached_valid({**image, 'local_path': path}, root):
+                        errors.append({'reason': 'category_file_invalid', 'category_id': code, 'url': url})
             if image.get("filename") and not image["filename"].startswith(f"{product['source']}_{product['product_id']}_"):
                 errors.append({"reason": "filename_product_mismatch", "url": url})
             if not local or Path(local).name != image.get("filename") or not cached_valid(image, root):

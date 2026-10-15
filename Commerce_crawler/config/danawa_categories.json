@@ -1,7 +1,37 @@
 [
-  {"category_id": "15241194", "category_name": "침대", "limit": 2},
-  {"category_id": "15240504", "category_name": "책상", "limit": 2},
-  {"category_id": "1523647", "category_name": "학생/사무용의자", "limit": 2},
-  {"category_id": "15241240", "category_name": "식탁", "limit": 2},
-  {"category_id": "15227279", "category_name": "선반", "limit": 2}
+  {
+    "category_id": "15241194",
+    "category_name": "침대",
+    "limit": null,
+    "start_page": 1,
+    "max_pages": null
+  },
+  {
+    "category_id": "15240504",
+    "category_name": "책상",
+    "limit": null,
+    "start_page": 1,
+    "max_pages": null
+  },
+  {
+    "category_id": "1523647",
+    "category_name": "학생/사무용의자",
+    "limit": null,
+    "start_page": 1,
+    "max_pages": null
+  },
+  {
+    "category_id": "15241240",
+    "category_name": "식탁",
+    "limit": null,
+    "start_page": 1,
+    "max_pages": null
+  },
+  {
+    "category_id": "15227279",
+    "category_name": "선반",
+    "limit": null,
+    "start_page": 1,
+    "max_pages": null
+  }
 ]

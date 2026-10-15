@@ -12,7 +12,7 @@ from pathlib import Path
 
 import requests
 
-from .core import BudgetExhausted, RequestClient, payload_hash, utc_now
+from .core import BudgetExhausted, RequestClient, payload_hash, utc_now, parse_limit
 from .danawa import DanawaAdapter
 from .reprocess import apply_detail
 from .media import ImageFetcher, localize_images
@@ -118,8 +118,8 @@ def main():
     parser = argparse.ArgumentParser(description="기존 상품의 상세 갤러리 전체 수집·다운로드·연결 검증")
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--max-detail-requests", type=int, default=300)
-    parser.add_argument("--max-image-requests", type=int, default=3000)
+    parser.add_argument("--max-detail-requests", type=parse_limit, default=None)
+    parser.add_argument("--max-image-requests", type=parse_limit, default=None)
     parser.add_argument("--interval", type=float, default=1)
     parser.add_argument("--timeout", type=float, default=20)
     parser.add_argument("--cache-dir", type=Path, help="기본값은 수집 실행들의 상위 디렉터리/_asset_cache")

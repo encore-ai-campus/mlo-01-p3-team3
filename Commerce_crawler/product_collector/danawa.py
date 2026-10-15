@@ -11,7 +11,7 @@ from decimal import Decimal, InvalidOperation
 from urllib.parse import parse_qs, parse_qsl, urljoin, urlparse
 
 from bs4 import BeautifulSoup
-from .pagination import PaginationTemplates, decode_products
+from .pagination import PaginationTemplates, decode_products, pagination_metadata
 
 BASE_URL = "https://prod.danawa.com/list/"
 
@@ -172,7 +172,7 @@ def select_product(blocks: list, listing: dict) -> tuple[dict | None, str | None
     return (matches[0], "name") if len(matches) == 1 else (None, None)
 
 
-def listing_products(soup: BeautifulSoup, limit: int) -> list[dict]:
+def listing_products(soup: BeautifulSoup, limit: int | None) -> list[dict]:
     rows, seen = [], set()
     items = soup.select("#productListArea .dnw-catalog-item") or soup.select("li.prod_item")
     for item in items:
@@ -230,7 +230,7 @@ def listing_products(soup: BeautifulSoup, limit: int) -> list[dict]:
                      "registered_month": month.group(1) if month else None,
                      "registered_month_text": month.group(0) if month else short_month.group(0) if short_month else None,
                      "html": str(item)})
-        if len(rows) >= limit:
+        if limit is not None and len(rows) >= limit:
             break
     return rows
 
@@ -238,32 +238,61 @@ def listing_products(soup: BeautifulSoup, limit: int) -> list[dict]:
 class DanawaAdapter:
     source = "danawa"
 
-    def __init__(self, pagination_templates: PaginationTemplates | None = None):
+    def __init__(self, pagination_templates: PaginationTemplates | None = None, discover_categories: bool = False):
         self.pagination_templates = pagination_templates
+        self.discover_categories = discover_categories
+
+    def restore_pagination(self, report):
+        """Reuse observed category arguments after restart; keep fresh local headers."""
+        if not self.pagination_templates or not self.pagination_templates.categories:
+            return
+        seed = next(iter(self.pagination_templates.categories))
+        _, headers = self.pagination_templates.request(seed, 1)
+        names = {c['category_id']: c.get('observed_category_name') for c in report.get('categories', [])}
+        for attempt in report.get('requests', []):
+            url = attempt.get('url', '')
+            code = parse_qs(urlparse(url).query).get('cate', [None])[0]
+            if attempt.get('method') == 'POST' and code and not self.pagination_templates.supports(code) and attempt.get('payload'):
+                self.pagination_templates.categories[code] = {'payload': attempt['payload'],
+                    'headers': {**headers, 'Referer': url}, 'metadata': {'category_name': names.get(code)}}
 
     def validate_categories(self, categories) -> None:
         for category in categories:
-            if (category.start_page > 1 or category.max_pages > 1) and not (
+            if (category.start_page > 1 or category.max_pages is None or category.max_pages > 1) and not (
                 self.pagination_templates and self.pagination_templates.supports(category.category_id)
             ):
+                if self.discover_categories and self.pagination_templates and self.pagination_templates.categories:
+                    continue
                 raise ValueError(f"cate={category.category_id}: pagination requires its own captured POST template")
 
     def fetch_listing_page(self, client, category, page: int) -> tuple[list[dict], dict]:
         url = self.category_url(category.category_id)
+        if self.discover_categories and self.pagination_templates and not self.pagination_templates.supports(category.category_id):
+            # Only common arguments/Next-Action come from the seed. All category
+            # parameters must be observed on THIS category's page before POST.
+            seed = next(iter(self.pagination_templates.categories))
+            payload, headers = self.pagination_templates.request(seed, page)
+            metadata = pagination_metadata(client.get(url), category.category_id)
+            for key in ('categoryCode', 'physicsCate1', 'physicsCate2', 'physicsCate3', 'physicsCate4',
+                        'group', 'depth', 'bSearchOptionMultiCategoryYN'):
+                payload[0][key] = metadata[key]
+            self.pagination_templates.categories[category.category_id] = {
+                'payload': payload, 'headers': {**headers, 'Referer': url}, 'metadata': metadata}
         if self.pagination_templates and self.pagination_templates.supports(category.category_id):
             payload, headers = self.pagination_templates.request(category.category_id, page)
             response = client.post(url, payload, headers)
             products, _ = decode_products(response)
             rows = self.parse_api_products(products, category.limit)
             return rows, {"format": "action_products", "response_product_count": len(products),
-                          "parsed_product_count": len(rows), "observed_category_name": None,
+                          "parsed_product_count": len(rows), "observed_category_name":
+                          self.pagination_templates.categories[category.category_id].get('metadata', {}).get('category_name'),
                           "public_category_id": category.category_id,
                           "payload_category_code": payload[0]["categoryCode"], "page": page}
         if page != 1:
             raise ValueError("GET listing supports only page 1")
         return self.parse_listing(client.get(url), category.limit)
 
-    def parse_api_products(self, products: list[dict], limit: int) -> list[dict]:
+    def parse_api_products(self, products: list[dict], limit: int | None) -> list[dict]:
         rows, seen = [], set()
         for product in products:
             code = str(product.get("productCode", ""))
@@ -291,14 +320,14 @@ class DanawaAdapter:
                          "image_url": image_url(source_image.get("url"), canonical_url),
                          "registered_month": month_text if exact_month else None, "registered_month_text": month_text,
                          "variant_prices": [], "api_product": product, "format": "action_product"})
-            if len(rows) >= limit:
+            if limit is not None and len(rows) >= limit:
                 break
         return rows
 
     def category_url(self, category_id: str) -> str:
         return f"{BASE_URL}?cate={category_id}"
 
-    def parse_listing(self, html: str, limit: int) -> tuple[list[dict], dict]:
+    def parse_listing(self, html: str, limit: int | None) -> tuple[list[dict], dict]:
         soup = BeautifulSoup(html, "html.parser")
         diagnostics = {"page_title": soup.title.get_text(" ", strip=True) if soup.title else None,
                        "current_cards": len(soup.select("#productListArea .dnw-catalog-item")),

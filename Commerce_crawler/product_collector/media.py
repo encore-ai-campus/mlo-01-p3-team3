@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import requests
 from requests.adapters import HTTPAdapter
 
-from .core import utc_now
+from .core import utc_now, limit_reached, parse_limit
 from .storage import atomic_json, append_record, history, link_file, read_jsonl, write_jsonl
 from .validation import cached_valid, verified_image
 
@@ -65,14 +65,17 @@ class ImageFetcher:
         self.session.close()
 
 
-def localize_images(products_path: Path, destination: Path, fetcher, max_requests=300,
+def localize_images(products_path: Path, destination: Path, fetcher, max_requests=None,
                     progress=None, cache_dir: Path | None = None) -> dict:
-    if type(max_requests) is not int or max_requests < 1:
+    if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
         raise ValueError("max_requests must be positive")
     products = read_jsonl(products_path)
     for product in products:
         if not all(re.fullmatch(r"[A-Za-z0-9_-]+", str(product.get(k, ""))) for k in ("source", "product_id")):
             raise ValueError("unsafe source/product_id")
+        for category in product.get('categories') or []:
+            if not isinstance(category, dict) or not isinstance(category.get('category_id'), str) or not re.fullmatch(r'[0-9]+', category['category_id']):
+                raise ValueError('category_id must be a numeric string')
     plans = [product_images(p) for p in products]
     urls = list(dict.fromkeys(e["url"] for plan in plans for e in plan))
     destination.mkdir(parents=True, exist_ok=True)
@@ -95,14 +98,17 @@ def localize_images(products_path: Path, destination: Path, fetcher, max_request
             for ordinal, observed in enumerate(plan, 1):
                 entry = current[observed["url"]]
                 image = {**observed, **entry, "source": product["source"], "product_id": product["product_id"],
-                         "filename": None, "local_path": None}
+                         "filename": None, "local_path": None, "category_paths": {}}
                 image.pop("storage_path", None)  # compatibility input must not duplicate output paths
                 if entry["status"] == "downloaded":
                     key = hashlib.sha256(entry["url"].encode()).hexdigest()[:12]
                     name = f"{product['source']}_{product['product_id']}_{ordinal:03d}_{key}.{entry['extension']}"
-                    relative = Path("products") / product["source"] / str(product["product_id"]) / name
-                    link_file(store / entry["local_path"], destination / relative, entry["sha256"])
-                    image.update(filename=name, local_path=relative.as_posix())
+                    codes = list(dict.fromkeys(c['category_id'] for c in product.get('categories') or [])) or ['_uncategorized']
+                    for code in codes:
+                        relative = Path('categories') / code / product['source'] / str(product['product_id']) / name
+                        link_file(store / entry['local_path'], destination / relative, entry['sha256'])
+                        image['category_paths'][code] = relative.as_posix()
+                    image.update(filename=name, local_path=next(iter(image['category_paths'].values())))
                 images.append(image)
             row = {k: v for k, v in product.items() if k not in {"images", "image_urls", "local_images", "storage_path"}}
             for key in ("provenance", "field_status"):
@@ -129,7 +135,7 @@ def localize_images(products_path: Path, destination: Path, fetcher, max_request
             if cached_valid(cached, store):
                 entry = cached.copy()
                 report["cached"] += 1
-            elif stopped or report["requests"] >= max_requests:
+            elif stopped or limit_reached(report["requests"], max_requests):
                 entry = {"url": url, "status": "stopped_after_block" if stopped else "budget_exhausted", "local_path": None}
                 report["budget_exhausted"] += not stopped
             else:
@@ -169,7 +175,7 @@ def main():
     parser.add_argument("--products", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--cache-dir", type=Path)
-    parser.add_argument("--max-requests", type=int, default=300)
+    parser.add_argument("--max-requests", type=parse_limit, default=None)
     parser.add_argument("--interval", type=float, default=1)
     parser.add_argument("--timeout", type=float, default=20)
     args = parser.parse_args()
