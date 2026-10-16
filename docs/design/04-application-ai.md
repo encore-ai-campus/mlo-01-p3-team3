@@ -27,7 +27,7 @@ scikit-learn은 저장한 후보 특징/라벨로 학습·평가하고 광고 �
 
 # Django와 AI 연결
 
-Django는 MySQL을 사용해 사용자 서비스를 제공한다. AI는 외부 멀티모달 API로 연결하고 전용 AI 서버는 추가하지 않는다. Application 서버(app-01)의 Kafka Consumer 프로세스가 API를 호출한다. 3차 흐름은 입력 해석·템플릿 기반 공간 구성·결과 물체 분석과 유사 상품 추천이다. 광고 서버는 별도 ad-01 후보 VM에서 검색·추천과 상품 페이지 연결 결정·집계 조회를 담당한다.
+Django는 MySQL을 사용해 사용자 서비스를 제공한다. AI는 외부 멀티모달 API로 연결하고 전용 AI 서버는 추가하지 않는다. Application 서버(pj3-webapp)의 Kafka Consumer 프로세스가 API를 호출한다. 3차 흐름은 입력 해석·템플릿 기반 공간 구성·결과 물체 분석과 유사 상품 추천이다. 광고 서버는 별도 pj3-ad-server 후보 VM에서 검색·추천과 상품 페이지 연결 결정·집계 조회를 담당한다.
 
 [문서 안내](index.md) · [데이터 모델](03-data-model.md) · [Kafka 처리](05-kafka-jobs.md)
 
@@ -104,10 +104,10 @@ Application은 소유자 권한과 요청 맥락을 검증한다. 템플릿 선�
 
 상품 이미지 분석은 핵심 흐름 이후 보조 기능으로 연결한다. 색상·재질 등 해석을 확장하면 추정값으로 구분하고 3차 성공 조건에 추가하지 않는다.
 
-AI API Consumer는 Django와 같은 Application 서버(app-01)에서 실행하되 웹 요청 프로세스와 분리한다. 같은 코드베이스의 Django 관리 명령으로 구현하고 별도 컨테이너나 systemd 서비스로 관리할 수 있다. 웹 서버 시작 시 Consumer를 함께 실행하지 않는다. 이 프로세스는 모델을 호스팅하지 않으며 실제 추론은 외부 API 제공처에서 수행한다. 모델 가중치와 GPU 및 AI 전용 VM은 배치하지 않는다.
+AI API Consumer는 Django와 같은 Application 서버(pj3-webapp)에서 실행하되 웹 요청 프로세스와 분리한다. 같은 코드베이스의 Django 관리 명령으로 구현하고 별도 컨테이너나 systemd 서비스로 관리할 수 있다. 웹 서버 시작 시 Consumer를 함께 실행하지 않는다. 이 프로세스는 모델을 호스팅하지 않으며 실제 추론은 외부 API 제공처에서 수행한다. 모델 가중치와 GPU 및 AI 전용 VM은 배치하지 않는다.
 
 ```text
-Application 서버(app-01)
+Application 서버(pj3-webapp)
   ├─ Django 웹 프로세스 → Kafka
   ├─ 작업 복구 프로세스 → Kafka
   └─ AI API Consumer ← Kafka
@@ -146,7 +146,7 @@ Object Storage와 DB는 하나의 트랜잭션이 아니다. DB 등록 전에 �
 ### 작업 프로세스 실행 구조
 
 ```text
-Application(app-01)
+Application(pj3-webapp)
   Django 웹 프로세스: 입력·작업 접수, 권한 확인, 상태·결과 조회
   별도 작업 프로세스
     ├─ asyncio: AI·저장소·내부 HTTP의 비동기 I/O

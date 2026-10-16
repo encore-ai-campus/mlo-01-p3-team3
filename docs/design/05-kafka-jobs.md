@@ -8,6 +8,10 @@
 
 v2 입력/보존/해석 메시지는 input_revision_id·recommendation_run_id·input_hash·고정 파일/텍스트 참조·schema_version을 사용한다. generation_run_id는 신규 필수가 아니다. 기존 생성 스키마와 혼합하지 않도록 새 version/호환 Consumer 전환을 구현한다. 이미 저장된 v1 실행은 원래 참조로 복구하고 v2로 조용히 바꾸지 않는다.
 
+![사용자 입력 보존과 Bronze 확인 이후 해석 시작](assets/input-bronze-gate.svg)
+
+[PNG로 보기](assets/input-bronze-gate.png). 입력 파일·버전 보존과 Bronze 확인이라는 공통 순서를 보여 준다. 메시지 필드는 위의 v2 계약을 따르며 생성 실행을 신규 필수로 요구하지 않는다.
+
 ## 신규 사용 토픽과 단계
 
 - user.input.received / user.input.bronze.persisted / input.interpretation.requested: v2 스키마 정의 후 직접 추천에 사용.
@@ -89,9 +93,6 @@ user.action.recorded는 PRODUCT_IMPRESSION·PRODUCT_SELECTED·PRODUCT_REJECTED·
 
 이 절이 입력 보존 완료와 AI 시작의 기준 계약이다. 파일은 불변 키에 저장하고 checksum·접근 가능성을 확인한 뒤 입력 버전·생성 실행·보존 작업을 같은 MySQL 트랜잭션으로 등록하고 커밋 확인 후 접수 이벤트를 발행한다. 파일 저장 실패는 접수 완료가 아니다. 객체 저장과 DB 등록은 분산 트랜잭션이 아니므로 DB 등록 실패로 남은 미참조 객체는 보관 정책에 따라 정리한다.
 
-![사용자 입력 보존과 AI 시작 게이트](assets/input-bronze-gate.svg)
-
-[PNG로 보기](assets/input-bronze-gate.png)
 
 화살표는 입력 보존 확인까지의 진행 순서다. DB 커밋 확인 후 Kafka에 직접 발행하며 DB·Delta·Kafka 전체를 한 트랜잭션으로 처리하지 않는다.
 
