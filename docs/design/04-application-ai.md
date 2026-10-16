@@ -1,6 +1,6 @@
 # Application과 외부 AI: 입력 맥락 기반 추천
 
-2026-10-15 현행 설계. 상세 책임·응답 구획·코드 검증 예시는 [직접 추천 계약](12-direct-recommendation.md)을 따른다. 기존 생성 MVP 코드/스키마는 이번 문서 작업에서 변경하지 않았다.
+2026-10-15 현행 설계. 상세 책임·응답 구획·코드 검증 예시는 [직접 추천 계약](12-direct-recommendation.md)을 따른다. 직접 추천 로컬 웹 경로를 구현했으며 서비스 DB/API v2 전환은 별도다.
 
 ## AI와 해석 이후 코드의 책임
 
@@ -20,14 +20,16 @@ RECEIVED→BRONZE_PENDING→INTERPRETING→VALIDATING→SEARCHING→COMPLETED �
 
 ## 이번 운영 추천과 후속 고도화
 
-scikit-learn은 저장한 후보 특징/라벨로 학습·평가하고 광고 서버 CPU에서 실제 사용자 추천 순위를 결정한다. Application은 모델/특징/점수 버전을 저장한다. 모델 로딩/추론 실패를 후보 없음으로 숨기지 않는다. 후속은 데이터/모델/재학습 고도화와 임베딩/인덱스·멀티모달 추가 내재화다. 크기 추정의 정확도는 추천 모델 배포와 별개로 검증한다.
+초기 추천은 라벨 없이 scikit-learn `cosine_similarity`와 수동 초기 가중치로 수행한다. `weighted-content-v1`은 선호 색상이 있으면 `0.85 × 유사도 + 0.15 × 색상 일치`, 없으면 유사도만 사용한다. 필수 조건 불일치는 제외하고 결측·미지원 필수 조건은 UNKNOWN 목록으로 분리한다. 가중치는 학습값이 아니며 점수는 확률이 아니다. 사람의 6만 이미지 전수 적합/부적합 라벨링·LogisticRegression 학습·직렬화 모델 파일은 초기 실행 조건이 아니다. 반응 자료를 충분히 확보한 뒤 지도학습을 별도 평가한다.
+
+로컬 구현은 `src/interior_recommender/recommendation.py`와 `src/interior_recommender/web/direct.py`다. `python -m interior_recommender.web` 기본 경로가 직접 추천이며 기존 Canvas의 `POST /api/runs`를 재사용한다. 해석 1회와 질의 임베딩 1회를 기본으로 하며 성공 receipt를 재사용한다. 별도 입력 절차·템플릿 선택·이미지 생성은 없다. 실제 DB·Kafka·Delta Bronze·광고 서버 HTTP·FAISS·상품 링크 검증 API 통합 및 운영 배포는 아직 미구현이다. 논리 서비스 계약을 로컬 파일 구현 완료와 혼동하지 않는다.
 
 <details>
 <summary>이전 설계 이력 — 이미지 생성 중심 흐름과 당시 계약</summary>
 
 # Django와 AI 연결
 
-Django는 MySQL을 사용해 사용자 서비스를 제공한다. AI는 외부 멀티모달 API로 연결하고 전용 AI 서버는 추가하지 않는다. Application 서버(pj3-webapp)의 Kafka Consumer 프로세스가 API를 호출한다. 3차 흐름은 입력 해석·템플릿 기반 공간 구성·결과 물체 분석과 유사 상품 추천이다. 광고 서버는 별도 pj3-ad-server 후보 VM에서 검색·추천과 상품 페이지 연결 결정·집계 조회를 담당한다.
+Django는 MySQL을 사용해 사용자 서비스를 제공한다. AI는 외부 멀티모달 API로 연결하고 전용 AI 서버는 추가하지 않는다. Application 서버(app-01)의 Kafka Consumer 프로세스가 API를 호출한다. 3차 흐름은 입력 해석·템플릿 기반 공간 구성·결과 물체 분석과 유사 상품 추천이다. 광고 서버는 별도 ad-01 후보 VM에서 검색·추천과 상품 페이지 연결 결정·집계 조회를 담당한다.
 
 [문서 안내](index.md) · [데이터 모델](03-data-model.md) · [Kafka 처리](05-kafka-jobs.md)
 
@@ -104,10 +106,10 @@ Application은 소유자 권한과 요청 맥락을 검증한다. 템플릿 선�
 
 상품 이미지 분석은 핵심 흐름 이후 보조 기능으로 연결한다. 색상·재질 등 해석을 확장하면 추정값으로 구분하고 3차 성공 조건에 추가하지 않는다.
 
-AI API Consumer는 Django와 같은 Application 서버(pj3-webapp)에서 실행하되 웹 요청 프로세스와 분리한다. 같은 코드베이스의 Django 관리 명령으로 구현하고 별도 컨테이너나 systemd 서비스로 관리할 수 있다. 웹 서버 시작 시 Consumer를 함께 실행하지 않는다. 이 프로세스는 모델을 호스팅하지 않으며 실제 추론은 외부 API 제공처에서 수행한다. 모델 가중치와 GPU 및 AI 전용 VM은 배치하지 않는다.
+AI API Consumer는 Django와 같은 Application 서버(app-01)에서 실행하되 웹 요청 프로세스와 분리한다. 같은 코드베이스의 Django 관리 명령으로 구현하고 별도 컨테이너나 systemd 서비스로 관리할 수 있다. 웹 서버 시작 시 Consumer를 함께 실행하지 않는다. 이 프로세스는 모델을 호스팅하지 않으며 실제 추론은 외부 API 제공처에서 수행한다. 모델 가중치와 GPU 및 AI 전용 VM은 배치하지 않는다.
 
 ```text
-Application 서버(pj3-webapp)
+Application 서버(app-01)
   ├─ Django 웹 프로세스 → Kafka
   ├─ 작업 복구 프로세스 → Kafka
   └─ AI API Consumer ← Kafka
@@ -146,7 +148,7 @@ Object Storage와 DB는 하나의 트랜잭션이 아니다. DB 등록 전에 �
 ### 작업 프로세스 실행 구조
 
 ```text
-Application(pj3-webapp)
+Application(app-01)
   Django 웹 프로세스: 입력·작업 접수, 권한 확인, 상태·결과 조회
   별도 작업 프로세스
     ├─ asyncio: AI·저장소·내부 HTTP의 비동기 I/O

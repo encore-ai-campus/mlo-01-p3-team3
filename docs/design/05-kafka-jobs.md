@@ -8,10 +8,6 @@
 
 v2 입력/보존/해석 메시지는 input_revision_id·recommendation_run_id·input_hash·고정 파일/텍스트 참조·schema_version을 사용한다. generation_run_id는 신규 필수가 아니다. 기존 생성 스키마와 혼합하지 않도록 새 version/호환 Consumer 전환을 구현한다. 이미 저장된 v1 실행은 원래 참조로 복구하고 v2로 조용히 바꾸지 않는다.
 
-![사용자 입력 보존과 Bronze 확인 이후 해석 시작](assets/input-bronze-gate.svg)
-
-[PNG로 보기](assets/input-bronze-gate.png). 입력 파일·버전 보존과 Bronze 확인이라는 공통 순서를 보여 준다. 메시지 필드는 위의 v2 계약을 따르며 생성 실행을 신규 필수로 요구하지 않는다.
-
 ## 신규 사용 토픽과 단계
 
 - user.input.received / user.input.bronze.persisted / input.interpretation.requested: v2 스키마 정의 후 직접 추천에 사용.
@@ -19,7 +15,7 @@ v2 입력/보존/해석 메시지는 input_revision_id·recommendation_run_id·i
 - user.action.recorded 및 기존 원천/실패 전달: 실제 노출·반응·링크/상품 공통 계약 유지.
 - scene.generation.requested, scene.objects.analysis.requested, template.*: 신규 직접 추천에서 발행하지 않음.
 
-해석→코드 검증/맥락 확정→Application Consumer의 광고 서버 내부 HTTP→결과 저장 순서다. 질의/상품 벡터 생성 책임은 광고 서버, 추천 이력과 사용자 이벤트 쓰기는 Application이다. scikit-learn 학습은 매 요청 선행 단계가 아니지만 검증된 모델의 CPU 추론은 실제 순위 결정의 필수 단계다. run별 모델/특징 버전을 고정하고 재시도에서 바꾸지 않는다. 모델 미준비/추론 실패는 해당 단계 오류로 보존하고 해석 API를 다시 호출하지 않는다.
+해석→코드 검증/맥락 확정→Application Consumer의 광고 서버 내부 HTTP→결과 저장 순서다. 질의/상품 벡터 생성 책임은 광고 서버, 추천 이력과 사용자 이벤트 쓰기는 Application이다. 초기 scikit-learn 콘텐츠 추천은 학습 선행 단계가 없다. run별 수동 가중치/정책·인덱스를 고정하고 INDEX_NOT_READY/RANKING_FAILED를 해당 단계 오류로 보존한다. 로컬 계산/저장 실패로 성공한 해석/임베딩 API를 다시 호출하지 않는다.
 
 ## 발행과 복구
 
@@ -93,6 +89,9 @@ user.action.recorded는 PRODUCT_IMPRESSION·PRODUCT_SELECTED·PRODUCT_REJECTED·
 
 이 절이 입력 보존 완료와 AI 시작의 기준 계약이다. 파일은 불변 키에 저장하고 checksum·접근 가능성을 확인한 뒤 입력 버전·생성 실행·보존 작업을 같은 MySQL 트랜잭션으로 등록하고 커밋 확인 후 접수 이벤트를 발행한다. 파일 저장 실패는 접수 완료가 아니다. 객체 저장과 DB 등록은 분산 트랜잭션이 아니므로 DB 등록 실패로 남은 미참조 객체는 보관 정책에 따라 정리한다.
 
+![사용자 입력 보존과 AI 시작 게이트](assets/input-bronze-gate.svg)
+
+[PNG로 보기](assets/input-bronze-gate.png)
 
 화살표는 입력 보존 확인까지의 진행 순서다. DB 커밋 확인 후 Kafka에 직접 발행하며 DB·Delta·Kafka 전체를 한 트랜잭션으로 처리하지 않는다.
 

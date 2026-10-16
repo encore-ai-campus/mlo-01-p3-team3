@@ -32,7 +32,7 @@
 
 Cloudflare FLUX.2 klein 4B는 이미지 생성·편집, Gemini Flash-Lite는 입력 해석·물체 분석, Gemini Embedding 2는 벡터 생성을 담당한다. 해석 결과로 템플릿을 선택한 뒤 별도 생성 API를 호출한다. [생성 모델](https://developers.cloudflare.com/workers-ai/models/flux-2-klein-4b/) · [해석 모델](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) · [임베딩 API](https://ai.google.dev/gemini-api/docs/embeddings)
 
-Application(pj3-webapp)의 별도 Consumer가 템플릿 제작·벡터화·공간 생성 API를 호출한다. 광고 서버(pj3-ad-server)는 유사 상품 검색·추천 순위와 다나와 연결 결정을 담당하고 Spark는 Bronze 보존 및 Delta 벡터·행동 처리를 담당한다. 템플릿 인덱스는 Application에서 사용하고 상품 인덱스와 분리한다. 새 서버·GPU·로컬 모델·MCP는 추가하지 않는다.
+Application(app-01)의 별도 Consumer가 템플릿 제작·벡터화·공간 생성 API를 호출한다. 광고 서버(ad-01)는 유사 상품 검색·추천 순위와 다나와 연결 결정을 담당하고 Spark는 Bronze 보존 및 Delta 벡터·행동 처리를 담당한다. 템플릿 인덱스는 Application에서 사용하고 상품 인덱스와 분리한다. 새 서버·GPU·로컬 모델·MCP는 추가하지 않는다.
 
 ## 해석 결과의 좌표와 프롬프트 조립
 
@@ -44,6 +44,9 @@ Application(pj3-webapp)의 별도 Consumer가 템플릿 제작·벡터화·공�
 
 ## 템플릿 제작과 등록
 
+![템플릿 제작부터 검색 인덱스 등록까지](assets/template-preparation-flow.svg)
+
+[PNG로 보기](assets/template-preparation-flow.png)
 
 | 단계 | 담당·산출물 |
 |---|---|
@@ -109,6 +112,9 @@ Gemini Embedding 2는 한 입력에 여러 이미지·텍스트를 넣으면 하
 | NEEDS_TEMPLATE_SELECTION | 같은 품목 안에서 다른 형태·색상 템플릿 후보와 조건 차이를 표시하고 선택 요청 |
 | TEMPLATE_UNAVAILABLE | 해당 품목 템플릿이 없음을 안내하고 조건·품목 변경 선택 제공 |
 
+![입력 해석에 따른 템플릿 선택 상태](assets/template-selection-states.svg)
+
+[PNG로 보기](assets/template-selection-states.png)
 
 다른 품목으로 자동 대체하지 않는다. 선택 대기 중에는 보존된 입력과 후보 결과를 유지하고 생성 API를 호출하지 않는다. 후보 선택·조건 수정도 새 이용 데이터로 접수해 새 입력 버전과 실행을 만들고 이전 대기 실행은 이력으로 남긴다. 새 실행은 이전 후보 결과를 참조·재사용할 수 있으나 확정 조건과 소유자를 검증한다. 사용 템플릿 UUID·버전은 scene_generation_templates에 고정하며 작업 도중 바꾸지 않는다.
 
