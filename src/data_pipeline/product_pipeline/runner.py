@@ -41,7 +41,7 @@ def check_registration(row, saved, settings):
 
 
 def ingest(snapshot_dir, settings, ledger, objects, publisher, audit_dir, replay_events=False,
-           progress=None, sleep=time.sleep, hook=None):
+           progress=None, sleep=time.sleep, hook=None, repair_raw=False):
     snapshot_dir, audit_dir = Path(snapshot_dir).resolve(), Path(audit_dir).resolve()
     if audit_dir.is_relative_to(snapshot_dir) or snapshot_dir.is_relative_to(audit_dir):
         raise PipelineError("AUDIT_DIRECTORY_NOT_SEPARATE")
@@ -51,6 +51,8 @@ def ingest(snapshot_dir, settings, ledger, objects, publisher, audit_dir, replay
     report = {"ingestion_run_id": run_id, "snapshot_id": manifest["snapshot_id"], "started_at": now(),
               "products": manifest["product_count"], "raw_confirmed": 0, "raw_created": 0,
               "events_sent": 0, "events_reused": 0, "objects_written": 0,
+              "observations_reused": 0, "stages_reused": 0, "raw_reused": 0,
+              "image_relations_reused": 0,
               "image_relations_available": 0, "image_relations_unavailable": 0,
               "gallery_missing": 0, "failed": 0, "errors": [], "result": "running"}
     audit_dir.mkdir(parents=True, exist_ok=True)
@@ -105,23 +107,49 @@ def ingest(snapshot_dir, settings, ledger, objects, publisher, audit_dir, replay
                     if archived:
                         check_registration(row, archived, settings)
                     saved = perform(key, "REGISTER", lambda: ledger.register(row, manifest, archived))
+                    token = ledger.acquire(key)
+                    # register() may have returned state from before another worker completed.
+                    # Only fenced, freshly read evidence can authorize stage reuse.
+                    saved = ledger.get(key)
+                    ledger.renew(key, token)
                     check_registration(row, saved, settings)
                     if archived is None:
                         atomic_json(archive_path, saved)
                     elif archived["document"] != saved["document"] or archived["event"] != saved["event"]:
                         raise Conflict("REGISTRATION_ARCHIVE_CONFLICT")
-                    token = ledger.acquire(key)
                     point("REGISTERED")
+                    raw_confirmed = saved.get("raw_confirmed", saved.get("stage") in {
+                        "RAW_CONFIRMED", "EVENT_PENDING", "EVENT_UNKNOWN", "EVENT_CONFIRMED"})
+                    prior_vector = saved.get("image_state_vector", [])
+                    if saved.get("image_state_fingerprint") != digest(prior_vector):
+                        raise Conflict("IMAGE_STATE_FINGERPRINT_CONFLICT")
+                    prior = {item["image_slot"]: item for item in prior_vector}
+                    if len(prior) != len(prior_vector):
+                        raise Conflict("IMAGE_STATE_SLOT_CONFLICT")
                     vector = []
-                    if not row["images"]:
-                        report["gallery_missing"] += 1
                     for image in row["images"]:
                         slot = "representative" if image["role"] == "representative" else f"gallery:{image['order']}"
                         state = {"image_slot": slot, "checksum": image.get("sha256"),
                                  "bucket": settings.image_bucket if image.get("object_key") else None,
                                  "object_key": image.get("object_key"), "availability": "UNCONFIRMED",
                                  "verification": "sha256-bytes-v1"}
-                        if image.get("object_key"):
+                        previous = prior.get(slot)
+                        if previous:
+                            if any(previous.get(field) != value for field, value in state.items() if field != "availability"):
+                                raise Conflict("IMAGE_STATE_IDENTITY_CONFLICT")
+                            state["availability"] = previous["availability"]
+                        vector.append(state)
+                    if set(prior) - {state["image_slot"] for state in vector}:
+                        raise Conflict("IMAGE_STATE_SLOT_CONFLICT")
+                    images_reused = bool(saved.get("image_state_checked_at")) and all(
+                        state["availability"] == "AVAILABLE" for state in vector)
+                    if not row["images"]:
+                        report["gallery_missing"] += 1
+                    for image, state in zip(row["images"], vector):
+                        slot = state["image_slot"]
+                        if state["availability"] == "AVAILABLE":
+                            report["image_relations_reused"] += 1
+                        elif image.get("object_key"):
                             source = confined(snapshot_dir, image["object_key"])
                             try:
                                 written = perform(key, "IMAGE", lambda: objects.ensure(image["object_key"], source,
@@ -136,17 +164,27 @@ def ingest(snapshot_dir, settings, ledger, objects, publisher, audit_dir, replay
                                 state["availability"] = "FAILED"
                                 atomic_json(audit_dir / "image_errors" / (key + "-" + digest(slot) + ".json"), {
                                     "observation_key": key, "image_slot": slot, "error_code": error_code(exc)})
+                            # Each slot is durable before moving on to another external write.
+                            checkpoint = sorted(vector, key=lambda item: item["image_slot"])
+                            perform(key, "IMAGE_STATE", lambda: ledger.images(key, token, checkpoint), token)
+                            point("IMAGE_RESOLVED")
                         report["image_relations_available" if state["availability"] == "AVAILABLE"
                                else "image_relations_unavailable"] += 1
-                        vector.append(state)
-                    vector.sort(key=lambda i: i["image_slot"])
-                    perform(key, "IMAGE_STATE", lambda: ledger.images(key, token, vector), token)
-                    ledger.update(key, token, stage="IMAGES_RESOLVED")
+                    if images_reused:
+                        report["stages_reused"] += 1
+                    elif not any(image.get("object_key") for image in row["images"]):
+                        perform(key, "IMAGE_STATE", lambda: ledger.images(key, token, sorted(vector, key=lambda i: i["image_slot"])), token)
+                    if not raw_confirmed:
+                        ledger.update(key, token, stage="IMAGES_RESOLVED")
                     point("IMAGES_RESOLVED")
-                    created = perform(key, "RAW", lambda: ledger.ensure_raw(saved["document"]), token)
-                    point("RAW_INSERTED_BEFORE_MARK")
-                    ledger.update(key, token, stage="RAW_CONFIRMED")
-                    report["raw_created"] += bool(created)
+                    if raw_confirmed and not repair_raw:
+                        report["raw_reused"] += 1
+                        report["stages_reused"] += 1
+                    else:
+                        created = perform(key, "RAW", lambda: ledger.ensure_raw(saved["document"]), token)
+                        point("RAW_INSERTED_BEFORE_MARK")
+                        ledger.update(key, token, stage="RAW_CONFIRMED", raw_confirmed=True)
+                        report["raw_created"] += bool(created)
                     report["raw_confirmed"] += 1
                     point("RAW_CONFIRMED")
                     if not saved.get("event_confirmed") or replay_events:
@@ -164,6 +202,9 @@ def ingest(snapshot_dir, settings, ledger, objects, publisher, audit_dir, replay
                     else:
                         ledger.update(key, token, stage="EVENT_CONFIRMED", last_error=None)
                         report["events_reused"] += 1
+                        report["stages_reused"] += 1
+                    if images_reused and raw_confirmed and not repair_raw and saved.get("event_confirmed") and not replay_events:
+                        report["observations_reused"] += 1
                     notify("observation_complete", key, raw_confirmed=report["raw_confirmed"], total=report["products"])
                 except Exception as exc:
                     code = error_code(exc)

@@ -81,7 +81,7 @@ def _sorted_unique(path, work):
             yield row
 
 
-def _gallery(normal, media, media_root, build):
+def _gallery(normal, media, media_root, build, budget=None):
     observed, acquired = normal.get("images") or [], (media or normal).get("images") or []
     if not isinstance(observed, list) or not isinstance(acquired, list) or len(observed) != len(acquired):
         raise PipelineError("GALLERY_MISMATCH")
@@ -118,7 +118,8 @@ def _gallery(normal, media, media_root, build):
                 raise PipelineError("IMAGE_FILENAME_MISMATCH")
             codes = {c["category_id"] for c in normal.get("categories") or []} or {"_uncategorized"}
             if image.get("category_paths") is not None:
-                if set(image["category_paths"]) != codes or image["local_path"] not in image["category_paths"].values():
+                if (set(image["category_paths"]) != codes or path not in
+                        {confined(media_root, relative) for relative in image['category_paths'].values()}):
                     raise PipelineError("IMAGE_CATEGORY_MISMATCH")
                 for code, relative in image["category_paths"].items():
                     expected = f"categories/{code}/danawa/{normal['product_id']}/{image.get('filename')}"
@@ -130,6 +131,8 @@ def _gallery(normal, media, media_root, build):
             key = f"images/sha256/{actual['sha256'][:2]}/{actual['sha256']}.{actual['extension']}"
             target = confined(build, key)
             if not target.exists():
+                if budget is not None:
+                    budget.reserve(len(data))
                 atomic_bytes(target, data)
             entry.update(actual, acquisition_state="VERIFIED", object_key=key)
         result.append(entry)
@@ -252,9 +255,15 @@ def verify(directory, record_proofs=None):
     directory = Path(directory).resolve()
     manifest = read_json(directory / "snapshot.json")
     stable = {k: v for k, v in manifest.items() if k not in {"snapshot_id", "prepared_at"}}
-    if manifest.get("schema_version") != 1 or manifest.get("kind") != "FULL_EXPORT" or digest(stable) != manifest.get("snapshot_id"):
+    if manifest.get("schema_version") != 1 or manifest.get("kind") not in {"FULL_EXPORT", "LIVE_DELTA"} or digest(stable) != manifest.get("snapshot_id"):
         raise PipelineError("INVALID_SNAPSHOT_MANIFEST")
-    if not {"observations.jsonl", "input/product_raw.jsonl", "input/products.jsonl"}.issubset(manifest["files"]):
+    required = {"observations.jsonl"}
+    if manifest['kind'] == 'FULL_EXPORT':
+        required.update({'input/product_raw.jsonl', 'input/products.jsonl'})
+    elif (manifest.get('handoff_schema_version') != 1 or manifest.get('phase') not in {'SOURCE_METADATA', 'GALLERY_ACQUISITION'}
+          or manifest.get('source_format') != 'jsonl-v1'):
+        raise PipelineError('LIVE_MANIFEST_CONTRACT_INVALID')
+    if not required.issubset(manifest["files"]):
         raise PipelineError("SNAPSHOT_FILES_MISSING")
     for name, info in manifest["files"].items():
         path = confined(directory, name)
@@ -298,4 +307,7 @@ def verify(directory, record_proofs=None):
         raise PipelineError("SNAPSHOT_COUNT_MISMATCH")
     if relation_count != manifest["verified_image_relations"]:
         raise PipelineError("SNAPSHOT_IMAGE_COUNT_MISMATCH")
+    if manifest['kind'] == 'LIVE_DELTA':
+        from .live import verify_evidence
+        verify_evidence(directory, manifest)
     return manifest

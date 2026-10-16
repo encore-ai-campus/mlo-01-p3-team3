@@ -80,7 +80,7 @@ class FileLedger:
 
     def update(self, key, token, **fields):
         row = self._owned(key, token)
-        if set(fields) - {"stage", "last_error", "event_confirmed", "image_state_vector", "image_state_fingerprint", "image_state_revision", "image_state_checked_at"}:
+        if set(fields) - {"stage", "last_error", "raw_confirmed", "event_confirmed", "image_state_vector", "image_state_fingerprint", "image_state_revision", "image_state_checked_at"}:
             raise PipelineError("IMMUTABLE_FIELD_UPDATE")
         row.update(fields)
         atomic_json(self._path(key), row)

@@ -25,6 +25,12 @@ class Source:
         return copy.deepcopy(self.documents[key])
 
 
+class DummyLease:
+    """Localtest double only: this isolated file:// smoke does not test ownership."""
+    def check(self, *args):
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-rehearsal', type=Path, required=True)
@@ -48,10 +54,11 @@ def main():
         .config('spark.sql.catalog.spark_catalog', 'org.apache.spark.sql.delta.catalog.DeltaCatalog'))
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
     spark.sparkContext.setLogLevel('ERROR')
+    lease = DummyLease()
     try:
-        bind_checkpoint(spark, settings)
-        bind_checkpoint(spark, settings)
-        sink = DeltaSink(spark, settings)
+        bind_checkpoint(spark, settings, lease=lease)
+        bind_checkpoint(spark, settings, lease=lease)
+        sink = DeltaSink(spark, settings, lease=lease)
         source = Source({r['document']['_id']: r['document'] for r in records})
         messages = [Message('product.raw.collected', 0, index,
             r['document']['source_record_key'].encode(), canonical(r['event']).encode()) for index, r in enumerate(records)]
@@ -65,7 +72,7 @@ def main():
         conflict = Message('product.raw.collected', 0, len(messages) + 1, messages[0].key, canonical(changed).encode())
         process_batch([conflict], source, sink, 4)
         # Same bytes observed through a fresh sink instance simulate a restarted Driver.
-        restored = DeltaSink(spark, settings)
+        restored = DeltaSink(spark, settings, lease=lease)
         process_batch(messages, source, restored, 5)
         counts = {k: spark.read.format('delta').load(p).count() for k, p in sink.paths.items()}
         stored = restored.existing('raw', set(source.documents))
@@ -74,7 +81,8 @@ def main():
         passed = counts == {'raw': len(records), 'events': len(records), 'quarantine': 2} and same
         summary = {'passed': passed, 'spark_version': spark.version, 'products': len(records),
                    'counts': counts, 'payload_envelope_timestamp_match': same, 'first': first,
-                   'repeated': repeated, 'external_service_connections': 0}
+                   'repeated': repeated, 'external_service_connections': 0,
+                   'lease_backend': 'localtest-double'}
         atomic_json(output / 'report.json', summary)
         print(canonical(summary))
         return 0 if passed else 2

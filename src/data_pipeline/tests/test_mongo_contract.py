@@ -19,12 +19,14 @@ class Collection:
     def __init__(self):
         self.data, self.indexes, self.last_update = {}, [], None
         self.lost_insert_response = False
+        self.insert_calls = 0
         self.matched = 1
 
     def create_index(self, *args, **kwargs):
         self.indexes.append((args, kwargs))
 
     def insert_one(self, value):
+        self.insert_calls += 1
         if value["_id"] in self.data or (value.get("observation_key") and any(
                 v.get("observation_key") == value["observation_key"] for v in self.data.values())):
             raise DuplicateKeyError("duplicate")
@@ -92,10 +94,11 @@ class MongoContractTests(unittest.TestCase):
 
     def test_lost_registration_response_reuses_inserted_ids(self):
         self.ledger.observations.lost_insert_response = True
-        with self.assertRaises(AutoReconnect):
-            self.ledger.register(self.row, self.snapshot)
+        reconciled = self.ledger.register(self.row, self.snapshot)
         original = next(iter(self.ledger.observations.data.values()))
         restored = self.ledger.register(self.row, self.snapshot)
+        self.assertEqual(reconciled["event"], original["event"])
+        self.assertEqual(self.ledger.observations.insert_calls, 1)
         self.assertEqual(original["document"], restored["document"])
         self.assertEqual(original["event"], restored["event"])
         self.assertEqual(len(self.ledger.observations.data), 1)
@@ -103,9 +106,10 @@ class MongoContractTests(unittest.TestCase):
     def test_lost_raw_insert_response_is_reconciled_without_overwrite(self):
         saved = self.ledger.register(self.row, self.snapshot)
         self.ledger.raw.lost_insert_response = True
-        with self.assertRaises(AutoReconnect):
-            self.ledger.ensure_raw(saved["document"])
         self.assertFalse(self.ledger.ensure_raw(saved["document"]))
+        self.assertEqual(self.ledger.raw.insert_calls, 1)
+        self.assertFalse(self.ledger.ensure_raw(saved["document"]))
+        self.assertEqual(self.ledger.raw.insert_calls, 1)
         self.assertEqual(len(self.ledger.raw.data), 1)
         stored = next(iter(self.ledger.raw.data.values()))
         stored["payload"]["detail"]["html"] = "corrupt"

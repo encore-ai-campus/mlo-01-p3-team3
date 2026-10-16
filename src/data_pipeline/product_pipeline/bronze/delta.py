@@ -1,6 +1,6 @@
 """Single Driver, insert-only Delta tables. Existing rows are never updated."""
 from ..contracts import canonical
-from ..errors import Conflict
+from ..errors import Conflict, PipelineError
 
 SPECS = {
     'raw': ('raw_document_id', [('raw_document_id', 's'), ('source_code', 's'), ('source_product_id', 's'),
@@ -23,7 +23,11 @@ def same_content(table, first, second):
 
 
 class DeltaSink:
-    def __init__(self, spark, settings):
+    def __init__(self, spark, settings, *, lease=None):
+        if lease is None:
+            raise PipelineError('BRONZE_WRITER_LEASE_REQUIRED')
+        self.lease, self.settings = lease, settings
+        self.lease.check(self.settings)
         from delta.tables import DeltaTable
         from pyspark.sql.types import StructType, StructField, StringType, TimestampType, IntegerType, LongType
         self.spark = spark
@@ -37,8 +41,10 @@ class DeltaSink:
         for table, (_, fields) in SPECS.items():
             schema = StructType([StructField(k, types[t](), True) for k, t in fields])
             self.schemas[table] = schema
+            self.lease.check(self.settings)
             (DeltaTable.createIfNotExists(spark).location(self.paths[table]).addColumns(schema)
              .property('delta.appendOnly', 'true').property('pipeline.targetFingerprint', settings.fingerprint).execute())
+            self.lease.check(self.settings)
             existing = spark.read.format('delta').load(self.paths[table]).schema
             if [(f.name, f.dataType) for f in existing] != [(f.name, f.dataType) for f in schema]:
                 raise Conflict('BRONZE_DELTA_SCHEMA_CONFLICT')
@@ -72,6 +78,7 @@ class DeltaSink:
         return self._lookup('raw', 'observation_key', keys)
 
     def insert(self, table, rows):
+        self.lease.check(self.settings)
         from delta.tables import DeltaTable
         from pyspark.sql import functions as F
         from pyspark.sql.types import ArrayType
@@ -87,8 +94,10 @@ class DeltaSink:
         frame = (self.spark.range(1).select(F.explode(F.from_json(F.lit(canonical(rows)),
             ArrayType(self.schemas[table]), {'mode': 'FAILFAST', 'timeZone': 'UTC',
                 'timestampFormat': "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"})).alias('row')).select('row.*'))
+        self.lease.check(self.settings)
         (DeltaTable.forPath(self.spark, self.paths[table]).alias('target').merge(frame.alias('incoming'),
             f'target.{key} = incoming.{key}').whenNotMatchedInsertAll().execute())
+        self.lease.check(self.settings)
         stored = self.existing(table, {row[key] for row in rows})
         if any(row[key] not in stored or not same_content(table, stored[row[key]], row) for row in rows):
             raise Conflict('BRONZE_DELTA_COMMIT_UNCONFIRMED')

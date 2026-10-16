@@ -2,7 +2,7 @@
 
 분리 브랜치: `feature/#13`, 기준 `dev`의 `e35b2a3`(2026-10-16). [현재 제작 상태·기준 문서 차이](docs/status.md)를 먼저 확인한다. 크롤러 코드는 이 브랜치에 포함하지 않으며 완료된 export 파일로 인계받는다.
 
-다나와 수집 결과를 인계받는 독립 Python 파이프라인이다. **첫 구현 범위는 FULL_EXPORT 검증·봉인 → 이미지 객체 저장 → MongoDB 접수/불변 원천 → Kafka 발행·재실행 복구**다. 실제 서버에 대한 쓰기/장애 인수는 아직 수행하지 않았다.
+다나와 수집 결과를 인계받는 독립 Python 파이프라인이다. **FULL_EXPORT 및 LIVE_DELTA 인계 → 이미지 객체 저장 → MongoDB 접수/불변 원천 → Kafka 발행·재실행 복구 → Bronze → Silver** 실행 코드를 제공한다. 실제 서버에 대한 쓰기/장애 인수는 아직 수행하지 않았다.
 
 범위는 저장된 수집 결과의 스냅샷·이미지 적재·MongoDB 원천·Kafka 전달·Spark Bronze/Silver/Gold·상품 영역 MySQL 게시·실패 복구까지다. 크롤링 실행·파서 변경, 인프라 구축, 서비스 API/운영 화면, 이용 승인·매핑 원장 편집, 임베딩 호출·추천·학습은 포함하지 않는다. 해당 담당의 버전이 고정된 결과를 입력으로 받아 검증한다.
 
@@ -10,14 +10,21 @@
 - [보강 계약 v1.1](docs/design_amendment_v1_1.md): 현재 20대 인프라 기준, 상태 대조 재평가, LIVE 연결/순서, 게시 경쟁 보호, 가격 이력·검수 정책과 인수 우선순위. 새 세부 계약의 기준 문서.
 - [데이터·복구 계약 v1](docs/data_contract_v1.md): 실제 raw/products/media에 맞춘 관측 키, Mongo 운영 원장, 이미지·서비스 ID, 시각·가격·결측 처리와 실행 조건.
 - [상세 설계 대조표](docs/architecture_alignment.md): 03 데이터 모델·05 Kafka·01 인프라·12 직접 추천의 항목별 대응, 확장과 범위 구분.
-- [수집 중 증분 인계 계약](docs/live_handoff_v1.md): commit 상한·마이크로배치·이미지 후속 인계·cursor/접수/발행 분리·재개와 책임 경계. 아직 미구현.
+- [수집 중 증분 인계 계약](docs/live_handoff_v1.md): commit 상한·마이크로배치·이미지 후속 인계·cursor/접수/발행 분리·재개와 책임 경계.
+- [LIVE 실행·복구·NiFi 인수](docs/live_execution.md): capture/drain, S3 ready-last 전송, 용량 제한과 운영 경계.
+- [이슈 #13 충족표](docs/issue13_acceptance.md): 코드·대역/로컬 검증·실제 서버 인수를 구분한 항목별 근거.
+- [실제 서비스 인수 시험](docs/acceptance.md): 명시적 실행으로 Mongo/S3/Kafka/Delta를 대조하는 시험. 아직 미실행.
 - [상위 파이프라인 설계](../../docs/design/02-data-pipeline.md): 프로젝트 공통 계약.
 - [수집기](https://github.com/encore-ai-campus/mlo-01-p3-team3/blob/67e837db4114ef8955a12c0b466f6f4aba50bd8f/Commerce_crawler/README.md): 입력 파일을 생성하는 기존 시스템.
 
-관측 버전·운영 기록·이미지 연결은 계약 v1에 구체화했다. 수집기의 요청·저장·재개 기능과 파이프라인의 적재·발행·복구 책임을 분리한다. **상품 Bronze Delta 코드를 추가했고 실제 로컬 Spark/Delta 저장·중복·격리를 검증했다.** 실제 Kafka/MongoDB/lake를 통한 종단 인수는 남아 있다. Silver/Gold, MySQL 게시, LIVE 인계, NiFi 예약 작업은 후속 구현 대상이다.
+관측 버전·운영 기록·이미지 연결은 계약 v1에 구체화했다. 수집기의 요청·저장·재개 기능과 파이프라인의 적재·발행·복구 책임을 분리한다. **상품 Bronze/Silver Delta 저장·중복·품질·복구와 LIVE 인계의 로컬 검증을 수행했다.** 실제 Kafka/MongoDB/lake를 통한 종단 인수는 남아 있다. Gold, MySQL 게시와 실제 NiFi 일정 활성화는 후속 대상이다.
 
 - [Bronze 실행·초기 전체 적재](docs/bronze_execution.md): 전체 JSON/이미지 인계 이후 available-now 처리, 지속 수신, checkpoint·Delta 복구.
 - [Bronze 구현 계획·검증 기록](docs/bronze_implementation_plan.md).
+- [Silver·Gold 제안서 전체 대조표](docs/silver_gold_field_mapping.md): 실제 입력과 46개 요구 항목의 반영 위치. 코드 구현률과 구분한다.
+- [Silver 설계 v1](docs/silver_design_v1.md): 테이블·키·타입·품질·멱등 저장·재평가 기준안.
+- [Silver 실행·서버 배포](docs/silver_execution.md): 고정 Bronze, 담당자 입력/실행 등록, 정규화·Delta·재평가·복구 명령과 현재 인수 경계.
+- [서버 배포·인계 가이드](docs/deployment.md): 기능 추가와 함께 갱신하는 실행 위치·권한·초기 적재·재개·백업 절차.
 
 ## 설치와 실행
 
@@ -66,7 +73,11 @@ $python = '.\.venv\Scripts\python.exe'
 
 `preflight`는 읽기 전용이다. 실제 쓰기·장애 인수를 대체하지 않는다. `ingest`는 인덱스·접수 상태·원천·객체·이벤트를 실제 생성한다. rehearsal 상태를 live로 재사용하거나 같은 상태 폴더를 다른 대상에 연결할 수 없다. 실제 이미지 서버 역할은 인프라 담당이 확정하며 코드에서 임의 지정하지 않는다.
 
+정상 재개는 원장의 성공 이미지 슬롯·원천·이벤트를 재사용한다. 외부에서 유실된 원천까지 다시 대조/복원할 때는 같은 ingest 명령에 `--repair-raw`를 추가한다. `--replay-events`는 확인된 이벤트를 최초 ID·시각·본문 그대로 다시 발행하는 별도 기능이다. 이미지 객체를 매번 다시 읽어 존재를 확인하는 전수 무결성 검사와 정상 재개를 혼동하지 않는다.
+
 ## 서버 배포 순서
+
+상세 절차와 단계별 실행 가능 여부는 [서버 배포·인계 가이드](docs/deployment.md)를 따른다. 현재 원천 적재·Bronze·Silver 실행 코드가 있다. 새 단계가 구현되면 실제 명령·권한·검증·재개 항목을 이 절과 가이드에 함께 반영한다.
 
 인프라 프로그램 설치는 서버 담당자가 수행하고, 아래 절차는 준비된 서버에 파이프라인을 배치하는 절차다. 실제 접속 주소·비밀정보는 Git 밖에서 관리한다.
 
@@ -76,6 +87,7 @@ $python = '.\.venv\Scripts\python.exe'
 | prepare/ingest | 완료 export와 이미지에 접근할 수 있는 PC 또는 Python 실행 서버 | MongoDB 3멤버·이미지 저장소·Kafka |
 | Bronze Driver | Spark Master/Driver 서버에서 client 모드 제출 | MongoDB 읽기·Kafka 읽기·lake 읽기/쓰기·Spark 클러스터 |
 | Spark Executor | Spark Workers | Kafka·lake·Driver 통신 |
+| Silver Driver | Spark Driver 서버. Bronze와 별도 작업/잠금/checkpoint | 고정 Bronze·lake·Mongo 이미지 상태 읽기·공용 ops lease |
 
 1. 이 브랜치 코드를 배포하고 해당 OS의 가상환경을 새로 만든다. PC의 `.venv`를 복사하지 않는다. 원천 적재는 `requirements.lock.txt`, Bronze는 `requirements-bronze.lock.txt`를 설치한 뒤 `python -m pip install --no-deps -e .`를 실행한다. 서버 Python·Java·Spark·Delta·Hadoop 조합을 인프라 담당과 맞춘다.
 2. 원천 적재 서버에 `environment.local.json`과 배포 비밀을 구성한다. 수집 PC에 데이터가 있다면 그 PC에서 우선 실행할 수 있다. 데이터를 옮길 때는 완료 export의 JSON과 media 폴더 상대 경로를 함께 보존한다.
@@ -83,6 +95,7 @@ $python = '.\.venv\Scripts\python.exe'
 4. Bronze Driver에 `bronze.local.json`, 실제 Kafka cluster ID, Mongo 읽기 계정, Kafka Java client 설정, lake S3A 설정을 주입한다. 이미지 버킷과 Delta 버킷을 구분한다.
 5. [Bronze 제출 예시](docs/bronze_execution.md#설치와-실행)에 따라 Driver 서버에서 `spark-submit --deploy-mode client`로 실행한다. 초기에는 `--available-now`, 이후 지속 수신은 같은 checkpoint에서 해당 옵션만 제거한다. 동시에 두 Driver를 시작하지 않는다.
 6. 원천·이벤트·격리·이미지 관계 건수와 hash를 대조한다. 실패 시 원천 적재는 동일 snapshot/state/config, Bronze는 동일 config/checkpoint로 재개한다. checkpoint를 삭제하거나 같은 상태를 다른 환경에 연결하지 않는다.
-7. 종단 인수 후 NiFi가 검증된 명령을 호출하도록 일정·로그 수집을 연결한다. 이 저장소가 NiFi 실행 작업을 자동 설치한 상태는 아니다.
+7. [LIVE 실행 문서](docs/live_execution.md)의 capture/drain으로 수집 중 인계를 시험한다. 실제 종단 인수 후 NiFi가 검증된 단발 명령을 호출하도록 일정·로그 수집을 연결한다. 이 저장소가 NiFi 실행 작업을 자동 설치한 상태는 아니다.
+8. [Silver 실행 문서](docs/silver_execution.md)에 따라 `config/silver.local.json`, 담당자 snapshot, NORMALIZATION 등록 증거, `SILVER_SPARK_OPTIONS`/`SILVER_LEASE_MONGO_URI`를 준비한다. `run_silver.py --bronze-version N --inputs ... --registration ... --state-dir ... --max-observations 3`으로 인수한다. 매핑/검수 미제공은 품질 대기이며 Gold/MySQL로 자동 게시하지 않는다.
 
 원천 적재 감사/등록 사본, MongoDB, 이미지·Delta 저장소와 checkpoint를 각 보관 정책으로 백업한다. 현재 로컬 테스트 결과는 실제 서버 구축·연동 완료를 의미하지 않는다.

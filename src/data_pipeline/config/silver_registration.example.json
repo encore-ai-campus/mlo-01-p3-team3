@@ -1,0 +1,7 @@
+{
+  "processing_run_id": "replace-with-existing-pipeline-runs-uuid",
+  "stage": "NORMALIZATION",
+  "status": "NOT_REGISTERED",
+  "provider": "MYSQL_PIPELINE_RUNS_EXPORT",
+  "evidence_ref": "replace-with-owner-issued-registration-evidence"
+}

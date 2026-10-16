@@ -17,7 +17,10 @@ def kafka_options(options, settings):
             'failOnDataLoss': 'true', 'maxOffsetsPerTrigger': str(settings.max_records)}
 
 
-def bind_checkpoint(spark, settings):
+def bind_checkpoint(spark, settings, *, lease=None):
+    if lease is None:
+        raise PipelineError('BRONZE_WRITER_LEASE_REQUIRED')
+    lease.check(settings)
     path = spark._jvm.org.apache.hadoop.fs.Path(settings.checkpoint_path)
     fs = path.getFileSystem(spark._jsc.hadoopConfiguration())
     marker = spark._jvm.org.apache.hadoop.fs.Path(path, '_pipeline_target')
@@ -31,13 +34,17 @@ def bind_checkpoint(spark, settings):
     else:
         if fs.exists(path) and len(fs.listStatus(path)):
             raise Conflict('BRONZE_CHECKPOINT_BINDING_MISSING')
+        lease.check(settings)
         fs.mkdirs(path)
+        lease.check(settings)
         stream = fs.create(marker, False)
         try:
+            lease.check(settings)
             stream.writeUTF(settings.fingerprint)
             stream.hflush()
         finally:
             stream.close()
+        lease.check(settings)
 
 
 def check_kafka_cluster(spark, options, settings):
@@ -62,11 +69,15 @@ def check_kafka_cluster(spark, options, settings):
             admin.close(spark._jvm.java.time.Duration.ofSeconds(5))
 
 
-def start(spark, settings, source, options, available_now=False, progress=None):
+def start(spark, settings, source, options, available_now=False, progress=None, *, lease=None):
+    if lease is None:
+        raise PipelineError('BRONZE_WRITER_LEASE_REQUIRED')
+    lease.check(settings)
     options = kafka_options(options, settings)
     check_kafka_cluster(spark, options, settings)
-    bind_checkpoint(spark, settings)
-    sink = DeltaSink(spark, settings)
+    lease.check(settings)
+    bind_checkpoint(spark, settings, lease=lease)
+    sink = DeltaSink(spark, settings, lease=lease)
     frame = spark.readStream.format('kafka').options(**options).load()
 
     def batch(data, batch_id):
@@ -77,9 +88,11 @@ def start(spark, settings, source, options, available_now=False, progress=None):
                             None if row.value is None else bytes(row.value))
                     for row in data.select('topic', 'partition', 'offset', 'key', 'value').toLocalIterator())
         try:
+            lease.check(settings)
             result = process_batch(messages, source, sink, batch_id,
                 max_records=settings.max_records, max_raw_bytes=settings.max_raw_bytes,
                 max_input_bytes=settings.max_input_bytes)
+            lease.check(settings)  # A lost lease must not return success to foreachBatch.
         except Exception as exc:
             # Spark prints Python callback exceptions; never expose raw SDK credentials there.
             if progress:
@@ -93,5 +106,6 @@ def start(spark, settings, source, options, available_now=False, progress=None):
 
     writer = (frame.writeStream.foreachBatch(batch).option('checkpointLocation', settings.checkpoint_path)
               .queryName('product-bronze-' + settings.environment_id))
+    lease.check(settings)
     return writer.trigger(availableNow=True).start() if available_now else writer.trigger(
         processingTime=f'{settings.trigger_seconds} seconds').start()

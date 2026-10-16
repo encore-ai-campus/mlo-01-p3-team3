@@ -76,7 +76,7 @@ class MongoLedger:
 
     def register(self, row, snapshot, archived=None):
         from bson import ObjectId
-        from pymongo.errors import DuplicateKeyError
+        from pymongo.errors import ConnectionFailure, DuplicateKeyError, ExecutionTimeout, WriteConcernError
         identity = registration_identity(row)
         found = self.observations.find_one({"observation_key": row["observation_key"]})
         if found is None:
@@ -94,6 +94,9 @@ class MongoLedger:
                 self.observations.insert_one(candidate)
             except DuplicateKeyError:
                 pass
+            except (ConnectionFailure, ExecutionTimeout, WriteConcernError):
+                if self.observations.find_one({"observation_key": row["observation_key"]}) is None:
+                    raise
             found = self.get(row["observation_key"])
         if found["identity"] != identity or found["target_fingerprint"] != self.settings.fingerprint:
             raise Conflict("OBSERVATION_CONFLICT")
@@ -138,7 +141,7 @@ class MongoLedger:
             raise LeaseLost()
 
     def update(self, key, token, **fields):
-        if set(fields) - {"stage", "last_error", "event_confirmed"}:
+        if set(fields) - {"stage", "last_error", "raw_confirmed", "event_confirmed"}:
             raise PipelineError("IMMUTABLE_FIELD_UPDATE")
         result = self.observations.update_one(self._filter(key, token), {"$set": fields})
         if result.matched_count != 1:
@@ -166,14 +169,24 @@ class MongoLedger:
                                     {"$unset": {"lease_owner": "", "lease_until": ""}})
 
     def ensure_raw(self, doc):
-        from pymongo.errors import DuplicateKeyError
+        from pymongo.errors import ConnectionFailure, DuplicateKeyError, ExecutionTimeout, WriteConcernError
+        from bson import ObjectId
         validate_size(doc)
+        existing = self.raw.find_one({"_id": ObjectId(doc["_id"])})
+        if existing is not None:
+            if wire_document(existing) != doc:
+                raise Conflict("RAW_DOCUMENT_CONFLICT")
+            return False
         inserted = True
         try:
             self.raw.insert_one(bson_document(doc))
         except DuplicateKeyError:
             inserted = False
-        from bson import ObjectId
+        except (ConnectionFailure, ExecutionTimeout, WriteConcernError):
+            # Majority readback reconciles an unknown write without issuing another insert.
+            if self.raw.find_one({"_id": ObjectId(doc["_id"])}) is None:
+                raise
+            inserted = False  # an unknown acknowledgement is not a confirmed new write
         stored = self.raw.find_one({"_id": ObjectId(doc["_id"])})
         if stored is None:
             raise PipelineError("RAW_UNCONFIRMED")

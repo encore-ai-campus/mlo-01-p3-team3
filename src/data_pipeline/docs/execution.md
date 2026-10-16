@@ -71,7 +71,7 @@ smoke 출력 경로는 새 폴더여야 한다. 선택 상품과 이미지 사�
 - 실제 3노드 MongoDB majority+journal·장애 전환, S3 조건부 쓰기·동시 업로드·인증, Kafka 전달/복구는 시험 환경에서 인수해야 한다. 읽기 전용 preflight는 Mongo topology, 버킷 접근, 토픽 복제 수/ISR까지 확인하며 브로커 minISR 설정은 별도 확인한다.
 - 이번 버전은 단일 프로세스의 순차 상품 처리다. Mongo fencing은 있지만 실제 다중 실행 경쟁·전체 처리량/용량 시험은 남아 있다. SDK timeout은 설정했으나 여러 청크로 읽는 객체 전체 작업 시간의 고정 상한을 보장하지 않는다.
 - 입력 오류는 준비 단계 전체를 fail-fast한다. 잘못된 행을 제외한 부분 스냅샷은 미구현이다. JSONL 한 행 32MiB, 이미지 하나 20MiB, Mongo BSON 문서 16MiB 한도다. 큰 원문 외부 참조 fallback은 미구현으로 한도 초과는 격리한다.
-- 스냅샷 자동 원격 업로드/발견, NiFi 일정, Spark Silver/Gold·상태 재평가, MySQL 게시, LIVE cursor/마이크로배치는 미구현이다. 상품 Bronze는 별도 후속 작업으로 구현·로컬 검증했다. CLI를 예약 실행기에서 호출할 수 있지만 예약 작업을 구성한 것은 아니다.
+- LIVE cursor/마이크로배치·이미지 후속·S3 chunk/ready 전송은 이후 구현·로컬 검증했으며 [실행 가이드](live_execution.md)를 따른다. 원격 ready 자동 발견·NiFi 일정 활성화, Spark Silver/Gold·상태 재평가, MySQL 게시는 남아 있다. 상품 Bronze는 구현·로컬 검증했다. CLI를 예약 실행기에서 호출할 수 있지만 실제 예약 작업을 구성한 것은 아니다.
 - 파일 원자적 교체·파일 fsync 및 POSIX 디렉터리 fsync를 사용한다. Windows/NAS 전원 장애 내구성은 대상 파일시스템 검증이 필요하다. 동결은 writer 잠금과 전후 해시에 의존하므로 입력 작업 종료를 운영 절차로 보장한다.
 - VM/Linux/EC2에 이식하도록 환경 설정을 분리했지만 실제 배포·권한·TLS 시험은 남아 있다. 이미지 버킷 역할과 승인된 endpoint를 확정해야 한다.
 

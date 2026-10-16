@@ -13,6 +13,16 @@ from product_pipeline.snapshot import prepare
 
 
 class CliTests(unittest.TestCase):
+    def test_capture_and_drain_cli_are_file_only_in_rehearsal(self):
+        from test_live import source_fixture
+        with tempfile.TemporaryDirectory() as d:
+            source, _, _ = source_fixture(d)
+            spool, state = Path(d)/'spool', Path(d)/'state'
+            with patch('socket.socket', side_effect=AssertionError('network forbidden')), redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['capture', '--source', str(source), '--spool', str(spool),
+                    '--max-spool-bytes', '100000000', '--min-free-bytes', '0']), 0)
+                self.assertEqual(main(['drain', '--spool', str(spool), '--state-dir', str(state), '--rehearse']), 0)
+
     def test_plan_is_network_free_and_creates_no_state(self):
         with tempfile.TemporaryDirectory() as root:
             source, media = fixture(root, codes=("11",))

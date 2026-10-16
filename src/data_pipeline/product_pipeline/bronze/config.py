@@ -39,12 +39,18 @@ class BronzeSettings:
     max_raw_bytes: int = 32 * 1024 * 1024
     max_input_bytes: int = 8 * 1024 * 1024
     trigger_seconds: int = 30
+    lease_database: str = 'pipeline_ops'
+    lease_collection: str = 'bronze_writer_leases'
+    lease_uri_env: str = 'BRONZE_LEASE_MONGO_URI'
+    lease_seconds: int = 120
+    lease_heartbeat_seconds: int = 10
 
     def __post_init__(self):
-        for value in (self.environment_id, self.mongo_database, self.mongo_replica_set, self.kafka_topic, self.kafka_cluster_id):
+        for value in (self.environment_id, self.mongo_database, self.mongo_replica_set, self.kafka_topic,
+                      self.kafka_cluster_id, self.lease_database, self.lease_collection):
             if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', value):
                 raise PipelineError('INVALID_BRONZE_TARGET')
-        for value in (self.mongo_uri_env, self.kafka_options_env, self.spark_options_env):
+        for value in (self.mongo_uri_env, self.kafka_options_env, self.spark_options_env, self.lease_uri_env):
             if not isinstance(value, str) or not re.fullmatch(r'[A-Z][A-Z0-9_]*', value):
                 raise PipelineError('INVALID_SECRET_ENV_NAME')
         paths = [location(p) for p in (self.bronze_path, self.events_path, self.quarantine_path, self.checkpoint_path)]
@@ -54,6 +60,11 @@ class BronzeSettings:
                     raise PipelineError('BRONZE_PATHS_OVERLAP')
         if self.single_writer_confirmed is not True:
             raise PipelineError('BRONZE_SINGLE_WRITER_REQUIRED')
+        if (self.lease_database == self.mongo_database or self.lease_collection == 'raw_products'
+                or type(self.lease_seconds) is not int or not 60 <= self.lease_seconds <= 3600
+                or type(self.lease_heartbeat_seconds) is not int
+                or not 1 <= self.lease_heartbeat_seconds <= self.lease_seconds // 6):
+            raise PipelineError('BRONZE_INVALID_LEASE_CONFIG')
         if (type(self.max_records) is not int or not 1 <= self.max_records <= 100
                 or type(self.max_raw_bytes) is not int or not 1 <= self.max_raw_bytes <= 128 * 1024 * 1024
                 or type(self.max_input_bytes) is not int or not 1 <= self.max_input_bytes <= 32 * 1024 * 1024

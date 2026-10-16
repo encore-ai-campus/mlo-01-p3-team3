@@ -5,7 +5,7 @@ from .errors import PipelineError
 
 
 class KafkaPublisher:
-    def __init__(self, topic, config, producer=None, clock=time.monotonic, max_attempts=3):
+    def __init__(self, topic, config, producer=None, clock=time.monotonic, max_attempts=3, admin_client=None):
         if type(max_attempts) is not int or not 2 <= max_attempts <= 3:
             raise PipelineError("KAFKA_IDEMPOTENT_RETRY_BUDGET_REQUIRED")
         if not isinstance(config, dict) or not config.get("bootstrap.servers"):
@@ -13,6 +13,9 @@ class KafkaPublisher:
         if config.get("enable.idempotence", True) is not True or config.get("acks", "all") != "all":
             raise PipelineError("KAFKA_DURABILITY_CONFIG_REQUIRED")
         self.topic, self.clock = topic, clock
+        self.admin_client, self.admin_config = admin_client, {
+            k: v for k, v in config.items() if k == 'bootstrap.servers'
+            or k.startswith(('security.', 'sasl.', 'ssl.'))}
         fixed = {**config, "enable.idempotence": True, "acks": "all", "max.in.flight.requests.per.connection": 1,
                  "message.send.max.retries": max_attempts - 1, "delivery.timeout.ms": 30000, "request.timeout.ms": 10000,
                  "socket.timeout.ms": 10000}
@@ -28,6 +31,23 @@ class KafkaPublisher:
             raise PipelineError("KAFKA_TOPIC_REQUIRED")
         if any(len(p.replicas) != 3 or len(p.isrs) < 2 for p in topic.partitions.values()):
             raise PipelineError("KAFKA_REPLICATION_CONTRACT_REQUIRED")
+        # describe_configs returns the effective topic value, including a broker default.
+        # A healthy ISR snapshot does not prove the broker will enforce durable writes.
+        try:
+            from confluent_kafka.admin import AdminClient, ConfigResource, ResourceType
+            if self.admin_client is None:
+                self.admin_client = AdminClient(self.admin_config)
+            resource = ConfigResource(ResourceType.TOPIC, self.topic)
+            result = self.admin_client.describe_configs([resource], request_timeout=10)
+            config = result[resource].result(timeout=12)
+        except Exception:
+            raise PipelineError('KAFKA_CONFIG_UNCONFIRMED') from None
+        try:
+            minimum = int(config['min.insync.replicas'].value)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            raise PipelineError('KAFKA_MIN_ISR_CONTRACT_REQUIRED') from None
+        if minimum < 2:
+            raise PipelineError('KAFKA_MIN_ISR_CONTRACT_REQUIRED')
 
     def send(self, event, key):
         delivery = []

@@ -63,10 +63,10 @@ class BronzeRuntimeTests(unittest.TestCase):
                 fs.open.return_value.readUTF.return_value = stored
                 if error:
                     with self.assertRaises(PipelineError) as found:
-                        bind_checkpoint(spark, self.settings())
+                        bind_checkpoint(spark, self.settings(), lease=MagicMock())
                     self.assertEqual(found.exception.code, error)
                 else:
-                    bind_checkpoint(spark, self.settings())
+                    bind_checkpoint(spark, self.settings(), lease=MagicMock())
                     if not marker_exists:
                         fs.create.return_value.writeUTF.assert_called_once_with(self.settings().fingerprint)
     def test_initial_backlog_and_continuous_modes_share_checkpoint(self):
@@ -80,7 +80,8 @@ class BronzeRuntimeTests(unittest.TestCase):
                 with patch('product_pipeline.bronze.stream.bind_checkpoint'), \
                         patch('product_pipeline.bronze.stream.check_kafka_cluster'), \
                         patch('product_pipeline.bronze.stream.DeltaSink'):
-                    start(spark, self.settings(), object(), {'kafka.bootstrap.servers': 'test:9092'}, initial)
+                    start(spark, self.settings(), object(), {'kafka.bootstrap.servers': 'test:9092'}, initial,
+                          lease=MagicMock())
                 frame.writeStream.foreachBatch.return_value.option.assert_called_with(
                     'checkpointLocation', self.settings().checkpoint_path)
                 if initial:
