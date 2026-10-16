@@ -26,7 +26,7 @@
 
 # 공간 대비 가구 크기 적정성 정책
 
-2026-10-15 정책 반영. 서비스 동작 계약이며 서비스 통합 완료 기록이 아니다. 로컬 웹 MVP 구현은 [MVP 안내](../../../ai_mvp/README.md)를 따른다.
+2026-10-15 정책 반영. 서비스 동작 계약이며 서비스 통합 완료 기록이 아니다. 로컬 웹 MVP 구현은 [MVP 안내](../../src/interior_recommender/README.md)를 따른다.
 
 [설계 안내](index.md) · [템플릿과 생성](08-template-generation.md) · [Application과 AI](04-application-ai.md) · [운영 검증](06-operations-migration.md)
 

@@ -19,6 +19,21 @@ erDiagram
 
 운영 추천은 run별 ranking_policy_json(수동 가중치·결측/미선호 정책·MANUAL_INITIAL)·ranking_version·인덱스/임베딩 버전을 고정한다. item별 ranking_score·score_components_json과 조건별 상태를 보존한다. 초기에는 학습 모델 artifact가 필요 없으며 후속 학습 모델 참조는 선택 사항이다. 상세 필드는 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)을 따른다. 실제 DB/DDL 반영은 별도 작업이다.
 
+## 실버·골드의 논리 연결과 원장 경계
+
+2026-10-16 상품 처리 관계를 반영했다. 아래는 Delta 관측/게시 데이터의 논리 연결이며 MySQL FK나 생성 완료 테이블 목록이 아니다. 정확한 필드와 서비스 확장은 [데이터 모델](03-data-model.md#실버골드와-서비스-원장-대응), 원문 대응·행 기준은 [Delta 속성 사전](data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위)을 따른다.
+
+| 원천·Silver | 논리 연결 | Gold·서비스 |
+|---|---|---|
+| `raw_products` → `silver_product_observations` | 원천 관측 ID·업무 키·관측 시각 | `gold_product_catalog` → `products` |
+| `silver_product_attributes` | 같은 관측·상품/옵션의 확인 속성 | 카탈로그 속성, 값별 출처·확인 상태 |
+| `silver_price_observations` | 상품/옵션·가격 종류·판매 항목 참조 | 목록 가격은 카탈로그 가격, 확인 Offer는 `gold_offers_current`·`gold_offer_snapshots` |
+| `silver_product_images` | 상품별 이미지 연결·자산 checksum·원천 버전 | `gold_recommendation_images` → `product_images`·`assets`·이미지별 벡터 참조 |
+| `silver_link_observations` | 비교/구매 종류·상품/판매 항목·검증 시각 | `gold_product_links`·확인 Offer 링크 |
+| `silver_quality_issues`와 각 정제 결과 | 대상·필드·실패/보류 사유·처리 버전 | `gold_catalog_quality_daily`, 네 가지 준비 상태와 사유 |
+
+상품–이미지·가격·속성은 한 상품에 여러 관측이 연결된다. 이를 모두 펼친 조인 결과를 상품 행 수로 세지 않는다. `gold_recommendation_images.product_id`는 연결된 서비스 상품 UUID지만 벡터 원장의 소유 키는 이미지 asset이다. 같은 이미지로 서로 다른 상품을 합치지 않는다. 상품 품질 일별 집계와 사용자 반응 집계의 키·분모는 별도다.
+
 <details>
 <summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
 
