@@ -6,7 +6,7 @@ from pathlib import Path
 from .adapters.router import ModelAdapter
 from .config import Settings, load_environment
 from .pipeline import Pipeline, create_run
-from .batch_embedding import BatchEmbedding, create_batch, inspect_directory
+from .catalog.batch_embedding import BatchEmbedding, create_batch, inspect_directory
 
 
 def main(argv=None):

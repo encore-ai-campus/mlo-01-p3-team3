@@ -39,6 +39,14 @@ def bridge(request, route=""):
                                  headers=headers, **payload, timeout=30, follow_redirects=False)
     except httpx.HTTPError:
         return JsonResponse({"error": "AI MVP 서버에 연결할 수 없습니다."}, status=502)
+    if response.status_code == 302:
+        from ..domain.product_links import comparison_url
+        from urllib.parse import parse_qs, urlsplit
+        location = response.headers.get("Location", "")
+        pid = parse_qs(urlsplit(location).query).get("pcode", [""])[0]
+        if not comparison_url(location, "danawa:" + pid):
+            return JsonResponse({"error": "Invalid product link"}, status=502)
+        return HttpResponse(status=302, headers={"Location": location, "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer"})
     return HttpResponse(response.content, status=response.status_code,
                         content_type=response.headers.get("content-type", "application/json"),
                         headers={"Cache-Control": "private, no-store"})

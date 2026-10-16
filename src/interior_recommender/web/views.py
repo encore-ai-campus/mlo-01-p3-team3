@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from django.conf import settings
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, JsonResponse, HttpResponseRedirect
 from django.middleware.csrf import get_token
 from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
@@ -26,7 +26,7 @@ def studio():
                 _studio = Studio(settings.WEB_OUTPUT_ROOT, settings.WEB_TEMPLATE_MANIFEST, settings.WEB_DEMO,
                                  danawa_index=getattr(settings, "WEB_DANAWA_INDEX", None))
             else:
-                from .direct import DirectStudio
+                from ..application.direct import DirectStudio
                 policy_path = getattr(settings, "WEB_RANKING_POLICY", None)
                 _studio = DirectStudio(settings.WEB_OUTPUT_ROOT, products=getattr(settings, "WEB_PRODUCTS", None),
                                        danawa_index=getattr(settings, "WEB_DANAWA_INDEX", None), demo=settings.WEB_DEMO,
@@ -139,6 +139,18 @@ def submit(request):
 @api
 def state(request, run_id):
     return JsonResponse(studio().state(str(run_id), owner(request)))
+
+
+@require_GET
+@api
+def product_link(request, run_id):
+    target = studio()
+    if not getattr(target, "direct", False):
+        raise FileNotFoundError
+    response = HttpResponseRedirect(target.product_link(str(run_id), owner(request), request.GET.get("image_id")))
+    response["Cache-Control"] = "private, no-store"
+    response["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 @require_POST

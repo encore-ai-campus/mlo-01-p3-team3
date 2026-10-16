@@ -4,6 +4,7 @@
 
 | 작업 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| interior_recommender 구현·호출 계층 | [역할별 구현 라우팅](../interior-recommender/README.md) | [호출 구조](../interior-recommender/call-structure.md), 아래 담당 설계 |
 | 전체 경계·변경 범위 | [직접 추천 계약](12-direct-recommendation.md) | [아키텍처](00-architecture.md) |
 | AI 입력 해석·코드 검증 | [Application](04-application-ai.md) | [크기 근거](11-scale-policy.md), [작업](05-kafka-jobs.md) |
 | 상품 검색·콘텐츠 추천·후속 평가 | [광고 서버](07-ad-server.md) | [파이프라인](02-data-pipeline.md), [평가 계약](12-direct-recommendation.md#이번-scikit-learn과-후속-내재화) |

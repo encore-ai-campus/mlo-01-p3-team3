@@ -1,5 +1,9 @@
 # 기존 RoomPick Canvas → 직접 상품 추천 연결
 
+## 역할별 구현 안내
+
+연동 변경 전 [웹 담당 라우팅](../../../docs/interior-recommender/roles/web.md)과 [현재 호출 구조](../../../docs/interior-recommender/call-structure.md)를 읽는다. 기본 직접 추천 실행은 `application/direct.py`, 추천 규칙은 `domain/`, 카탈로그 준비는 `catalog/`에 있다. 아래 기존 생성 연동 예제의 생성 버튼·템플릿 절차는 `--legacy-generation`용 이력이며 직접 추천의 기본 사용자 절차로 적용하지 않는다.
+
 2026-10-15 기본 웹은 이미지 생성 없는 콘텐츠 추천이다. [실행·상품 준비·제약](../README.md)을 먼저 읽는다. 이 저장소에서 원격 RoomPick의 소스를 수정/배포하지 않았다. 기존 브리지·CSRF·소유자 세션 계약을 유지하며 로컬 파일 저장을 Bronze 완료로 표시하지 않는다.
 
 ## 서버와 화면

@@ -45,6 +45,16 @@ def analysis_wire_schema(schema):
     return result
 
 
+def direct_context_wire_schema(schema):
+    result = inline_wire_schema(schema)
+    region = result["properties"]["placement_region"]
+    box = next(node for node in region.get("anyOf", [region]) if node.get("type") == "object")
+    for field in ("x_min", "y_min", "x_max", "y_max"):
+        box["properties"][field] = {"type": "integer", "minimum": 0, "maximum": 1000,
+                                    "description": "Normalized room-image coordinate from 0 to 1000, not pixels"}
+    return result
+
+
 class GeminiAdapter:
     def __init__(self, settings, client=None):
         self.settings = settings
@@ -70,6 +80,11 @@ class GeminiAdapter:
             parts[0] = (prompt.replace("normalized x_min,y_min,x_max,y_max in 0..1", "x_min,y_min,x_max,y_max on a 0..1000 normalized scale") +
                         " For this provider request use integer coordinates from 0 to 1000, "
                         "not pixels and not fractions. x uses image width and y uses image height.")
+        elif kind == "direct_context":
+            parts[0] = (prompt + " PROVIDER COORDINATE CONTRACT: placement_region uses integer coordinates "
+                        "from 0 to 1000 relative to the ORIGINAL ROOM, not pixel coordinates. "
+                        "Top-left is (0,0), bottom-right is (1000,1000). "
+                        "Use null when the placement region is uncertain.")
         if kind in {"embed", "embed_text"}:
             if kind == "embed" and len(images) != 1:
                 raise ValueError("Embed exactly one image per request")
@@ -88,7 +103,9 @@ class GeminiAdapter:
                           system_instruction=SYSTEM))
             if kind in {"analyze", "compare"}:
                 config.response_json_schema = analysis_wire_schema(schema)
-            elif kind in {"direct_context", "plan", "reference", "scale"}:
+            elif kind == "direct_context":
+                config.response_json_schema = direct_context_wire_schema(schema)
+            elif kind in {"plan", "reference", "scale"}:
                 config.response_json_schema = inline_wire_schema(schema)
             response = self.client.models.generate_content(
                 model=self.settings.image_model if kind == "generate" else self.settings.analysis_model,
@@ -104,7 +121,7 @@ class GeminiAdapter:
                            "mime_type": images_out[0].mime_type}
             else:
                 payload = {"text": response.text}
-                if kind in {"analyze", "compare"}:
+                if kind in {"analyze", "compare", "direct_context"}:
                     payload["coordinate_space"] = "normalized_1000_xyxy"
         usage = getattr(response, "usage_metadata", None)
         return {"payload": payload, "usage_json": usage.model_dump(mode="json") if usage else None,

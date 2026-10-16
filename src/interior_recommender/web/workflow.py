@@ -20,7 +20,7 @@ from ..schemas import ReferenceStructure, Template, normalized_vector
 from ..scale import api_scale_bounds
 from ..services import (comparison_prompt, generation_prompt, scene_plan_prompt, reference_structure_prompt,
                         REFERENCE_PROMPT_VERSION, WEB_PROMPT_VERSION, scale_plan_prompt)
-from .danawa import DanawaCatalog
+from ..catalog.danawa import DanawaCatalog
 
 
 class DemoAdapter:

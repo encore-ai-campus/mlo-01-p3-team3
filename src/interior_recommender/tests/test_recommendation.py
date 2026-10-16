@@ -11,7 +11,7 @@ from interior_recommender.assets import checksum, read_json, write_json
 from interior_recommender.config import Settings
 from interior_recommender.pipeline import contract_hash
 from interior_recommender.recommendation import (Condition, ProductIndex, RankingPolicy, RecommendationContext,
-                                    validate_context)
+                                    parse_context, validate_context)
 from interior_recommender.tests.test_pipeline import image_bytes
 from interior_recommender.tests.test_web_workflow import post, wait
 from interior_recommender.tests.test_danawa_references import saved_index
@@ -79,6 +79,28 @@ def test_product_dedup_and_stable_ties(tmp_path):
     assert result["items"][0]["image_id"] == "image-a"
 
 
+@pytest.mark.parametrize("upper,group", [(900, "items"), (810, "items"), (700, "unverified_items"), (600, None)])
+def test_adjustable_dimensions_only_match_when_entire_recorded_range_meets_limit(tmp_path, upper, group):
+    row = product(tmp_path, "desk", height_mm=None,
+                  dimension_ranges_mm={"height_mm": {"minimum": 675, "maximum": 810}},
+                  component_dimensions_mm={"seat_width_mm": {"minimum": 400, "maximum": 400}})
+    request = context(required=[Condition(field="height_mm", operator="LE", value=upper, source_quote="test")])
+    result = index([row], [[1, 0]]).rank([1, 0], request)
+    if group is None:
+        assert result["excluded_images"] == 1 and not result["items"] and not result["unverified_items"]
+    else:
+        assert len(result[group]) == 1
+    request = context(required=[Condition(field="width_mm", operator="LE", value=500, source_quote="test")])
+    assert index([row], [[1, 0]]).rank([1, 0], request)["unverified_items"]
+
+
+def test_scalar_dimensions_cannot_hide_a_conflicting_adjustable_range(tmp_path):
+    row = product(tmp_path, "desk", height_mm=675,
+                  dimension_ranges_mm={"height_mm": {"minimum": 675, "maximum": 810}})
+    with pytest.raises(ValueError, match="conflicts"):
+        index([row], [[1, 0]])
+
+
 @pytest.mark.parametrize("policy", [{"similarity_weight": .9}, {"color_weight": -1}, {"similarity_weight": float("nan")}, {"color_weight": float("inf")}])
 def test_invalid_weights_rejected(policy):
     with pytest.raises(ValueError):
@@ -99,6 +121,42 @@ def test_context_requires_original_quote_and_matching_units():
     c.required[0].value = 6000.0
     with pytest.raises(ValueError, match="number/unit"):
         validate_context(c.model_dump(), "폭 60cm 이하", ["CHAIR"])
+
+
+@pytest.mark.parametrize("space,region,expected", [
+    ("normalized_1000_xyxy", {"x_min": 528, "y_min": 570, "x_max": 735, "y_max": 888},
+     {"x_min": .528, "y_min": .570, "x_max": .735, "y_max": .888}),
+    ("normalized_1_xyxy", {"x_min": .1, "y_min": .2, "x_max": .8, "y_max": .9},
+     {"x_min": .1, "y_min": .2, "x_max": .8, "y_max": .9}),
+    ("normalized_1000_xyxy", None, None),
+])
+def test_direct_context_converts_declared_coordinates_without_changing_receipt(space, region, expected):
+    receipt = {"text": json.dumps({**context().model_dump(), "placement_region": region}),
+               "coordinate_space": space}
+    original = receipt["text"]
+    parsed = parse_context(receipt, "", ["CHAIR"])
+    assert parsed.model_dump()["placement_region"] == expected
+    assert receipt["text"] == original
+
+
+@pytest.mark.parametrize("value", [-1, 1001, True, float("nan"), float("inf")])
+def test_direct_context_rejects_invalid_provider_coordinates(value):
+    data = {**context().model_dump(), "placement_region":
+            {"x_min": value, "y_min": 100, "x_max": 800, "y_max": 900}}
+    with pytest.raises(ValueError):
+        parse_context({"text": json.dumps(data), "coordinate_space": "normalized_1000_xyxy"}, "", ["CHAIR"])
+
+
+def test_direct_context_never_guesses_coordinate_units_or_accepts_ocr_as_text_quote():
+    data = {**context().model_dump(), "placement_region":
+            {"x_min": 528, "y_min": 570, "x_max": 735, "y_max": 888}}
+    with pytest.raises(ValueError):
+        parse_context({"text": json.dumps(data)}, "", ["CHAIR"])
+    with pytest.raises(ValueError, match="coordinate space"):
+        parse_context({"text": json.dumps(data), "coordinate_space": "pixels"}, "", ["CHAIR"])
+    data["required"] = [{"field": "color", "operator": "EQ", "value": "black", "source_quote": "검은색 의자"}]
+    with pytest.raises(ValueError, match="quote"):
+        parse_context({"text": json.dumps(data), "coordinate_space": "normalized_1000_xyxy"}, "", ["CHAIR"])
 
 
 def test_mmap_catalog_checksum_paths_and_consistency(tmp_path):
@@ -166,6 +224,36 @@ def test_direct_workflow_reuses_api_and_freezes_policy_without_catalog_copy(tmp_
             f.result(timeout=5)
         assert service.state(run, owner)["status"] == "INDEX_NOT_READY"
         assert CountingAdapter.calls == ["direct_context", "embed_text"]
+    finally:
+        service.pool.shutdown(wait=True)
+
+
+def test_sketch_only_provider_coordinates_reach_recommendations_and_keep_raw_receipt(tmp_path):
+    class SketchAdapter(DirectDemoAdapter):
+        calls = []
+
+        def call(self, kind, prompt, images, schema=None):
+            self.calls.append(kind)
+            if kind == "direct_context":
+                raw = context(placement_region=None).model_dump()
+                raw["placement_region"] = {"x_min": 528, "y_min": 570, "x_max": 735, "y_max": 888}
+                return {"payload": {"text": json.dumps(raw), "coordinate_space": "normalized_1000_xyxy"}}
+            return super().call(kind, prompt, images, schema)
+
+    service = DirectStudio(tmp_path, demo=True, adapter_factory=SketchAdapter)
+    owner = str(uuid4())
+    try:
+        run = service.submit(image_bytes(), image_bytes(), "", [], None, owner, str(uuid4()))
+        service.launch(run, owner, "prepare")
+        result = wait(service, run, owner)
+        assert result["status"] == "COMPLETED"
+        assert result["context"]["placement_region"]["x_min"] == .528
+        assert result["context"]["required"] == []
+        receipt = read_json(service.directory(run, owner) / "receipts/context.json")
+        assert json.loads(receipt["payload"]["text"])["placement_region"]["x_min"] == 528
+        service.launch(run, owner, "prepare", retry=True)
+        assert wait(service, run, owner)["status"] == "COMPLETED"
+        assert SketchAdapter.calls == ["direct_context", "embed_text"]
     finally:
         service.pool.shutdown(wait=True)
 

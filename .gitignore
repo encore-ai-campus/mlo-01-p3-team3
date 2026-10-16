@@ -7,6 +7,9 @@ __pycache__/
 !src/.env.example
 outputs/
 data/
+/src/interior_recommender/sample/
 
 build/
 dist/
+
+/src/demo_sketchon/lan-firewall.log

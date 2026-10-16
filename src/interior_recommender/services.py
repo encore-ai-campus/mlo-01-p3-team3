@@ -2,7 +2,7 @@
 import json
 
 from .schemas import Interpretation, ObjectAnalysis, SceneUnderstanding, SceneComparison, ReferenceStructure, ScalePlan
-from .recommendation import RecommendationContext
+from .domain.recommendation import RecommendationContext
 
 PROMPT_VERSION = "interior-single-object-v1"
 SCHEMA_VERSION = 1

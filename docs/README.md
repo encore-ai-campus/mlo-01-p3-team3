@@ -4,6 +4,7 @@
 
 | 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| interior_recommender 코드·호출·담당별 변경 | [역할별 코드·문서 라우팅](interior-recommender/README.md) | [현재 호출 구조](interior-recommender/call-structure.md), [설계 라우팅](design/index.md) |
 | 사업·사용자 범위 | [BRD](BRD_3차.md) | [PRD](PRD_3차_초안.md) |
 | 전체 흐름·담당·내재화 단계 | [직접 추천 계약·다이어그램](design/12-direct-recommendation.md) | [아키텍처](design/00-architecture.md) |
 | 역할별 기술 작업 | [설계 라우팅](design/index.md) | 담당 상세 문서 |
