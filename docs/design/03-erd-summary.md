@@ -1,18 +1,10 @@
 # 핵심 데이터 관계: 직접 추천
 
-2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 그림/필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.
+2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.
 
-```mermaid
-erDiagram
-    projects ||--o{ input_revisions : owns
-    input_revisions ||--o{ recommendation_contexts : interpreted
-    input_revisions ||--o{ recommendation_runs : requested
-    recommendation_contexts |o--o{ recommendation_runs : searched_with
-    recommendation_runs ||--o{ recommendation_items : returns
-    products ||--o{ recommendation_items : matched
-    recommendation_items ||--o{ recommendation_impressions : shown
-    recommendation_impressions ||--o{ user_events : responded
-```
+![입력 버전·추천 맥락·실행·상품·실제 반응의 직접 추천 관계](assets/erd-core-overview.svg)
+
+[PNG로 보기](assets/erd-core-overview.png). A행은 입력과 맥락, B행은 추천과 실제 상품, C행은 판매 이력, D행은 실제 노출과 상품 반응이다. 화살표는 관계를 읽는 방향이며 전체 FK·필드는 상세 사전을 따른다.
 
 접수 중에는 context_id가 NULL일 수 있고 검색 전에는 확정 맥락이 필요하다. 후보 전체/특징/버전은 run의 manifest로, 반환 항목 설명은 item 스냅샷으로 연결하며 반응 라벨은 실제 impression에 연결한다. 원천/벡터/작업의 나머지 공통 관계는 기존 목록을 유지한다.
 
@@ -28,11 +20,8 @@ erDiagram
 
 ## 핵심 관계
 
-공간 생성, 물체별 추천, 상품 판매 이력, 실제 노출·행동을 줄마다 분리했다. 반복 표시한 테이블명은 동일한 테이블이다.
+아래는 이전 생성 중심 관계의 설명 이력이다. 현행 관계 그림은 문서 상단을 따른다.
 
-![공간 생성·상품 추천·판매 이력·실제 반응을 네 줄로 나눈 핵심 데이터 관계](assets/erd-core-overview.svg)
-
-[PNG로 보기](assets/erd-core-overview.png). 화살표는 관계를 읽는 방향이며 서버 호출이나 처리 순서가 아니다. `1 : 0..N`은 왼쪽 한 건에 오른쪽 0건 이상이 연결된다는 뜻이다. `N : 1`은 추천 항목 여러 건이 하나의 상품을 참조한다는 뜻이다. 생략한 관계와 정확한 키는 [업무별 ERD](03-erd-full.md#전체-관계-목록)에서 확인한다.
 
 사용자와 프로젝트의 소유 관계는 전체 관계 목록에서 확인한다.
 

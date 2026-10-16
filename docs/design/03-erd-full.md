@@ -1,18 +1,12 @@
 # 전체 ERD: 직접 추천
 
-2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 그림/필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.
+2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.
 
-```mermaid
-erDiagram
-    projects ||--o{ input_revisions : owns
-    input_revisions ||--o{ recommendation_contexts : interpreted
-    input_revisions ||--o{ recommendation_runs : requested
-    recommendation_contexts |o--o{ recommendation_runs : searched_with
-    recommendation_runs ||--o{ recommendation_items : returns
-    products ||--o{ recommendation_items : matched
-    recommendation_items ||--o{ recommendation_impressions : shown
-    recommendation_impressions ||--o{ user_events : responded
-```
+## 직접 추천 검색 관계
+
+![직접 추천의 입력·맥락·실행과 파일별 상품 벡터·검색 버전 관계](assets/erd-recommendation.svg)
+
+[PNG로 보기](assets/erd-recommendation.png). A행은 입력과 추천 결과, B행은 파일별 벡터, C행은 검색 버전, D행은 선택적 판매 snapshot 참조다. 생성물 연결을 신규 필수로 요구하지 않으며, 생략한 입력·상품 관계는 [핵심 관계](03-erd-summary.md)를 따른다.
 
 접수 중에는 context_id가 NULL일 수 있고 검색 전에는 확정 맥락이 필요하다. 후보 전체/특징/버전은 run의 manifest로, 반환 항목 설명은 item 스냅샷으로 연결하며 반응 라벨은 실제 impression에 연결한다. 원천/벡터/작업의 나머지 공통 관계는 기존 목록을 유지한다.
 
@@ -251,10 +245,6 @@ product_identity_reviews는 후보 업무 키와 검수자를 기록한다. 상�
 
 입력·생성 경로와 사용 템플릿 연결을 분리한다. 최신 실행 포인터와 파일 참조는 전체 관계 목록에서 확인한다.
 
-![프로젝트 입력 버전에서 생성 결과 물체까지와 선택적 스케치·템플릿 연결](assets/erd-generation.svg)
-
-[PNG로 보기](assets/erd-generation.png). A행은 핵심 관계, B행은 스케치 버전, C행은 생성 때 사용한 템플릿 기록이다.
-
 
 다른 업무의 참조 테이블: `templates`. 상세 필드는 해당 업무 표를 따른다.
 
@@ -353,9 +343,6 @@ product_identity_reviews는 후보 업무 키와 검수자를 기록한다. 상�
 
 ## 템플릿 준비
 
-![템플릿의 품목·이미지 파일·검색 벡터 관계](assets/erd-template.svg)
-
-[PNG로 보기](assets/erd-template.png).
 
 다른 업무의 참조 테이블: `assets`, `categories`. 상세 필드는 해당 업무 표를 따른다.
 
@@ -397,15 +384,13 @@ product_identity_reviews는 후보 업무 키와 검수자를 기록한다. 상�
 
 ## 추천·검색
 
-![결과 물체에서 추천 항목·상품까지와 검색 인덱스·이미지 벡터·판매 snapshot 관계](assets/erd-recommendation.svg)
-
-[PNG로 보기](assets/erd-recommendation.png). A행의 `recommendation_items`가 `products`를 참조하고, D행의 판매 snapshot 연결은 선택 사항이다.
+현행 그림은 [직접 추천 검색 관계](#직접-추천-검색-관계)를 따른다. 아래 생성물 연결 필드는 이전 실행 조회를 위한 이력이다.
 
 다른 업무의 참조 테이블: `scene_objects`, `products`. 상세 필드는 해당 업무 표를 따른다.
 
 상품 벡터는 파일 단위로 관리한다. 검색 결과에서 현재 product_images를 조회해 상품별로 확장하며 임베딩 행 자체를 상품으로 취급하지 않는다.
 
-상품 이미지 벡터 관계는 위 그림의 C행에서 확인한다.
+상품 이미지 벡터의 현행 관계는 상단 직접 추천 검색 그림의 B행에서 확인한다.
 
 <details>
 <summary>추천·검색 전체 필드 펼치기</summary>

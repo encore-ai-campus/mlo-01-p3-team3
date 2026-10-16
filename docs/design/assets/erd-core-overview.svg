@@ -1,33 +1,79 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="844" viewBox="0 0 1440 844" role="img" aria-labelledby="title desc">
-<title id="title">핵심 데이터 관계</title><desc id="desc">공간 생성 · 상품 추천 · 판매 정보 · 실제 반응을 한 줄씩 따라갑니다.</desc>
-<defs><style>text{font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif;fill:#17324b}.title{font-size:37px;font-weight:700}.sub{font-size:18px;fill:#596e80}.lane-title{font-size:21px;font-weight:700}.table{font-size:20px;font-weight:700}.meaning{font-size:16px;fill:#52697d}.rel{font-size:16px;font-weight:700;fill:#40566d}.note{font-size:16px;fill:#576e80}</style><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#657d93" stroke-width="2"/></marker></defs>
-<rect width="1440" height="844" fill="#f6f9fc"/><rect width="1440" height="9" fill="#218f83"/>
-<text class="title" x="52" y="66">핵심 데이터 관계</text><text class="sub" x="53" y="102">공간 생성 · 상품 추천 · 판매 정보 · 실제 반응을 한 줄씩 따라갑니다.</text><rect x="38" y="126" width="1364" height="151" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
-<rect x="55" y="143" width="7" height="28" rx="3" fill="#176b63"/><text class="lane-title" x="76" y="165" fill="#176b63">A  공간 입력과 생성</text><rect x="55" y="186" width="264" height="72" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
-<text class="table" x="73" y="215">projects</text><text class="meaning" x="73" y="241">사용자 공간</text><path d="M329 222H394" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="363.5" y="211" text-anchor="middle">1 : 0..N</text><rect x="408" y="186" width="264" height="72" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
-<text class="table" x="426" y="215">input_revisions</text><text class="meaning" x="426" y="241">입력 버전</text><path d="M682 222H747" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="716.5" y="211" text-anchor="middle">1 : 0..1</text><rect x="761" y="186" width="264" height="72" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
-<text class="table" x="779" y="215">scene_generation_runs</text><text class="meaning" x="779" y="241">생성 실행</text><path d="M1035 222H1100" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="1069.5" y="211" text-anchor="middle">1 : 0..N</text><rect x="1114" y="186" width="264" height="72" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
-<text class="table" x="1132" y="215">scene_objects</text><text class="meaning" x="1132" y="241">생성된 물체</text><rect x="38" y="291" width="1364" height="151" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
-<rect x="55" y="308" width="7" height="28" rx="3" fill="#285d9b"/><text class="lane-title" x="76" y="330" fill="#285d9b">B  물체별 상품 추천</text><rect x="55" y="351" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="table" x="73" y="380">scene_objects</text><text class="meaning" x="73" y="406">검색 대상 물체</text><path d="M329 387H394" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="363.5" y="376" text-anchor="middle">1 : 0..N</text><rect x="408" y="351" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="table" x="426" y="380">recommendation_runs</text><text class="meaning" x="426" y="406">추천 실행</text><path d="M682 387H747" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="716.5" y="376" text-anchor="middle">1 : 0..N</text><rect x="761" y="351" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="table" x="779" y="380">recommendation_items</text><text class="meaning" x="779" y="406">추천 목록</text><path d="M1035 387H1100" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="1069.5" y="376" text-anchor="middle">N : 1</text><rect x="1114" y="351" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="table" x="1132" y="380">products</text><text class="meaning" x="1132" y="406">추천된 상품</text><rect x="38" y="456" width="1364" height="151" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
-<rect x="55" y="473" width="7" height="28" rx="3" fill="#9a6422"/><text class="lane-title" x="76" y="495" fill="#9a6422">C  상품의 판매 이력</text><rect x="80" y="516" width="330" height="72" rx="13" fill="#fff5e8" stroke="#e2bc80" stroke-width="1.5"/>
-<text class="table" x="98" y="545">products</text><text class="meaning" x="98" y="571">상품 카탈로그</text><path d="M420 552H541" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="482.5" y="541" text-anchor="middle">1 : 0..N</text><rect x="555" y="516" width="330" height="72" rx="13" fill="#fff5e8" stroke="#e2bc80" stroke-width="1.5"/>
-<text class="table" x="573" y="545">offers</text><text class="meaning" x="573" y="571">판매처·옵션</text><path d="M895 552H1016" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="957.5" y="541" text-anchor="middle">1 : 0..N</text><rect x="1030" y="516" width="330" height="72" rx="13" fill="#fff5e8" stroke="#e2bc80" stroke-width="1.5"/>
-<text class="table" x="1048" y="545">offer_snapshots</text><text class="meaning" x="1048" y="571">수집 당시 조건</text><rect x="38" y="621" width="1364" height="151" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
-<rect x="55" y="638" width="7" height="28" rx="3" fill="#6b4b9a"/><text class="lane-title" x="76" y="660" fill="#6b4b9a">D  실제 노출과 반응</text><rect x="80" y="681" width="330" height="72" rx="13" fill="#f3effb" stroke="#b39bdd" stroke-width="1.5"/>
-<text class="table" x="98" y="710">recommendation_items</text><text class="meaning" x="98" y="736">추천 항목</text><path d="M420 717H541" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="482.5" y="706" text-anchor="middle">1 : 0..1</text><rect x="555" y="681" width="330" height="72" rx="13" fill="#f3effb" stroke="#b39bdd" stroke-width="1.5"/>
-<text class="table" x="573" y="710">recommendation_impressions</text><text class="meaning" x="573" y="736">실제 화면 노출</text><path d="M895 717H1016" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
-<text class="rel" x="957.5" y="706" text-anchor="middle">0..1 : 0..N</text><rect x="1030" y="681" width="330" height="72" rx="13" fill="#f3effb" stroke="#b39bdd" stroke-width="1.5"/>
-<text class="table" x="1048" y="710">user_events</text><text class="meaning" x="1048" y="736">선택·클릭 기록</text><text class="note" x="53" y="826">반복 표시한 테이블은 같은 테이블입니다. 화살표는 관계를 읽는 방향이고 실제 처리 순서는 아닙니다.</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1038" viewBox="0 0 1600 1038" role="img" aria-labelledby="title desc">
+<title id="title">직접 추천의 핵심 데이터 관계</title><desc id="desc">입력 버전 · 확정 맥락 · 추천 실행 · 실제 상품 · 사용자 반응을 구분합니다.</desc>
+<defs><style>text{font-family:"Malgun Gothic",Arial,sans-serif;fill:#19334c} .muted{fill:#5e7080}</style><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1L7 4L1 7" fill="none" stroke="#71869b" stroke-width="1.5"/></marker></defs>
+<rect width="1600" height="1038" fill="#f6f9fc"/><rect width="1600" height="8" fill="#218f83"/>
+<text x="54" y="66" font-size="36" font-weight="700" text-anchor="start" data-max-width="1490">직접 추천의 핵심 데이터 관계</text>
+<text x="55" y="104" font-size="18" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">입력 버전 · 확정 맥락 · 추천 실행 · 실제 상품 · 사용자 반응을 구분합니다.</text>
+<rect x="34" y="132" width="1532" height="182" rx="18" fill="#fff" stroke="#dce5ed" stroke-width="1.4"/>
+<rect x="51" y="149" width="6" height="27" rx="3" fill="#176b63" stroke="#176b63" stroke-width="1.4"/>
+<text x="72" y="172" font-size="21" font-weight="700" text-anchor="start" data-max-width="1470" style="fill:#176b63">A  프로젝트 입력과 해석 맥락</text>
+<rect x="60.0" y="194" width="424.0" height="90" rx="12" fill="#eaf5f3" stroke="#8ac3b9" stroke-width="1.4"/>
+<text x="78.0" y="223" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">projects</text>
+<text x="78.0" y="249" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">사용자 프로젝트</text>
+<path d="M491.0 239H580.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="535.5" y="227" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">1 : 0..N</text>
+<rect x="588.0" y="194" width="424.0" height="90" rx="12" fill="#eaf5f3" stroke="#8ac3b9" stroke-width="1.4"/>
+<text x="606.0" y="223" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">input_revisions</text>
+<text x="606.0" y="249" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">사진·텍스트·스케치 입력 버전</text>
+<path d="M1019.0 239H1108.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="1063.5" y="227" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">1 : 0..N</text>
+<rect x="1116.0" y="194" width="424.0" height="90" rx="12" fill="#eaf5f3" stroke="#8ac3b9" stroke-width="1.4"/>
+<text x="1134.0" y="223" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">recommendation_contexts</text>
+<text x="1134.0" y="249" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">해석·코드 검증의 불변 맥락</text>
+<rect x="34" y="330" width="1532" height="182" rx="18" fill="#fff" stroke="#dce5ed" stroke-width="1.4"/>
+<rect x="51" y="347" width="6" height="27" rx="3" fill="#285d9b" stroke="#285d9b" stroke-width="1.4"/>
+<text x="72" y="370" font-size="21" font-weight="700" text-anchor="start" data-max-width="1470" style="fill:#285d9b">B  추천 실행과 실제 상품</text>
+<rect x="60.0" y="392" width="292.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="78.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="256.0">recommendation_contexts</text>
+<text x="78.0" y="447" font-size="16" font-weight="400" text-anchor="start" data-max-width="256.0" style="fill:#52697d">접수 시 연결은 비어 있을 수 있음</text>
+<path d="M359.0 437H448.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="403.5" y="425" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">0..1 : 0..N</text>
+<rect x="456.0" y="392" width="292.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="474.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="256.0">recommendation_runs</text>
+<text x="474.0" y="447" font-size="17" font-weight="400" text-anchor="start" data-max-width="256.0" style="fill:#52697d">검색 전 확정 맥락 연결</text>
+<path d="M755.0 437H844.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="799.5" y="425" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">1 : 0..N</text>
+<rect x="852.0" y="392" width="292.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="870.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="256.0">recommendation_items</text>
+<text x="870.0" y="447" font-size="17" font-weight="400" text-anchor="start" data-max-width="256.0" style="fill:#52697d">반환 상품·점수·설명</text>
+<path d="M1151.0 437H1240.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="1195.5" y="425" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">N : 1</text>
+<rect x="1248.0" y="392" width="292.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="1266.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="256.0">products</text>
+<text x="1266.0" y="447" font-size="17" font-weight="400" text-anchor="start" data-max-width="256.0" style="fill:#52697d">실제 서비스 상품</text>
+<rect x="34" y="528" width="1532" height="182" rx="18" fill="#fff" stroke="#dce5ed" stroke-width="1.4"/>
+<rect x="51" y="545" width="6" height="27" rx="3" fill="#95611f" stroke="#95611f" stroke-width="1.4"/>
+<text x="72" y="568" font-size="21" font-weight="700" text-anchor="start" data-max-width="1470" style="fill:#95611f">C  확인된 판매 정보와 관측 이력</text>
+<rect x="60.0" y="590" width="424.0" height="90" rx="12" fill="#fff5e8" stroke="#e6c593" stroke-width="1.4"/>
+<text x="78.0" y="619" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">products</text>
+<text x="78.0" y="645" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">추천 상품 카탈로그</text>
+<path d="M491.0 635H580.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="535.5" y="623" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">1 : 0..N</text>
+<rect x="588.0" y="590" width="424.0" height="90" rx="12" fill="#fff5e8" stroke="#e6c593" stroke-width="1.4"/>
+<text x="606.0" y="619" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">offers</text>
+<text x="606.0" y="645" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">판매처·옵션·현재 조건</text>
+<path d="M1019.0 635H1108.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="1063.5" y="623" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">1 : 0..N</text>
+<rect x="1116.0" y="590" width="424.0" height="90" rx="12" fill="#fff5e8" stroke="#e6c593" stroke-width="1.4"/>
+<text x="1134.0" y="619" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">offer_snapshots</text>
+<text x="1134.0" y="645" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">관측 당시 가격·링크 조건</text>
+<rect x="34" y="726" width="1532" height="182" rx="18" fill="#fff" stroke="#dce5ed" stroke-width="1.4"/>
+<rect x="51" y="743" width="6" height="27" rx="3" fill="#684891" stroke="#684891" stroke-width="1.4"/>
+<text x="72" y="766" font-size="21" font-weight="700" text-anchor="start" data-max-width="1470" style="fill:#684891">D  실제 노출과 상품 반응</text>
+<rect x="60.0" y="788" width="424.0" height="90" rx="12" fill="#f3effb" stroke="#c0aee0" stroke-width="1.4"/>
+<text x="78.0" y="817" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">recommendation_items</text>
+<text x="78.0" y="843" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">반환된 추천 항목</text>
+<path d="M491.0 833H580.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="535.5" y="821" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">1 : 0..1</text>
+<rect x="588.0" y="788" width="424.0" height="90" rx="12" fill="#f3effb" stroke="#c0aee0" stroke-width="1.4"/>
+<text x="606.0" y="817" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">recommendation_impressions</text>
+<text x="606.0" y="843" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">실제 화면 노출</text>
+<path d="M1019.0 833H1108.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="1063.5" y="821" font-size="15" font-weight="700" text-anchor="middle" data-max-width="113.0" style="fill:#52697d">1 : 0..N</text>
+<rect x="1116.0" y="788" width="424.0" height="90" rx="12" fill="#f3effb" stroke="#c0aee0" stroke-width="1.4"/>
+<text x="1134.0" y="817" font-size="20" font-weight="700" text-anchor="start" data-max-width="388.0">user_events</text>
+<text x="1134.0" y="843" font-size="17" font-weight="400" text-anchor="start" data-max-width="388.0" style="fill:#52697d">노출에 연결된 상품 반응</text>
+<text x="56" y="956" font-size="16" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">run은 input_revision_id도 직접 참조합니다. 검색 전에는 같은 입력의 확정 context_id가 필요합니다.</text>
+<text x="56" y="987" font-size="16" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">화살표는 관계를 읽는 방향입니다. 서버 호출 순서가 아니며 전체 FK·필드는 상세 사전을 따릅니다.</text>
+<text x="56" y="1018" font-size="16" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">신규 v2 논리 설계 · ORM/DDL 반영 완료를 뜻하지 않습니다. 생성 실행·생성 물체 연결은 신규 필수가 아닙니다.</text>
+</svg>

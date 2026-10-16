@@ -6,73 +6,50 @@ VMware 기반 로컬 VM에 서비스를 배치하고 검증 후 AWS로 이전한
 
 ## 직접 추천의 실행 경계
 
-2026-10-15부터 신규 서비스는 이미지 생성 없이 입력 해석→코드 검증→질의 임베딩→상품 검색·scikit-learn 모델 순위를 수행한다. 기존 19대/DB 3+3·저장소 배치 후보는 유지한다. 이미지 생성 제거만으로 VM 수를 자동 축소하거나 수백 명 처리량을 보장하지 않는다. 기존 역할 그림의 생성 관련 표기는 이전 흐름이며 [현행 담당별 다이어그램](12-direct-recommendation.md#담당별-추천-흐름)을 따른다.
+2026-10-15부터 신규 서비스는 이미지 생성 없이 입력 해석→코드 검증→질의 임베딩→상품 검색·scikit-learn 모델 순위를 수행한다. Prometheus·Grafana 모니터링 VM 1대를 포함한 20대/DB 3+3·저장소 배치 후보를 기준으로 한다. 이미지 생성 제거만으로 VM 수를 자동 축소하거나 수백 명 처리량을 보장하지 않는다. 역할 그림은 Webapp·Ad 분리와 모니터링을 포함한 20대 구성을 반영하며 [현행 담당별 다이어그램](12-direct-recommendation.md#담당별-추천-흐름)을 따른다.
 
 scikit-learn은 별도 CPU 배치에서 학습·평가하고 검증된 Pipeline을 광고 서버의 제한된 추론 프로세스에 로드해 실제 순위를 정한다. 요청마다 fit/다운로드/파일 재로드를 하지 않는다. 후보 수·스레드·메모리 복제를 실측하고 학습이 웹/DB/검색을 점유하지 않게 제한한다. GPU·새 추론 VM 증설은 전제하지 않으며 기존 사양의 처리량을 보장하지 않는다.
 
 ## 기반 사양과 증설 상태
 
-현재 설계는 로컬 VM 19대이며 실제 설치·자원 검증 완료를 뜻하지 않는다. Application과 광고 서버는 분리하고 이미지·Delta 저장소도 각각 둔다. 이 문서의 서버명은 역할을 구분하기 위한 논리 이름이다. 실제 IP·서브넷·서버명과 주소의 대응표는 저장소 밖의 환경별 배포 설정에서 관리한다.
+현재 설계는 로컬 VM 20대이며 실제 설치·자원 검증 완료를 뜻하지 않는다. Django Application은 Webapp 서버(pj3-webapp), 광고·추천 서비스는 별도 Ad 서버(pj3-ad-server)에 배치하고 이미지·Delta 저장소도 각각 둔다. 논리 서버명은 전달받은 「인프라 구성 문서」의 호스트명 표기를 따른다. 실제 IP·서브넷·서버명과 주소의 대응표는 저장소 밖의 환경별 배포 설정에서 관리한다.
 
 | 영역 | 현재 역할 | VM 수 | 논리 서버명 |
 |---|---|---|---|
-| 접근 관리 | Bastion·Ansible | 1 | bastion-01 |
-| 사용자 서비스 | Django 웹·AI Consumer·작업 복구 | 1 | app-01 |
-| 추천 | 광고 API·상품 임베딩·FAISS | 1 | ad-01 |
-| 메시지 | Kafka Broker·KRaft Controller | 3 | kafka-01~kafka-03 |
-| 분산 처리 | Spark Master/Driver·Workers | 4 | spark-master-01, spark-worker-01~spark-worker-03 |
-| 상품 준비 | NiFi | 1 | nifi-01 |
-| MySQL | Primary 1대·Replica 2대 | 3 | mysql-01, mysql-02, mysql-03 |
-| MongoDB | 3노드 Replica Set | 3 | mongo-01, mongo-02, mongo-03 |
-| 파일 | 이미지용·Delta용 Object Storage | 2 | media-storage-01, lake-storage-01 |
+| 접근 관리 | Bastion·Ansible | 1 | bastion |
+| 사용자 서비스(Webapp) | Django 웹·AI Consumer·작업 복구 | 1 | pj3-webapp |
+| 광고·추천(Ad) | 광고 API·상품 임베딩·FAISS | 1 | pj3-ad-server |
+| 모니터링 | Prometheus·Grafana | 1 | pj3-monitor |
+| 메시지 | Kafka Broker·KRaft Controller | 3 | pj3-kafka01~pj3-kafka03 |
+| 분산 처리 | Spark Master/Driver·Workers | 4 | pj3-spark-master, pj3-spark-worker01~pj3-spark-worker03 |
+| 상품 준비 | NiFi | 1 | pj3-nifi |
+| MySQL | Primary 1대·Replica 2대 | 3 | pj3-mysql01, pj3-mysql02, pj3-mysql03 |
+| MongoDB | 3노드 Replica Set | 3 | pj3-mongo01, pj3-mongo02, pj3-mongo03 |
+| 파일 | 이미지용·Delta용 Object Storage | 2 | pj3-object01, pj3-object02 |
 
-![로컬 인프라의 역할 구성](assets/vm-role-map.svg)
+Object Storage 01·02의 서버명은 첨부 구성 문서를 따른다. 해당 문서에는 이미지용·Delta용의 개별 서버 대응이 명시되지 않아 역할 배정은 미확정으로 둔다.
+
+![Webapp·Ad 분리와 관리·모니터링을 포함한 20대 VM 역할 구성](assets/vm-role-map.svg)
 
 [PNG로 보기](assets/vm-role-map.png). 그림은 역할 개요이며 발행은 DB 커밋 후 직접 수행하고 누락은 업무 기록에서 복구한다. 현행 VM 대수·DB 복제 구성과 실행 방식은 본문 표·DB 다중화 계약 및 [Kafka 발행·복구 계약](05-kafka-jobs.md#발행과-복구)을 기준으로 한다.
 
-물리 노트북과 관리 담당자는 별도 확정한다. Kafka 3대는 서로 다른 노트북에 분산하며 아래 과거 배치표를 현재 설치 지시로 사용하지 않는다.
+Webapp 서버(pj3-webapp)는 김세진 담당의 Django 애플리케이션 서버이며, Ad 서버(pj3-ad-server)는 이여찬 담당의 별도 광고 서버다. VM별 담당자 배정은 전달받은 「인프라 구성 문서」를 따른다. Kafka 3대는 서로 다른 노트북에 분산한다.
 
 초기 공통 후보는 2 vCPU·OS 30GB다. Bastion은 RAM 2GB, 나머지는 4GB부터 검토하고 Spark Master/Driver와 인덱스·저장소는 작업량에 맞춰 증설한다. OS·Python·Java·DB·저장소 호환과 데이터 디스크 용량은 설치 전 검증한다. 과거 28 vCPU·50GB·420GB 합계는 현재 자원 합계가 아니다.
 
-<details>
-<summary>이전 배치와 역할 변경 이력</summary>
+## AI API 방식과 20대 초기 구성
 
-광고 서버와 Delta용 저장소를 포함한 현재 구성은 역할별 표를 기준으로 한다. 과거 노트북 번호는 현행 장애 분산 배치와 구분한다.
-
-| 원래 노트북 | 논리 서버명 | 원래 역할 | 현재 설계 역할 | RAM 제안 |
-|---|---|---|---|---|
-| 1 | bastion-01 | Bastion | Bastion, Ansible 관리 | 2GB |
-| 2 | kafka-01 | Kafka 01 | Kafka Broker와 KRaft Controller | 4GB |
-| 2 | kafka-02 | Kafka 02 | Kafka Broker와 KRaft Controller | 4GB |
-| 2 | kafka-03 | Kafka 03 | Kafka Broker와 KRaft Controller | 4GB |
-| 1 | app-01 | Ad server | Django 웹·AI API Consumer·작업 복구 | 4GB부터 |
-| 4 | spark-worker-01 | Spark Worker 01 | Spark Worker | 4GB부터 |
-| 4 | spark-worker-02 | Spark Worker 02 | Spark Worker | 4GB부터 |
-| 4 | spark-worker-03 | Spark Worker 03 | Spark Worker | 4GB부터 |
-| 3 | nifi-01 | NiFi | 원천과 이미지 수집 | 4GB부터 |
-| 5 | mysql-01 | Main DB | MySQL 초기 Primary | 4GB부터 |
-| 5 | mongo-01 | Standby DB | MongoDB Replica Set 멤버 1 | 4GB부터 |
-| 3 | media-storage-01 | Object Storage | Object Storage (이미지용) | 4GB부터 |
-| 3 | spark-master-01 | Spark Master | Master와 작업 제출, 필요 시 Driver | 4GB 이상 검토 |
-| 1, 재배정 검토 | ad-01 후보 | 미배정 | 광고 서버: Django API·상품 추천·링크 결정·FAISS 인덱스 관리 | 4GB부터 |
-| 미배정 | lake-storage-01 후보 | 추가 | Object Storage (Delta용) | 4GB부터 |
-
-
-</details>
-
-## AI API 방식과 19대 초기 구성
-
-- 광고 서버의 논리 이름은 ad-01이다. MySQL 3대·MongoDB 3대와 이미지·Delta 저장 VM을 포함해 초기 운영은 19대로 계획한다.
+- 광고 서버의 논리 이름은 pj3-ad-server이다. MySQL 3대·MongoDB 3대와 이미지·Delta 저장 VM을 포함해 초기 운영은 20대로 계획한다.
 - 작업 상태와 오류는 MySQL 및 Django 운영 화면으로 확인하고 상세 로그는 서비스별 파일 또는 systemd·컨테이너 로그로 관리한다.
-- spark-worker-01~spark-worker-03의 Spark Worker 세 대는 유지한다. AI 전용 VM을 추가하거나 Spark VM을 AI 서버로 전환하지 않는다.
-- app-01에서 Django 웹, AI API Consumer, 작업 복구를 별도 프로세스 또는 컨테이너로 실행한다. 웹 서버 시작 훅에 Consumer를 포함하지 않는다.
-- 모델 추론은 외부 API가 수행한다. app-01에는 모델 가중치나 GPU를 배치하지 않는다. 이미지 읽기·변환에 사용하는 RAM과 동시 요청 수를 제한하고 웹 응답 지연을 측정한다.
+- pj3-spark-worker01~pj3-spark-worker03의 Spark Worker 세 대는 유지한다. AI 전용 VM을 추가하거나 Spark VM을 AI 서버로 전환하지 않는다.
+- pj3-webapp에서 Django 웹, AI API Consumer, 작업 복구를 별도 프로세스 또는 컨테이너로 실행한다. 웹 서버 시작 훅에 Consumer를 포함하지 않는다.
+- 모델 추론은 외부 API가 수행한다. pj3-webapp에는 모델 가중치나 GPU를 배치하지 않는다. 이미지 읽기·변환에 사용하는 RAM과 동시 요청 수를 제한하고 웹 응답 지연을 측정한다.
 - Application 서버는 이미지 저장소·Kafka·MySQL과 통신하며 외부 모델 API로 나가는 HTTPS 연결이 필요하다. 웹과 Consumer는 별도로 재시작할 수 있지만 서버 장애는 공유한다.
-- AWS에서 이미지용과 Delta용 저장 VM을 S3로 대체하면 EC2는 17대다. AI API Consumer는 Django EC2 안에서 실행한다.
+- AWS에서 이미지용과 Delta용 저장 VM을 S3로 대체하면 EC2는 18대다. AI API Consumer는 Django EC2 안에서 실행한다.
 
 ### 작업 프로세스의 자원 경계
 
-접수된 작업의 비동기 I/O와 제한된 이미지·파일 스레드풀은 app-01의 별도 작업 프로세스 안에서 실행한다. DB 연결은 스레드별 수명과 상한을 관리하고 외부 호출 중 트랜잭션을 유지하지 않는다. 작업 동시 실행 수·스레드풀 수·이미지 메모리·API 한도는 측정 후 정하며, 이 실행 방식 결정으로 웹 트래픽 분산·웹 워커 증설·서버 추가를 계획하지 않는다. 실행 분류는 [Application](04-application-ai.md#비동기-io스레드풀동기-트랜잭션-처리-경계)을 따른다.
+접수된 작업의 비동기 I/O와 제한된 이미지·파일 스레드풀은 pj3-webapp의 별도 작업 프로세스 안에서 실행한다. DB 연결은 스레드별 수명과 상한을 관리하고 외부 호출 중 트랜잭션을 유지하지 않는다. 작업 동시 실행 수·스레드풀 수·이미지 메모리·API 한도는 측정 후 정하며, 이 실행 방식 결정으로 웹 트래픽 분산·웹 워커 증설·서버 추가를 계획하지 않는다. 실행 분류는 [Application](04-application-ai.md#비동기-io스레드풀동기-트랜잭션-처리-경계)을 따른다.
 
 ## DB 다중화와 접속 계약
 
@@ -80,12 +57,12 @@ MySQL 3대와 MongoDB 3대를 각각 별도 VM으로 배치한다. 기존 DB 2�
 
 | 노드 | 역할 | 초기 사양 후보 |
 |---|---|---|
-| mysql-01 | 초기 Primary, 서비스 읽기·쓰기 | 2 vCPU·RAM 4GB부터 |
-| mysql-02 | 읽기 전용 Replica, 수동 승격 대상 | 2 vCPU·RAM 4GB부터 |
-| mysql-03 | 읽기 전용 Replica, 수동 승격 대상 | 2 vCPU·RAM 4GB부터 |
-| mongo-01 | 데이터·투표 멤버, 초기 Primary 후보 | 2 vCPU·RAM 4GB부터 |
-| mongo-02 | 데이터·투표 멤버, 초기 Secondary 후보 | 2 vCPU·RAM 4GB부터 |
-| mongo-03 | 데이터·투표 멤버, 초기 Secondary 후보 | 2 vCPU·RAM 4GB부터 |
+| pj3-mysql01 | 초기 Primary, 서비스 읽기·쓰기 | 2 vCPU·RAM 4GB부터 |
+| pj3-mysql02 | 읽기 전용 Replica, 수동 승격 대상 | 2 vCPU·RAM 4GB부터 |
+| pj3-mysql03 | 읽기 전용 Replica, 수동 승격 대상 | 2 vCPU·RAM 4GB부터 |
+| pj3-mongo01 | 데이터·투표 멤버, 초기 Primary 후보 | 2 vCPU·RAM 4GB부터 |
+| pj3-mongo02 | 데이터·투표 멤버, 초기 Secondary 후보 | 2 vCPU·RAM 4GB부터 |
+| pj3-mongo03 | 데이터·투표 멤버, 초기 Secondary 후보 | 2 vCPU·RAM 4GB부터 |
 
 실제 주소는 저장소 밖의 환경별 배포 설정에서 사용 여부·DHCP 충돌을 확인한 뒤 배정하고 논리 서버명의 DNS/호스트 매핑도 함께 확정한다. MySQL 세 VM은 각각 서로 다른 노트북, MongoDB 세 VM은 각각 다른 노트북에 배치한다. 장애 후 승격될 노드도 정상 쓰기 부하를 감당하도록 사양을 정한다. 데이터 디스크는 DB 전체 데이터·인덱스·MySQL binlog·MongoDB oplog·초기 동기화 여유로 산정한다. 추가 VM 4대의 초기 자원 후보는 8 vCPU·RAM 16GB·OS 디스크 120GB이며 데이터 디스크·호스트 여유는 별도다.
 
@@ -101,19 +78,19 @@ Django·AI Consumer·작업 복구·광고 서버·Spark 검수 조회 및 MySQL
 
 세 노드 모두 데이터를 보관하고 투표하는 Primary-Secondary-Secondary 구성으로 같은 Replica Set에 등록한다. Arbiter는 두지 않는다. 초기 Primary 후보는 고정 Primary가 아니며 선출 후 역할이 바뀔 수 있다. 세 노드 중 두 노드가 통신하고 선출 조건을 충족하면 한 노드 장애 시 새 Primary를 선출할 수 있다. 두 노드가 중단돼 과반수를 잃으면 쓰기를 대기시키며 단독 노드를 강제 Primary로 만들어 진행하지 않는다. [MongoDB 3노드 구성](https://www.mongodb.com/docs/manual/core/replica-set-architecture-three-members/)
 
-연결 설정은 mongo-01·mongo-02·mongo-03 멤버와 replicaSet=rs-products, readPreference=primary, w=majority, journal=true를 포함한다. 실제 접속 URI는 저장소 밖의 환경별 배포 설정으로 주입한다. DB 이름과 Replica Set 이름은 배포 설정에서 고정하고 인증정보는 비밀 설정으로 주입한다. advertised 멤버 이름은 NiFi/Python·Spark와 모든 MongoDB 멤버에서 해석·접근 가능해야 한다. 멤버 간 인증과 접근 제어를 적용하고 TLS 인증서·클라이언트 호환을 검증한다.
+연결 설정은 pj3-mongo01·pj3-mongo02·pj3-mongo03 멤버와 replicaSet=rs-products, readPreference=primary, w=majority, journal=true를 포함한다. 실제 접속 URI는 저장소 밖의 환경별 배포 설정으로 주입한다. DB 이름과 Replica Set 이름은 배포 설정에서 고정하고 인증정보는 비밀 설정으로 주입한다. advertised 멤버 이름은 NiFi/Python·Spark와 모든 MongoDB 멤버에서 해석·접근 가능해야 한다. 멤버 간 인증과 접근 제어를 적용하고 TLS 인증서·클라이언트 호환을 검증한다.
 
 원천 저장은 writeConcern={w: majority, j: true} 확인 후 성공으로 집계하고 Kafka 발행을 허용한다. 초기 Spark 원천 조회는 readPreference=primary·readConcern=majority로 통일한다. 복제 지연이 있는 Secondary를 임의로 읽지 않는다. 쓰기 확인·서버 선택·네트워크 timeout은 운영 설정으로 제한한다. 확인 실패는 실제 미저장을 뜻하지 않으므로 동일 원천 ID·중복 키로 상태를 대조하고 과반수 보존을 다시 확인한 뒤 재발행한다. [MongoDB 쓰기 확인](https://www.mongodb.com/docs/manual/reference/write-concern/)
 
 ## 광고 서버 배치
 
-광고 서버(ad-01)는 Application(app-01)과 별도 Django API 서비스로 운영한다. 입력 해석·검증·추천 맥락 보존은 Application(app-01), 검색 임베딩·상품 추천과 다나와 연결 판단은 광고 서버(ad-01)의 책임이다. 외부 링크 요청은 Application의 인증 경로를 거쳐 내부 API로 전달한다. 초기 2 vCPU·4GB RAM·OS 디스크 30GB를 후보로 두고 인덱스 용량에 따라 데이터 디스크를 추가한다. 기존 MySQL·이미지용 Object Storage를 사용하며 벡터 생성은 외부 임베딩 API에 요청한다. 인덱스 원본은 Delta에서 발행하고 광고 서버는 로컬 디스크·메모리에서 검색한다. 멀티모달/임베딩 로컬 가중치나 GPU는 배치하지 않으며 scikit-learn 추천 Pipeline artifact는 검증 후 CPU에 로드한다.
+Django Application은 Webapp 서버(pj3-webapp)에서 실행하고, 광고 서버는 별도 Ad 서버(pj3-ad-server)에서 광고·추천 API를 운영한다. 입력 해석·검증·추천 맥락 보존은 Application(pj3-webapp), 검색 임베딩·상품 추천과 다나와 연결 판단은 광고 서버(pj3-ad-server)의 책임이다. 외부 링크 요청은 Application의 인증 경로를 거쳐 내부 API로 전달한다. 초기 2 vCPU·4GB RAM·OS 디스크 30GB를 후보로 두고 인덱스 용량에 따라 데이터 디스크를 추가한다. 기존 MySQL·이미지용 Object Storage를 사용하며 벡터 생성은 외부 임베딩 API에 요청한다. 인덱스 원본은 Delta에서 발행하고 광고 서버는 로컬 디스크·메모리에서 검색한다. 멀티모달/임베딩 로컬 가중치나 GPU는 배치하지 않으며 scikit-learn 추천 Pipeline artifact는 검증 후 CPU에 로드한다.
 
-Application → 광고 서버 내부 HTTP, 광고 서버 → MySQL·이미지 저장소·외부 임베딩 API, 인덱스 관리 프로세스 → Kafka·Delta용 저장소의 연결을 허용한다. Application(app-01)과 광고 서버(ad-01)는 가능하면 다른 노트북에 배치하고 인덱스 재구축이 웹·DB 자원을 독점하지 않게 제한한다. 담당자는 기존 인원 1 또는 재배정한 담당자로 확정한다. 상세 경계는 [광고 서버](07-ad-server.md)를 따른다.
+Application → 광고 서버 내부 HTTP, 광고 서버 → MySQL·이미지 저장소·외부 임베딩 API, 인덱스 관리 프로세스 → Kafka·Delta용 저장소의 연결을 허용한다. Application(pj3-webapp)과 광고 서버(pj3-ad-server)는 가능하면 다른 노트북에 배치하고 인덱스 재구축이 웹·DB 자원을 독점하지 않게 제한한다. Webapp은 김세진, Ad 서버는 이여찬의 확정 배정을 따른다. 상세 경계는 [광고 서버](07-ad-server.md)를 따른다.
 
 ## 입력 해석과 임베딩 외부 API 실행
 
-Application(app-01)의 별도 Consumer는 사진·텍스트·스케치의 공간/요구/배치/크기 근거를 멀티모달 API로 해석하고 코드로 검증한다. 광고 서버는 외부 질의/상품 임베딩과 CPU 인덱스·특징 계산·scikit-learn 운영 순위를 담당한다. Google 등 선택 제공처의 실제 모델 ID·계정 권한·이미지/텍스트 호환·차원·쿼터를 구현 전 확인한다.
+Application(pj3-webapp)의 별도 Consumer는 사진·텍스트·스케치의 공간/요구/배치/크기 근거를 멀티모달 API로 해석하고 코드로 검증한다. 광고 서버는 외부 질의/상품 임베딩과 CPU 인덱스·특징 계산·scikit-learn 운영 순위를 담당한다. Google 등 선택 제공처의 실제 모델 ID·계정 권한·이미지/텍스트 호환·차원·쿼터를 구현 전 확인한다.
 
 Cloudflare 생성 자격 증명·생성 예산·템플릿 인덱스는 신규 직접 추천 운영 의존성에서 제외한다. 기존 생성 MVP 설정/진행 실행을 실제로 제거·변환한 것은 아니며 배포 때 구버전 처리·자산 보존을 별도 결정한다. API·상품 배치·모델 학습/평가·운영 CPU 추론의 동시성/자원 한도를 분리한다. [통합 계약](12-direct-recommendation.md)을 따른다.
 

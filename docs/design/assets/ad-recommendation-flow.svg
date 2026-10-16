@@ -1,14 +1,67 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="516" viewBox="0 0 1440 516" role="img" aria-labelledby="title desc">
-<title id="title">물체별 추천 요청</title><desc id="desc">웹 요청은 작업 ID를 먼저 반환하고 추천 검색은 Consumer가 비동기로 처리합니다.</desc>
-<defs><style>text{font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif;fill:#17324b}.title{font-size:37px;font-weight:700}.sub{font-size:18px;fill:#596e80}.lane-title{font-size:21px;font-weight:700}.card-title{font-size:20px;font-weight:700}.card-body{font-size:16px;fill:#52697d}.note{font-size:16px;fill:#576e80}</style><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#657d93" stroke-width="2"/></marker></defs>
-<rect width="1440" height="516" fill="#f6f9fc"/><rect width="1440" height="9" fill="#218f83"/>
-<text class="title" x="52" y="66">물체별 추천 요청</text><text class="sub" x="53" y="102">웹 요청은 작업 ID를 먼저 반환하고 추천 검색은 Consumer가 비동기로 처리합니다.</text><rect x="38" y="126" width="1364" height="151" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
-<rect x="55" y="143" width="7" height="28" rx="3" fill="#176b63"/><text class="lane-title" x="76" y="165" fill="#176b63">A  웹 요청</text><rect x="80" y="186" width="330" height="72" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
-<text class="card-title" x="98" y="215">1  물체 선택</text><text class="card-body" x="98" y="241">웹이 Application에 요청</text><path d="M420 222H541" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/><rect x="555" y="186" width="330" height="72" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
-<text class="card-title" x="573" y="215">2  권한 확인</text><text class="card-body" x="573" y="241">run · job 등록</text><path d="M895 222H1016" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/><rect x="1030" y="186" width="330" height="72" rx="13" fill="#eaf5f3" stroke="#6cb4a8" stroke-width="1.5"/>
-<text class="card-title" x="1048" y="215">3  처리 중 응답</text><text class="card-body" x="1048" y="241">웹에 작업 ID 반환</text><rect x="38" y="292" width="1364" height="151" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
-<rect x="55" y="309" width="7" height="28" rx="3" fill="#285d9b"/><text class="lane-title" x="76" y="331" fill="#285d9b">B  비동기 검색과 결과</text><rect x="55" y="352" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="card-title" x="73" y="381">4  Consumer</text><text class="card-body" x="73" y="407">광고 서버 내부 API 호출</text><path d="M329 388H394" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/><rect x="408" y="352" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="card-title" x="426" y="381">5  광고 서버</text><text class="card-body" x="426" y="407">임베딩 · 검색 · 후보 검증</text><path d="M682 388H747" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/><rect x="761" y="352" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="card-title" x="779" y="381">6  결과 저장</text><text class="card-body" x="779" y="407">MySQL 추천 이력 확정</text><path d="M1035 388H1100" stroke="#657d93" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/><rect x="1114" y="352" width="264" height="72" rx="13" fill="#edf3fd" stroke="#8bb2e3" stroke-width="1.5"/>
-<text class="card-title" x="1132" y="381">7  웹 조회</text><text class="card-body" x="1132" y="407">작업 상태 · 결과 표시</text><text class="note" x="53" y="498">추천 결과 반환만으로 실제 노출을 집계하지 않습니다. 생성 결과는 추천 실패 시에도 유지합니다.</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="878" viewBox="0 0 1600 878" role="img" aria-labelledby="title desc">
+<title id="title">입력 맥락 기반 직접 추천 요청</title><desc id="desc">Webapp이 입력·추천 원장을 소유하고, 별도 Ad 서버가 검색·순위·링크를 판단합니다.</desc>
+<defs><style>text{font-family:"Malgun Gothic",Arial,sans-serif;fill:#19334c} .muted{fill:#5e7080}</style><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M1 1L7 4L1 7" fill="none" stroke="#71869b" stroke-width="1.5"/></marker></defs>
+<rect width="1600" height="878" fill="#f6f9fc"/><rect width="1600" height="8" fill="#218f83"/>
+<text x="54" y="66" font-size="36" font-weight="700" text-anchor="start" data-max-width="1490">입력 맥락 기반 직접 추천 요청</text>
+<text x="55" y="104" font-size="18" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">Webapp이 입력·추천 원장을 소유하고, 별도 Ad 서버가 검색·순위·링크를 판단합니다.</text>
+<rect x="34" y="132" width="1532" height="182" rx="18" fill="#fff" stroke="#dce5ed" stroke-width="1.4"/>
+<rect x="51" y="149" width="6" height="27" rx="3" fill="#176b63" stroke="#176b63" stroke-width="1.4"/>
+<text x="72" y="172" font-size="21" font-weight="700" text-anchor="start" data-max-width="1470" style="fill:#176b63">A  Webapp · Django  /  입력 보존과 검색 요청</text>
+<rect x="60.0" y="194" width="340.0" height="90" rx="12" fill="#eaf5f3" stroke="#8ac3b9" stroke-width="1.4"/>
+<text x="78.0" y="223" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">입력 · 추천 run 등록</text>
+<text x="78.0" y="249" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">입력 파일·버전·보존 job 저장</text>
+<text x="78.0" y="272" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">커밋 후 입력 이벤트 발행</text>
+<path d="M407.0 239H432.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="440.0" y="194" width="340.0" height="90" rx="12" fill="#eaf5f3" stroke="#8ac3b9" stroke-width="1.4"/>
+<text x="458.0" y="223" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">Bronze 보존 확인</text>
+<text x="458.0" y="249" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">입력 버전·파일 hash 대조</text>
+<text x="458.0" y="272" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">확인 후 해석 작업 등록</text>
+<path d="M787.0 239H812.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="820.0" y="194" width="340.0" height="90" rx="12" fill="#eaf5f3" stroke="#8ac3b9" stroke-width="1.4"/>
+<text x="838.0" y="223" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">해석 · 코드 검증</text>
+<text x="838.0" y="249" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">요구·공간·배치·크기 근거</text>
+<text x="838.0" y="272" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">불변 추천 맥락 확정</text>
+<path d="M1167.0 239H1192.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1200.0" y="194" width="340.0" height="90" rx="12" fill="#eaf5f3" stroke="#8ac3b9" stroke-width="1.4"/>
+<text x="1218.0" y="223" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">Ad 내부 API 호출</text>
+<text x="1218.0" y="249" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">request_id · input_revision_id</text>
+<text x="1218.0" y="272" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">context_id · 고정 참조</text>
+<rect x="34" y="330" width="1532" height="182" rx="18" fill="#fff" stroke="#dce5ed" stroke-width="1.4"/>
+<rect x="51" y="347" width="6" height="27" rx="3" fill="#285d9b" stroke="#285d9b" stroke-width="1.4"/>
+<text x="72" y="370" font-size="21" font-weight="700" text-anchor="start" data-max-width="1470" style="fill:#285d9b">B  별도 Ad 서버  /  검색과 순위 결정</text>
+<rect x="60.0" y="392" width="340.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="78.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">질의 조립 · 임베딩</text>
+<text x="78.0" y="447" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">해석된 요구·공간 맥락 구분</text>
+<path d="M407.0 437H432.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="440.0" y="392" width="340.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="458.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">상품 후보 검색</text>
+<text x="458.0" y="447" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">사전 상품 벡터 · CPU FAISS</text>
+<path d="M787.0 437H812.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="820.0" y="392" width="340.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="838.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">현재 상품 · 조건 검증</text>
+<text x="838.0" y="447" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">품목·이미지·가격·규격 확인</text>
+<text x="838.0" y="470" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">미확인은 UNKNOWN 유지</text>
+<path d="M1167.0 437H1192.0" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1200.0" y="392" width="340.0" height="90" rx="12" fill="#edf3fd" stroke="#a1bee4" stroke-width="1.4"/>
+<text x="1218.0" y="421" font-size="20" font-weight="700" text-anchor="start" data-max-width="304.0">모델 순위 · 응답</text>
+<text x="1218.0" y="447" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">특징 계산 · scikit-learn CPU</text>
+<text x="1218.0" y="470" font-size="17" font-weight="400" text-anchor="start" data-max-width="304.0" style="fill:#52697d">상품·버전·점수·링크 반환</text>
+<rect x="34" y="528" width="1532" height="182" rx="18" fill="#fff" stroke="#dce5ed" stroke-width="1.4"/>
+<rect x="51" y="545" width="6" height="27" rx="3" fill="#95611f" stroke="#95611f" stroke-width="1.4"/>
+<text x="72" y="568" font-size="21" font-weight="700" text-anchor="start" data-max-width="1470" style="fill:#95611f">C  Webapp · Django  /  결과와 실제 행동</text>
+<rect x="60.0" y="590" width="466.6666666666667" height="90" rx="12" fill="#fff5e8" stroke="#e6c593" stroke-width="1.4"/>
+<text x="78.0" y="619" font-size="20" font-weight="700" text-anchor="start" data-max-width="430.6666666666667">추천 결과 저장</text>
+<text x="78.0" y="645" font-size="17" font-weight="400" text-anchor="start" data-max-width="430.6666666666667" style="fill:#52697d">같은 run에 결과·버전 고정</text>
+<path d="M533.6666666666667 635H558.6666666666667" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="566.6666666666667" y="590" width="466.6666666666667" height="90" rx="12" fill="#fff5e8" stroke="#e6c593" stroke-width="1.4"/>
+<text x="584.6666666666667" y="619" font-size="20" font-weight="700" text-anchor="start" data-max-width="430.6666666666667">상태 · 상품 카드 표시</text>
+<text x="584.6666666666667" y="645" font-size="17" font-weight="400" text-anchor="start" data-max-width="430.6666666666667" style="fill:#52697d">최신 입력·완료 상태 대조</text>
+<path d="M1040.3333333333335 635H1065.3333333333335" fill="none" stroke="#71869b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1073.3333333333335" y="590" width="466.6666666666667" height="90" rx="12" fill="#fff5e8" stroke="#e6c593" stroke-width="1.4"/>
+<text x="1091.3333333333335" y="619" font-size="20" font-weight="700" text-anchor="start" data-max-width="430.6666666666667">실제 노출 · 반응 기록</text>
+<text x="1091.3333333333335" y="645" font-size="17" font-weight="400" text-anchor="start" data-max-width="430.6666666666667" style="fill:#52697d">화면에 보인 항목만 노출</text>
+<text x="1091.3333333333335" y="668" font-size="17" font-weight="400" text-anchor="start" data-max-width="430.6666666666667" style="fill:#52697d">클릭 때 Ad 링크 재검증</text>
+<text x="56" y="764" font-size="16" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">상품 임베딩·인덱스·운영 모델은 사전 준비합니다. 매 요청 전체 상품 재벡터화·학습을 하지 않습니다.</text>
+<text x="56" y="796" font-size="16" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">모델 미준비·추론 실패와 후보 없음을 구분합니다. 완료된 해석과 벡터는 실패 복구 시 재사용합니다.</text>
+<text x="56" y="848" font-size="16" font-weight="400" text-anchor="start" data-max-width="1490" style="fill:#5e7080">생성 이미지·물체 선택·생성 크롭은 요구하지 않습니다. 흐름은 설계이며 API·스키마 구현 완료를 뜻하지 않습니다.</text>
+</svg>
