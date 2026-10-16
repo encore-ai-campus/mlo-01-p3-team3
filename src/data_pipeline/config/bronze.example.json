@@ -1,0 +1,19 @@
+{
+  "environment_id": "replace-with-approved-environment",
+  "mongo_database": "replace-with-approved-database",
+  "mongo_replica_set": "rs-products",
+  "mongo_uri_env": "PIPELINE_MONGO_URI",
+  "kafka_topic": "product.raw.collected",
+  "kafka_cluster_id": "replace-with-actual-kafka-cluster-id",
+  "kafka_options_env": "BRONZE_KAFKA_OPTIONS",
+  "spark_options_env": "BRONZE_SPARK_OPTIONS",
+  "bronze_path": "s3a://project-lake/bronze/raw_products",
+  "events_path": "s3a://project-lake/bronze/product_raw_events",
+  "quarantine_path": "s3a://project-lake/quarantine/product_raw_collected",
+  "checkpoint_path": "s3a://project-checkpoints/raw-ingestion",
+  "single_writer_confirmed": false,
+  "max_records": 20,
+  "max_raw_bytes": 33554432,
+  "max_input_bytes": 8388608,
+  "trigger_seconds": 30
+}
