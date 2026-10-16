@@ -10,7 +10,8 @@
 | 스냅샷·원천 적재 | run_pipeline.py의 prepare/plan/preflight/ingest | 코드·로컬 테스트 있음. 실제 서버 소량 시험 필요 |
 | Bronze | run_bronze.py | 코드·로컬 Delta 시험 있음. 실제 Kafka/Mongo/lake 인수 필요 |
 | Silver | 아직 없음 | 필드·스키마·품질·재평가 설계 단계. 실행 명령 미제공 |
-| Gold/MySQL 게시 | 아직 없음 | 후속. DDL·업무 키·준비 상태·Delta version 인수 필요 |
+| Gold | Spark 실행 서버 | 고정 Silver → Gold Delta/export. 실제 서버 인수 대기 |
+| MySQL 게시 | 아직 없음 | 후속. DDL·업무 키·준비 상태·Delta version 인수 필요 |
 | NiFi 자동 실행 | 아직 없음 | 검증된 명령의 호출·일정·로그/알림 후속 구성 |
 
 현재 19대/20대 설계 차이와 논리 서버명은 [현황](status.md)에 명시했다. 실제 VM 배정은 담당자와 확인하고 역할명으로 연결한다.
@@ -102,3 +103,13 @@ Bronze는 `BRONZE_LEASE_MONGO_URI`의 별도 ops 계정을 추가한다. 인프�
 ## 7. 기능 변경 시 문서 동시 갱신
 
 매 단계에 README·이 가이드·status의 ①실행 서버 ②코드/의존성 ③입출력·상태 위치 ④권한·네트워크 ⑤실제 명령·종료 코드 ⑥초기/증분/재개 ⑦건수/hash·실패 확인 ⑧백업·호환성 ⑨검증 완료/미검증을 갱신한다. 설계와 실제 실행 상태를 구분한다.
+
+## 8. Gold 배포·인계
+
+2026-10-17 추가. Spark 실행 서버에서 `run_gold.py`를 실행하며 Silver 고정 버전을 읽기 전용으로 사용한다. Gold root와 독립 checkpoint에만 쓰고 GOLD_LEASE_MONGO_URI의 공용 ops claim을 사용한다. Python/Java/Spark/Delta와 저장소 접속 권한은 Silver와 같은 검증 버전을 사용하되 GOLD_SPARK_OPTIONS로 실행 master/저장소 설정을 분리한다. 현재 로컬 검증 버전은 Spark/Delta 4.0.1이다.
+
+[Gold 실행 가이드](gold_execution.md)의 명령과 config/gold.* 예시를 따른다. 8개 Silver version·Gold 입력·실제 GOLD_BUILD 등록 export·--as-of를 고정한다. 소량 시험은 --max-products 3, 재개는 같은 입력으로 수행한다. 성공 출력·receipt를 대조해 재사용하며 성공 기록이 있어도 실제 출력이 없으면 중단한다. 작업이 완료되면 stdout/state-dir/runs의 export_manifest_ref·quality_summary_ref와 고정 Gold versions를 확인한다. SOURCE_DRAINED와 부분 시험을 구분한다.
+
+Gold 결과에는 원천/이미지 URL/객체 키/checksum/선택 근거와 확인 상태를 보존한다. 백업에는 Gold 데이터·_delta_log뿐 아니라 선택 페이지·입력/등록 export·완료 manifest와 공유 checkpoint를 포함한다. 새 스키마를 기존 root에 덮어쓰거나 Delta 로그를 삭제하지 않는다. 실제 인수 전 NiFi 일정이나 MySQL 게시에 자동 연결하지 않는다.
+
+MySQL 실제 DDL/staging/게시 guard/기존 UUID·검수 보존의 게시기는 아직 없다. 서비스 DB를 생성하거나 검수 원장을 수정하지 않는다. [요구사항 누락 대조](requirements_gap_review.md)에 서버 시험 외의 남은 구현을 기록했다. SSH hostname 조회 성공은 이 단계의 실제 클러스터 인수와 별개다.

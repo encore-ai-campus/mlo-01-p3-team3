@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "danawa-data-pipeline"
 version = "0.1.0"
-description = "Immutable Danawa ingestion, LIVE handoff, Bronze and Silver evaluations"
+description = "Immutable Danawa ingestion, LIVE handoff, Bronze, Silver and Gold evaluations"
 requires-python = ">=3.11,<3.15"
 dependencies = ["Pillow>=10,<13", "pymongo>=4.18,<5", "boto3>=1.40,<2", "confluent-kafka>=2.12,<3"]
 
@@ -13,10 +13,12 @@ dependencies = ["Pillow>=10,<13", "pymongo>=4.18,<5", "boto3>=1.40,<2", "conflue
 danawa-pipeline = "product_pipeline.cli:main"
 danawa-bronze = "product_pipeline.bronze.cli:main"
 danawa-silver = "product_pipeline.silver.cli:main"
+danawa-gold = "product_pipeline.gold.cli:main"
 
 [project.optional-dependencies]
 bronze = ["pyspark==4.0.1", "delta-spark==4.0.1"]
 silver = ["pyspark==4.0.1", "delta-spark==4.0.1"]
+gold = ["pyspark==4.0.1", "delta-spark==4.0.1"]
 
 [tool.setuptools.packages.find]
 include = ["product_pipeline*"]

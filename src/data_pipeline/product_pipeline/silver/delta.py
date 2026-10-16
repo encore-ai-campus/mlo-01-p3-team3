@@ -6,22 +6,26 @@ from .schemas import columns,EXTRA,ARRAYS,DECIMALS,LONGS,TIMES
 
 
 class DeltaSink:
+    keys, schema_tables, schema_columns = KEYS, EXTRA, staticmethod(columns)
+    arrays, decimals, longs, times, booleans = ARRAYS, DECIMALS, LONGS, TIMES, set()
+    hash_row = staticmethod(semantic_hash)
     def __init__(self,spark,settings,*,lease):
         from delta.tables import DeltaTable
-        from pyspark.sql.types import StructType,StructField,StringType,TimestampType,LongType,DecimalType,ArrayType
+        from pyspark.sql.types import StructType,StructField,StringType,TimestampType,LongType,DecimalType,ArrayType,BooleanType
         self.spark,self.settings,self.lease=spark,settings,lease
         spark.conf.set('spark.sql.session.timeZone','UTC')
-        self.paths={t:settings.silver_root.rstrip('/')+'/'+t for t in EXTRA}
+        self.paths={t:settings.silver_root.rstrip('/')+'/'+t for t in self.schema_tables}
         self.paths={t:spark._jvm.org.apache.hadoop.fs.Path(p).toString() for t,p in self.paths.items()}
         self.schemas={}
         for table,path in self.paths.items():
             def dtype(k):
-                if k in ARRAYS:return ArrayType(StringType())
-                if k in DECIMALS:return DecimalType(20,4)
-                if k in LONGS:return LongType()
-                if k in TIMES:return TimestampType()
+                if k in self.arrays:return ArrayType(StringType())
+                if k in self.decimals:return DecimalType(20,4)
+                if k in self.longs:return LongType()
+                if k in self.times:return TimestampType()
+                if k in self.booleans:return BooleanType()
                 return StringType()
-            schema=StructType([StructField(k,dtype(k),True) for k in columns(table)])
+            schema=StructType([StructField(k,dtype(k),True) for k in self.schema_columns(table)])
             self.schemas[table]=schema
             lease.check(settings)
             (DeltaTable.createIfNotExists(spark).location(path).addColumns(schema)
@@ -37,17 +41,17 @@ class DeltaSink:
         if not keys:return {}
         reader=self.spark.read.format('delta')
         if version is not None:reader=reader.option('versionAsOf',version)
-        frame=reader.load(self.paths[table]).filter(F.col(KEYS[table]).isin(sorted(keys))).limit(len(keys)+1)
-        for name in columns(table):
-            if name in TIMES:frame=frame.withColumn(name,F.date_format(F.col(name),"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"))
+        frame=reader.load(self.paths[table]).filter(F.col(self.keys[table]).isin(sorted(keys))).limit(len(keys)+1)
+        for name in self.schema_columns(table):
+            if name in self.times:frame=frame.withColumn(name,F.date_format(F.col(name),"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"))
         result={}
         for row in frame.collect():
             value=row.asDict(recursive=True)
-            for name in DECIMALS & set(value):
+            for name in self.decimals & set(value):
                 if value[name] is not None:value[name]=format(value[name].normalize(),'f')
-            key=value[KEYS[table]]
+            key=value[self.keys[table]]
             if key in result:raise Conflict('SILVER_DUPLICATE_KEY')
-            if value['record_hash']!=semantic_hash(value):raise Conflict('SILVER_STORED_HASH_CONFLICT')
+            if value['record_hash']!=self.hash_row(value):raise Conflict('SILVER_STORED_HASH_CONFLICT')
             result[key]=value
         return result
 
@@ -75,16 +79,16 @@ class DeltaSink:
         from pyspark.sql import functions as F
         from pyspark.sql.types import ArrayType
         self.lease.check(self.settings)
-        keys={r[KEYS[table]] for r in rows}
+        keys={r[self.keys[table]] for r in rows}
         old=self.existing(table,keys)
         for row in rows:
-            if row['record_hash']!=semantic_hash(row) or (row[KEYS[table]] in old and old[row[KEYS[table]]]['record_hash']!=row['record_hash']):
+            if row['record_hash']!=self.hash_row(row) or (row[self.keys[table]] in old and old[row[self.keys[table]]]['record_hash']!=row['record_hash']):
                 raise Conflict('SILVER_OUTPUT_CONFLICT')
         if set(old)==keys:return
         frame=(self.spark.range(1).select(F.explode(F.from_json(F.lit(canonical(rows)),ArrayType(self.schemas[table]),
             {'mode':'FAILFAST','timeZone':'UTC','timestampFormat':"yyyy-MM-dd'T'HH:mm:ss.SSSXXX"})).alias('row')).select('row.*'))
         self.lease.check(self.settings)
         (DeltaTable.forPath(self.spark,self.paths[table]).alias('t').merge(frame.alias('s'),
-            f't.{KEYS[table]} = s.{KEYS[table]}').whenNotMatchedInsertAll().execute())
+            f't.{self.keys[table]} = s.{self.keys[table]}').whenNotMatchedInsertAll().execute())
         self.lease.check(self.settings)
-        self.verify(table,{r[KEYS[table]]:r['record_hash'] for r in rows},self.version(table))
+        self.verify(table,{r[self.keys[table]]:r['record_hash'] for r in rows},self.version(table))

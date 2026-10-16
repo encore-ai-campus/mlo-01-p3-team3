@@ -2,7 +2,7 @@
 
 분리 브랜치: `feature/#13`, 기준 `dev`의 `e35b2a3`(2026-10-16). [현재 제작 상태·기준 문서 차이](docs/status.md)를 먼저 확인한다. 크롤러 코드는 이 브랜치에 포함하지 않으며 완료된 export 파일로 인계받는다.
 
-다나와 수집 결과를 인계받는 독립 Python 파이프라인이다. **FULL_EXPORT 및 LIVE_DELTA 인계 → 이미지 객체 저장 → MongoDB 접수/불변 원천 → Kafka 발행·재실행 복구 → Bronze → Silver** 실행 코드를 제공한다. 실제 서버에 대한 쓰기/장애 인수는 아직 수행하지 않았다.
+다나와 수집 결과를 인계받는 독립 Python 파이프라인이다. **FULL_EXPORT 및 LIVE_DELTA 인계 → 이미지 객체 저장 → MongoDB 접수/불변 원천 → Kafka 발행·재실행 복구 → Bronze → Silver → Gold 고정 버전 export** 실행 코드를 제공한다. 실제 서버에 대한 쓰기/장애 인수는 아직 수행하지 않았다.
 
 범위는 저장된 수집 결과의 스냅샷·이미지 적재·MongoDB 원천·Kafka 전달·Spark Bronze/Silver/Gold·상품 영역 MySQL 게시·실패 복구까지다. 크롤링 실행·파서 변경, 인프라 구축, 서비스 API/운영 화면, 이용 승인·매핑 원장 편집, 임베딩 호출·추천·학습은 포함하지 않는다. 해당 담당의 버전이 고정된 결과를 입력으로 받아 검증한다.
 
@@ -17,13 +17,15 @@
 - [상위 파이프라인 설계](../../docs/design/02-data-pipeline.md): 프로젝트 공통 계약.
 - [수집기](https://github.com/encore-ai-campus/mlo-01-p3-team3/blob/67e837db4114ef8955a12c0b466f6f4aba50bd8f/Commerce_crawler/README.md): 입력 파일을 생성하는 기존 시스템.
 
-관측 버전·운영 기록·이미지 연결은 계약 v1에 구체화했다. 수집기의 요청·저장·재개 기능과 파이프라인의 적재·발행·복구 책임을 분리한다. **상품 Bronze/Silver Delta 저장·중복·품질·복구와 LIVE 인계의 로컬 검증을 수행했다.** 실제 Kafka/MongoDB/lake를 통한 종단 인수는 남아 있다. Gold, MySQL 게시와 실제 NiFi 일정 활성화는 후속 대상이다.
+관측 버전·운영 기록·이미지 연결은 계약 v1에 구체화했다. 수집기의 요청·저장·재개 기능과 파이프라인의 적재·발행·복구 책임을 분리한다. **상품 Bronze/Silver/Gold Delta 저장·중복·품질·복구와 LIVE 인계의 로컬 검증을 수행했다.** 실제 Kafka/MongoDB/lake를 통한 종단 인수는 남아 있다. MySQL 게시·내구성 있는 재시도 예약·전체 대조 job·실제 NiFi flow·상태 보존 이관은 후속이다. 전체 충족 판정은 아래 요구사항 대조를 따른다.
 
 - [Bronze 실행·초기 전체 적재](docs/bronze_execution.md): 전체 JSON/이미지 인계 이후 available-now 처리, 지속 수신, checkpoint·Delta 복구.
 - [Bronze 구현 계획·검증 기록](docs/bronze_implementation_plan.md).
 - [Silver·Gold 제안서 전체 대조표](docs/silver_gold_field_mapping.md): 실제 입력과 46개 요구 항목의 반영 위치. 코드 구현률과 구분한다.
 - [Silver 설계 v1](docs/silver_design_v1.md): 테이블·키·타입·품질·멱등 저장·재평가 기준안.
 - [Silver 실행·서버 배포](docs/silver_execution.md): 고정 Bronze, 담당자 입력/실행 등록, 정규화·Delta·재평가·복구 명령과 현재 인수 경계.
+- [Gold 실행·복구·배포](docs/gold_execution.md): 고정 Silver, 담당 입력·준비 상태·현재 Offer/이력, Delta 및 고정 export·일별 집계.
+- [Gold 이후 요구사항·누락 대조](docs/requirements_gap_review.md): 구현/외부 입력/미구현/서버 미검증을 구분한 후속 목록.
 - [서버 배포·인계 가이드](docs/deployment.md): 기능 추가와 함께 갱신하는 실행 위치·권한·초기 적재·재개·백업 절차.
 
 ## 설치와 실행
@@ -77,7 +79,7 @@ $python = '.\.venv\Scripts\python.exe'
 
 ## 서버 배포 순서
 
-상세 절차와 단계별 실행 가능 여부는 [서버 배포·인계 가이드](docs/deployment.md)를 따른다. 현재 원천 적재·Bronze·Silver 실행 코드가 있다. 새 단계가 구현되면 실제 명령·권한·검증·재개 항목을 이 절과 가이드에 함께 반영한다.
+상세 절차와 단계별 실행 가능 여부는 [서버 배포·인계 가이드](docs/deployment.md)를 따른다. 현재 원천 적재·Bronze·Silver·Gold 실행 코드가 있다. 새 단계가 구현되면 실제 명령·권한·검증·재개 항목을 이 절과 가이드에 함께 반영한다.
 
 인프라 프로그램 설치는 서버 담당자가 수행하고, 아래 절차는 준비된 서버에 파이프라인을 배치하는 절차다. 실제 접속 주소·비밀정보는 Git 밖에서 관리한다.
 

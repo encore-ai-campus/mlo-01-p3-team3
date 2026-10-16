@@ -5,13 +5,14 @@ from ..files import parse
 
 
 class Checkpoint:
+    stage, marker_name = 'SILVER', '_silver_target.json'
     def __init__(self,spark,settings,lease):
         self.jvm,self.settings,self.lease=spark._jvm,settings,lease
         self.path=self.jvm.org.apache.hadoop.fs.Path(settings.checkpoint_path)
         self.fs=self.path.getFileSystem(spark._jsc.hadoopConfiguration())
         self.lease.check(settings)
-        marker=self._path('_silver_target.json')
-        expected=dict(target_fingerprint=settings.fingerprint,stage='SILVER')
+        marker=self._path(self.marker_name)
+        expected=dict(target_fingerprint=settings.fingerprint,stage=self.stage)
         if self.fs.exists(marker):
             if self._read(marker)!=expected:raise Conflict('SILVER_CHECKPOINT_TARGET_CONFLICT')
         else:

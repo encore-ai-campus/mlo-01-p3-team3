@@ -1,6 +1,6 @@
 # 다나와 수집 데이터 파이프라인 통합 설계
 
-2026-10-16 기준 **전체 구현 기준안**이며 2026-10-17 실행 상태를 갱신했다. FULL_EXPORT 스냅샷·이미지 객체 저장·MongoDB 접수/불변 원천·Kafka 발행/복구, LIVE 인계와 상품 Bronze/Silver 코드를 작성하고 로컬 검증했다. 실제 서버 종단 쓰기/장애 인수, Gold·MySQL 연계와 실제 예약 실행 활성화는 남아 있다. 구현 범위·제약·검증 근거는 [첫 단계 실행 기록](execution.md), [Bronze 실행 기록](bronze_execution.md), [Silver 실행 기록](silver_execution.md), 관측 버전·운영 원장·서비스 키는 [데이터·복구 계약 v1](data_contract_v1.md)을 따른다.
+2026-10-16 기준 **전체 구현 기준안**이며 2026-10-17 실행 상태를 갱신했다. FULL_EXPORT 스냅샷·이미지 객체 저장·MongoDB 접수/불변 원천·Kafka 발행/복구, LIVE 인계와 상품 Bronze/Silver/Gold 코드를 작성하고 로컬 검증했다. 실제 서버 종단 쓰기/장애 인수, MySQL 게시·내구성 재시도 예약·실제 운영 자동화는 남아 있다. 구현 범위·제약·검증 근거는 [첫 단계 실행 기록](execution.md), [Bronze 실행 기록](bronze_execution.md), [Silver 실행 기록](silver_execution.md), 관측 버전·운영 원장·서비스 키는 [데이터·복구 계약 v1](data_contract_v1.md)을 따른다.
 
 현재 인프라 기준의 접수·이벤트·재평가·최신성 보강은 [보강 계약 v1.1](design_amendment_v1_1.md)을 따른다. 이 문서는 전체 흐름을 요약하고 세부 새 필드/상태/게시 규칙을 중복 정의하지 않는다.
 
@@ -27,7 +27,7 @@
 | 신규 스냅샷 단계 | FULL_EXPORT 구현·로컬 검증 | 일관된 입력 시점 고정·해시·건수·이미지 검증 |
 | 신규 적재 단계 | 어댑터 구현·대역 검증, 실제 서버 인수 대기 | 이미지 업로드, 불변 원천 적재, 처리 상태, 재실행 |
 | 신규 발행·복구 단계 | 어댑터 구현·대역 검증, 실제 서버 인수 대기 | 저장 확인, Kafka 전달 확인, 미발행 재대조 |
-| Spark·게시 | 상품 Bronze/Silver 구현·로컬 검증, 실제 서버 인수 대기. Gold/MySQL 미구현 | Bronze 복제, Silver 품질, Gold·MySQL 반영 |
+| Spark·게시 | 상품 Bronze/Silver/Gold 구현·로컬 검증, 실제 서버 인수 대기. MySQL 게시 미구현 | Bronze 복제, Silver 품질, Gold·MySQL 반영 |
 | NiFi·예약 실행 | 이 수집기에 미구현 | 승인된 실행 명령 호출·일정·실패 감시 |
 
 현재 파일의 products는 추출·정규화 중간 결과다. MySQL products나 완성된 Silver와 같은 데이터셋이 아니다. PyMongo가 개발 가상환경에 설치된 것과 파이프라인 구현 완료도 구분한다.
@@ -304,3 +304,5 @@ MongoDB 운영 계약은 3노드 Replica Set, writeConcern={w: majority, j: true
 6. 담당 계약 확정 후 Spark Bronze → Silver → Gold·MySQL 순차 인수.
 
 기존 수집 요청·잠금·재개 로직은 유지하고 신규 단계를 분리한다. 이번 보완은 설계 계약을 구체화한 문서 작업이며 실제 개발·인프라 변경·DB 적재·발행은 진행하지 않았다. 개발 범위와 시점은 별도로 논의한다.
+
+2026-10-17 Gold 구현과 최종 대조: [Gold 실행/고정 export](gold_execution.md), [요구사항·누락 목록](requirements_gap_review.md). 이 설계의 목표 전체가 구현됐다는 의미가 아니며 MySQL/운영 후속 경계를 유지한다.

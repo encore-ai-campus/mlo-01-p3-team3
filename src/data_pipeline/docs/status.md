@@ -11,12 +11,12 @@
 | Kafka 발행 | Mongo 저장 확인 후 고정 event ID/본문 발행·재시도·명시 replay 구현 |
 | Bronze | Spark Kafka source → primary/majority 원천 검증 → Delta insert-only MERGE, receipt·격리·checkpoint 구현 |
 | 초기 전체 적재 | prepare/ingest 이후 Bronze available-now로 적체 처리. 이후 같은 checkpoint로 증분 처리 |
-| 테스트 | 최종 전체 145개 통과(70.951초): 기존 122개 + Silver 23개. `.runtime/silver-unit-tests.txt`. 저장 실제 journal 5건·반복 drain, Bronze 로컬 Delta 기록과 Silver 실제 표본/CLI 결과를 각각 보존 |
+| 테스트 | 최종 전체 162개 통과(67.157초): 기존 145개 + Gold 17개. `.runtime/gold-unit-final.txt`. 저장 실제 journal 5건·반복 drain, Bronze 로컬 Delta 기록과 Silver 실제 표본/CLI 결과를 각각 보존 |
 | LIVE | commit 이하 journal 쌍, seq/hash/정체성·cursor/chain·media 후속/모호성·quota·drain receipt·S3 chunk/ready-last 코드 및 로컬 시험 구현 |
 | 복구 보완 | 확인된 이미지 슬롯·원천·이벤트 요청 생략, 명시 --repair-raw, 새 관측 불변 저장 회귀 시험 |
 | 중복 실행 | Bronze Mongo ops claim·heartbeat·실패 시 자동 takeover 금지 구현; 실제 다중 호스트 인수 미수행 |
 | Silver | 상품·속성·가격·이미지·링크·품질·확인된 Offer·평가 receipt의 8개 Delta, 고정 입력/품질/재평가·복구·공유 잠금·CLI 구현. 저장 표본 3상품·9이미지 관계의 실제 로컬 Delta 및 반복 평가 확인 |
-| Gold | 제안서 대조·설계 입력만 있으며 실행 코드 미구현. MySQL 게시·승인·임베딩은 수행하지 않음 |
+| Gold | 고정 Silver receipt/버전 → 상품·현재 Offer·이력·이미지·링크·품질·일별 기여·평가의 8 Delta, 고정 export manifest·품목/GLOBAL 집계·CLI 구현. MySQL 게시·승인·임베딩 생성은 수행하지 않음 |
 | 자동화·서비스 | capture/drain 단발·watch 및 운영 문서 구현. 실제 NiFi flow/일정 활성화·MySQL 게시 미구현 |
 | 실제 서버 | Mongo/Kafka/S3/Spark 클러스터 종단 인수 미수행 |
 
@@ -24,7 +24,7 @@
 
 Silver 실행은 [실행·배포 가이드](silver_execution.md)를 따른다. 운영은 담당자의 실제 NORMALIZATION 등록 export를 입력으로 요구한다. 현재 등록 어댑터는 export 검증/보관이며 MySQL에 직접 생성·실시간 확인하는 기능은 아니다. 실제 Mongo/Spark VM/S3A 연계, 등록 담당 인수, 대규모 부하는 아직 미수행이다.
 
-현재 [이슈 충족표](issue13_acceptance.md), [LIVE 실행·복구](live_execution.md), [실제 서비스 인수 시험](acceptance.md)을 함께 확인한다. 실제 서버 접속 설정이 없어 종단 시험은 NOT_RUN이며 로컬 테스트 결과로 대체하지 않았다.
+현재 [이슈 충족표](issue13_acceptance.md), [LIVE 실행·복구](live_execution.md), [실제 서비스 인수 시험](acceptance.md)을 함께 확인한다. SSH 20대 hostname 조회는 성공했지만 데이터 서비스 종단 시험은 NOT_RUN이며 로컬 테스트 결과로 대체하지 않았다.
 
 테스트 코드는 함께 배포하지만 로컬 보관 데이터·이미지·실행 보고서·가상환경·비밀 설정은 Git에 올리지 않는다. 실제 보관 데이터 smoke는 해당 입력을 제공해야 재현 가능하다. 기본 단위 테스트는 저장소에 포함된 fixture로 실행한다. 서버 배포·초기 적재·재개 절차는 [README](../README.md#서버-배포-순서), Bronze 세부는 [실행 문서](bronze_execution.md)를 따른다.
 
@@ -37,3 +37,7 @@ Silver 실행은 [실행·배포 가이드](silver_execution.md)를 따른다. �
 현재 코드에는 VM IP/호스트 역할을 하드코딩하지 않았다. Mongo rs-products 3멤버, Kafka 토픽·실제 cluster ID, 이미지/lake endpoint와 권한은 배포 설정으로 연결한다.
 
 크롤러는 dev에 아직 없으므로 문서의 크롤러 근거 링크는 최초 구현을 검증한 commit 67e837db4114ef8955a12c0b466f6f4aba50bd8f에 고정했다. 크롤러를 import하는 런타임 의존성은 없고 schema 1.2 완료 export를 읽는다.
+
+Gold 실행은 [가이드](gold_execution.md), 실제 요구사항 대비 남은 개발은 [누락 대조](requirements_gap_review.md)를 따른다. 서버 검증 외에도 MySQL 게시기·실행 등록 어댑터·내구성 재시도 예약·전체 대조 job·NiFi flow·이관/운영 인수가 남아 있다. 기존 LIVE/Silver 작업은 98ae0ae으로 커밋했고 이후 Gold 작업은 별도 변경이다.
+
+최종 Gold 로컬 증적: `.runtime/gold-delta-v2/report.json` passed=true, Spark 4.0.1, 3상품·9이미지 관계·27링크·3평가, 재실행 3건 재사용, 외부 데이터 서비스 연결 0. `.runtime/gold-cli-v3.log` 및 같은 출력의 cli-logs/runs에서 COMPLETED·source_drained=true·고정 export/품목/GLOBAL 집계를 확인했다. 3건 모두 QUALITY_WAIT, current_offers/offer_history는 0으로 실제 안정 판매 근거 부족을 유지했다.

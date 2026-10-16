@@ -92,8 +92,8 @@ python -m tests.smoke_silver_delta \
   --output .runtime/silver-delta-new
 ```
 
-테스트는 저장된 3상품·9이미지 관계를 사용한다. 원천 확인·가격/치수/옵션/등록월·검수/링크 만료·입력 변경·충돌·출력 후 receipt 전 중단·반복 평가를 검증한다. 매핑/검수 미제공의 실제 표본은 QUALITY_WAIT가 정상이다. 실제 Mongo/lake/Spark VM, NORMALIZATION 등록 export 인수, Linux/AWS 이전, 대규모 부하는 미검증이다. Gold와 MySQL 게시도 미구현이다.
+테스트는 저장된 3상품·9이미지 관계를 사용한다. 원천 확인·가격/치수/옵션/등록월·검수/링크 만료·입력 변경·충돌·출력 후 receipt 전 중단·반복 평가를 검증한다. 매핑/검수 미제공의 실제 표본은 QUALITY_WAIT가 정상이다. 실제 Mongo/lake/Spark VM, NORMALIZATION 등록 export 인수, Linux/AWS 이전, 대규모 부하는 미검증이다. Gold는 [별도 실행](gold_execution.md)으로 구현했으며 MySQL 게시기는 미구현이다.
 
 2026-10-17 실제 로컬 Spark 4.0.1/Delta 4.0.1 결과: `.runtime/silver-delta-v3/report.json`, passed=true, 상품 관측 3·속성 14·가격 42·이미지 관계 9·링크 27·품질 문제 94·확인된 Offer 0·평가 receipt 3. 모두 QUALITY_WAIT이며 같은 입력의 3개 평가를 재사용했다. 외부 데이터 서비스 연결은 0, 운영 lease는 대역이다. 별도 `run_silver.py` 실행도 `.runtime/silver-cli-v2.log` 및 같은 출력의 `cli-logs/runs`에 COMPLETED/processed=3/reused=3/source_drained=true를 남겼다. Windows JVM 종료 시 잠긴 임시 JAR 삭제 경고는 로그에 남지만 종료 코드와 데이터/receipt 검증은 통과했다.
 
-최종 자동 회귀 시험은 **145개 통과 / 70.951초**다(`.runtime/silver-unit-tests.txt`). Silver 관련 23개는 순수 정규화·입력·실행 차단·부분 출력·이미지 revision·발견 cursor 손상·불완전 입력 archive 복구 등을 검증한다. 실제 데이터 서비스와의 종단 시험으로 표시하지 않는다. 시험 산출물은 Git 제외 경로에 보관하며 코드와 재현 명령은 저장소에 남긴다.
+Silver 완료 시 자동 회귀 시험은 **145개 통과 / 70.951초**다(`.runtime/silver-unit-tests.txt`). Silver 관련 23개는 순수 정규화·입력·실행 차단·부분 출력·이미지 revision·발견 cursor 손상·불완전 입력 archive 복구 등을 검증한다. 실제 데이터 서비스와의 종단 시험으로 표시하지 않는다. 시험 산출물은 Git 제외 경로에 보관하며 코드와 재현 명령은 저장소에 남긴다.
