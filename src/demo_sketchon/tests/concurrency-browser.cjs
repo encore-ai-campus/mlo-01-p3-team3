@@ -7,8 +7,9 @@ const base=process.env.ROOMPICK_TEST_URL || 'http://127.0.0.1:8015';
     const browser=await chromium.launch({headless:true,channel:'msedge'});
     try {
         const context=await browser.newContext(), page=await context.newPage();
+        await require('./browser-member.cjs')(context,base);
         await page.goto(base+'/editor/');
-        const csrf=await page.locator('[name=csrfmiddlewaretoken]').inputValue();
+        const csrf=await page.locator('[name=csrfmiddlewaretoken]').first().inputValue();
         const project=JSON.parse(await page.locator('#initial-data').textContent());
         const headers={'X-CSRFToken':csrf};
         const events=await Promise.all(Array.from({length:16},(_,i)=>context.request.post(base+`/api/projects/${project.id}/events/`,{

@@ -1,3 +1,4 @@
+import {initAccountState, initialAccount} from './account-state.mjs';
 import {createPlatformAPI} from './platform-api.mjs';
 import {createTracker, identifier} from './events.mjs';
 import {createCollector} from './collector.mjs';
@@ -5,6 +6,7 @@ import {clamp, normalizePoint, moveItem, resizeItem, strokeBounds, transformStro
 import {floodRegion, outlineHit, selectedGroup, transformGroup, groupBounds, boxGroup, strokeHit, strokesTouch, fillHit, cutHit} from './paint.mjs';
 const $ = id => document.getElementById(id);
 const visitor = JSON.parse($('visitor-data').textContent);
+let historyActor = initialAccount().actor_key;
 const stage = $('stage'), ink = $('ink'), surface = $('surface');
 const context = ink.getContext('2d'), objects = surface.getContext('2d');
 let project = JSON.parse($('initial-data').textContent), drawing = structuredClone(project.document);
@@ -15,7 +17,7 @@ let cropSelection = null, clipboard = null, pasteCount = 0;
 let marquee = null, boxed = null, thicknessBefore = null;
 let savedHistory = null;
 try {
-    const saved = JSON.parse(sessionStorage.getItem('roompick.history.' + visitor) || 'null');
+    const saved = JSON.parse(sessionStorage.getItem('roompick.history.' + historyActor) || 'null');
     if (saved?.current === project.id && saved.revision === project.revision && Array.isArray(saved.past) && Array.isArray(saved.future)) savedHistory = saved;
 } catch {}
 for (const stroke of drawing.strokes) stroke.id ||= identifier();
@@ -52,7 +54,7 @@ for (const button of document.querySelectorAll('[data-preference]')) button.addE
     project.request_context = {...project.request_context, style_preferences: value};
     restoreRequirements(); record('style.changed', {style: value[0] || ''}); saveHistory(); updateControls();
 });
-const collector = createCollector({getProject: () => project, getDocument: () => drawing, surface, writer: visitor, api});
+const collector = createCollector({getProject: () => project, getDocument: () => drawing, surface, writer: () => project.writer_id || visitor, actor: initialAccount().actor_key, api});
 function record(type, payload = {}) {
     const eventId = recordEvent(type, payload);
     collector.operation(type, eventId);
@@ -86,7 +88,7 @@ function checkpoint(before, source = project) {
 }
 function saveHistory() {
     if (busy || gesture || textEdit || thicknessBefore) return;
-    try { sessionStorage.setItem('roompick.history.' + visitor, JSON.stringify({current: project.id, revision: project.revision, drawing, request_context: project.request_context || {}, past, future, changed})); }
+    try { sessionStorage.setItem('roompick.history.' + historyActor, JSON.stringify({current: project.id, revision: project.revision, drawing, request_context: project.request_context || {}, past, future, changed})); }
     catch { message('실행 취소 기록은 현재 페이지에서 유지됩니다. 저장 공간 부족으로 새로고침 후에는 복구되지 않을 수 있습니다.', true); }
 }
 function segment(stroke, first, last, target = context, size = ink) {
@@ -701,7 +703,7 @@ async function changePhoto(next) {
 }
 async function newProject(file, dropped = false) {
     if (changed && !confirm('새 사진으로 바꿀까요? 현재 스케치는 비워지며 실행 취소로 복구할 수 있습니다.')) return;
-    const form = new FormData(); form.set('title', '나의 공간 스케치');
+    const form = new FormData(); form.set('title', '나의 공간 스케치'); form.set('source_project_id', project.id);
     if (file) {
         if (file.size > 10 * 1024 * 1024) throw new Error('10MB 이하의 파일을 업로드해주세요.');
         form.set('photo', file); record(dropped ? 'photo.dropped' : 'photo.selected', {bytes: file.size, type: file.type.slice(0, 100)});
@@ -778,7 +780,19 @@ void operation(async () => {
     if (!project.photo_url) message('사진을 업로드하거나 끌어 놓아 시작하세요.');
 });
 void flushEvents();
-window.addEventListener('pageshow', event => { if (event.persisted) window.location.reload(); });
+
 window.addEventListener('pagehide', finishRequirements);
 
 
+
+initAccountState({projectId: () => project.id, beforeLogin: async () => {
+    if (busy || gesture) throw new Error('진행 중인 작업을 마친 후 다시 시도해 주세요.');
+    commitText(); finishRequirements();
+    const saved = await api(`/api/projects/${project.id}/`, {title:project.title, document:drawing, revision:project.revision, events:[], request_context:project.request_context});
+    project.revision = saved.revision; saveHistory();
+    void flushEvents();
+}, onChange: (state, {changed:actorChanged,denied}) => {
+    collector.setAccount(state, denied);
+    if (denied) return;
+    if (actorChanged) { historyActor=state.actor_key; past=[];future=[];saveHistory();updateControls(); }
+}});

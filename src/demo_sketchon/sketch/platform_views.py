@@ -14,7 +14,8 @@ from django.views.decorators.http import require_GET, require_POST
 from .models import Composition, RecommendationRun, SketchEvent, SceneObjectRevision
 from . import validation
 from . import platform
-from .views import owner, serialize_result
+from .views import serialize_result
+from .access import project_scope
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def run_dto(run):
 
 @require_GET
 def scene(request, scene_id):
-    result = get_object_or_404(Composition, id=scene_id, project__owner=owner(request))
+    result = get_object_or_404(Composition.objects.filter(project_scope(request, "project__")), id=scene_id)
     response = JsonResponse(serialize_result(result))
     response["Cache-Control"] = "private, no-store"
     return response
@@ -52,7 +53,7 @@ def expired(run, now):
 
 @require_GET
 def job(request, job_id):
-    run = get_object_or_404(RecommendationRun, id=job_id, composition__project__owner=owner(request))
+    run = get_object_or_404(RecommendationRun.objects.filter(project_scope(request, "composition__project__")), id=job_id)
     if run.status == "RUNNING" and expired(run, timezone.now()):
         RecommendationRun.objects.filter(id=run.id, status="RUNNING", lease_token=run.lease_token).update(
             status="FAILED", metadata={"error": "중단되거나 시간이 초과된 작업입니다. 같은 요청으로 다시 시도해 주세요."})
@@ -67,7 +68,7 @@ def recommend(request, object_id):
     try:
         data = body(request)
         scene_id = UUID(data.get("scene_generation_id")); request_id = UUID(data.get("request_id"))
-        result = get_object_or_404(Composition.objects.select_related("project"), id=scene_id, project__owner=owner(request))
+        result = get_object_or_404(Composition.objects.select_related("project").filter(project_scope(request, "project__")), id=scene_id)
         obj = next((row for row in platform.scene_objects(result) if row["id"] == str(object_id)), None)
         if not obj: return JsonResponse({"error": "물체가 변경됐습니다. 현재 결과에서 다시 선택해 주세요."}, status=409)
         if obj["change_type"] == "EXISTING" or (obj["change_type"] == "UNCERTAIN" and data.get("user_confirmed") is not True):
@@ -143,7 +144,7 @@ def revise_object(request, object_id):
         if bbox["x"] + bbox["width"] > 1.000001 or bbox["y"] + bbox["height"] > 1.000001: raise ValueError("검색 영역은 사진 안에 있어야 합니다.")
         signature = hashlib.sha256(json.dumps({"object_id":str(object_id),"scene_id":str(scene_id),"category_id":category,"bbox":bbox},sort_keys=True).encode()).hexdigest()
         with transaction.atomic():
-            result = get_object_or_404(Composition.objects.select_for_update(), id=scene_id, project__owner=owner(request))
+            result = get_object_or_404(Composition.objects.select_for_update().filter(project_scope(request, "project__")), id=scene_id)
             existing = SceneObjectRevision.objects.filter(request_id=request_id).first()
             if existing:
                 if existing.composition_id != result.id or existing.input_hash != signature: return JsonResponse({"error":"같은 수정 요청 ID의 내용이 다릅니다."},status=409)
@@ -162,7 +163,7 @@ def revise_object(request, object_id):
 def owned_item(request, data, item_id):
     try: run_id = UUID(data.get("recommendation_run_id"))
     except (ValueError, TypeError, AttributeError): raise ValueError("추천 실행 ID가 필요합니다.") from None
-    run = get_object_or_404(RecommendationRun.objects.select_related("composition__project"), id=run_id, composition__project__owner=owner(request), status="SUCCEEDED")
+    run = get_object_or_404(RecommendationRun.objects.select_related("composition__project").filter(project_scope(request, "composition__project__")), id=run_id, status="SUCCEEDED")
     item = next((row for row in run.items if row["id"] == str(item_id)), None)
     if item is None: raise ValueError("추천 항목이 일치하지 않습니다.")
     return run, item

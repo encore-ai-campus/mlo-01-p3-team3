@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.conf import settings
 
 
 def empty_document():
@@ -9,6 +10,8 @@ def empty_document():
 class Project(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.CharField(max_length=32, db_index=True)
+    account = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT)
+    saved_project = models.ForeignKey('SavedProject', null=True, blank=True, on_delete=models.PROTECT)
     title = models.CharField(max_length=100)
     photo = models.FileField(upload_to="rooms/", blank=True)
     original_photo = models.FileField(upload_to="originals/", blank=True)
@@ -79,3 +82,50 @@ class SceneObjectRevision(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["composition", "placement_id", "created_at"], name="scene_revision_lookup")]
+
+
+class GuestGenerationUsage(models.Model):
+    client_ip = models.GenericIPAddressField()
+    usage_date = models.DateField()
+    successful_count = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['client_ip','usage_date'], name='guest_ip_day')]
+
+
+class SavedProject(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    title = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SavedProjectVersion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    saved_project = models.ForeignKey(SavedProject, on_delete=models.PROTECT, related_name='versions')
+    version_number = models.PositiveIntegerField()
+    composition = models.ForeignKey(Composition, on_delete=models.PROTECT)
+    source_result_version = models.PositiveIntegerField()
+    request_id = models.UUIDField(unique=True)
+    snapshot = models.JSONField()
+    image = models.FileField(upload_to='saved_projects/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['saved_project','version_number'], name='saved_project_version'),
+                       models.UniqueConstraint(fields=['composition','source_result_version'], name='saved_source_version')]
+
+
+class WishlistEntry(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    stable_item_key = models.CharField(max_length=200)
+    item_snapshot = models.JSONField()
+    recommendation_run = models.ForeignKey(RecommendationRun, on_delete=models.PROTECT)
+    item_id = models.UUIDField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user','stable_item_key'], name='wishlist_user_item')]

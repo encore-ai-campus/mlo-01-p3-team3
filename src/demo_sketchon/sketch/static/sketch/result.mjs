@@ -1,3 +1,5 @@
+import {initAccountState, initialAccount} from './account-state.mjs';
+import {resultLibrary, wishlistButton} from './library.mjs';
 import {createDurableQueue} from './durable-queue.mjs';
 import {createPlatformAPI} from './platform-api.mjs';
 import {createTracker, identifier} from './events.mjs';
@@ -5,6 +7,7 @@ import {normalizePoint, moveItem, resizeItem} from './geometry.mjs';
 
 const $ = id => document.getElementById(id);
 const visitor = JSON.parse($('visitor-data').textContent);
+var library;
 let result = JSON.parse($('result-data').textContent);
 let placements = structuredClone(result.placements), selected = null, gesture = null, busy = false;
 const {api, record, flushEvents} = createTracker(result.project_id, visitor);
@@ -14,7 +17,7 @@ let recommendation = null, recommending = false, recommendationRequest = null, a
 let showingOriginal = false, renderedVersion = null;
 let placementPast = [], placementFuture = [];
 const initialPlacements = structuredClone(result.initial_placements || placements);
-const historyKey = version => 'roompick.placement-history.' + result.result_id + '.' + version;
+const historyKey = version => 'roompick.placement-history.' + initialAccount().actor_key + '.' + result.result_id + '.' + version;
 try {
     const saved = JSON.parse(sessionStorage.getItem(historyKey(result.version)) || 'null');
     if (saved && JSON.stringify(saved.current) === JSON.stringify(placements) && Array.isArray(saved.past) && Array.isArray(saved.future)) {
@@ -30,7 +33,7 @@ function persistHistory(previousVersion) {
 }
 const objectButtons = new Map();
 let impressionObserver = null, correctionObjectId = null, correctionPlacementId = null, correctionVersion = null, correctionRequest = null;
-const productEventKey = 'roompick.product-events.' + visitor;
+const productEventKey = 'roompick.product-events.' + initialAccount().actor_key;
 const productEvents = createDurableQueue(productEventKey);
 let delivering = false;
 async function deliverProductEvents() {
@@ -127,6 +130,7 @@ function syncSelection() {
 
 function message(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function controls() {
+    library?.controls();
     for (const id of ['download-png', 'redraw', 'edit-sketch', 'new-search']) $(id).disabled = busy || !!gesture;
     $('view-result').disabled = $('view-original').disabled = busy || !!gesture;
     $('undo-placement').disabled = busy || !!gesture || !placementPast.length;
@@ -297,7 +301,7 @@ function renderRecommendations(data) {
             } catch (error) { $('recommendation-status').textContent = error.message; $('recommendation-status').classList.add('error-text'); }
             finally { link.disabled = !item.link_available; }
         });
-        actions.append(choose, reject, link); card.append(photo, brand, name, price, note, actions); impressionObserver.observe(card);
+        actions.append(choose, reject, link, wishlistButton(item, data.recommendation_run_id)); card.append(photo, brand, name, price, note, actions); impressionObserver.observe(card);
     }
 }
 async function recommend() {
@@ -395,3 +399,9 @@ void (async () => {
 })();
 
 
+
+library = resultLibrary({getResult:()=>result,canSave:()=>!busy && !gesture && !showingOriginal});
+initAccountState({projectId:()=>result.project_id,onChange:(state,{denied,changed})=>{
+    library.setAccount(state,{denied,changed});
+    if(denied){requestSequence++;impressionObserver?.disconnect();return;}
+}});

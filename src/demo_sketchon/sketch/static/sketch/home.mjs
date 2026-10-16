@@ -1,3 +1,4 @@
+import {initAccountState} from './account-state.mjs';
 import {createTracker} from './events.mjs';
 
 const initial = JSON.parse(document.getElementById('initial-data').textContent);
@@ -8,3 +9,5 @@ document.getElementById('start-sketch').addEventListener('click', () => {
     void flushEvents();
 });
 void flushEvents();
+
+initAccountState({projectId:initial.id});

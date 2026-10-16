@@ -1,5 +1,27 @@
 # 스케치·온 SketchOn — 데모 Raw 데이터 목록 ver2
 
+현재 기준: 2026-10-16 · **8차 회원 기능 반영**. 아래 8차 절은 기존 상세 설명에 추가되는 현재 계약이다.
+
+## 8차 추가 데이터와 소유권
+
+| 저장소 | 새 데이터 | 의미 |
+| --- | --- | --- |
+| auth_user | username, password 해시, first_name(닉네임) | Django 인증. 평문 비밀번호·CSRF·세션 토큰을 행동 payload에 저장하지 않음 |
+| Project.account_id | nullable 회원 FK | 로그인 시 미귀속 작업 연결. 기존 owner 문자열·Raw.writer_id는 유지 |
+| Project.saved_project_id | nullable 저장 프로젝트 FK | 복원→재생성 결과를 같은 프로젝트의 다음 버전으로 연결 |
+| GuestGenerationUsage | client_ip, usage_date, successful_count | 서버 확인 IP·KST 날짜의 성공 생성 수. IP+날짜 유일 |
+| SavedProject | user, title, created_at, updated_at | 회원이 명시적으로 저장한 프로젝트 묶음 |
+| SavedProjectVersion | version_number, composition, source_result_version, request_id, snapshot, image | 저장 당시 입력·배치·사진 참조와 불변 PNG |
+| media/saved_projects | 저장 버전별 PNG 복사본 | 현재 Composition PNG 교체와 독립 |
+| WishlistEntry | user, stable_item_key, item_snapshot, recommendation_run, item_id | 서버가 확인한 추천 상품의 찜 스냅샷. 회원+안정 키 유일 |
+
+SavedProjectVersion.snapshot은 document, request_context, placements, initial_placements, photo, original_photo, original_checksum, width, height, writer_id, result_version을 포함한다. 저장 시 같은 Composition/version은 중복 버전을 만들지 않는다. 수정·재생성은 새 Composition으로 새 버전을 추가한다.
+
+모의 상품은 product_id=null을 유지하고 category:variant 형식의 catalog_key를 사용한다. 추천 실행마다 바뀌는 item UUID를 동일 상품 식별자로 쓰지 않는다. 찜 이미지는 소유권 검사되는 기존 결과 샘플 경로를 참조한다. 원본 결과를 삭제하는 기능은 이번 범위에 없다.
+
+Raw 계약 roompick-sketch-1.0.0과 기존 JSON 파일은 변경하지 않는다. 아래 과거 누적 건수는 당시 스냅샷이며 회원 기능 테스트 DB의 건수를 운영 기록으로 섞지 않는다. IP·사진·개인 이력의 동의·보관 기간·삭제 정책과 운영 로그 마스킹은 별도 운영 설계가 필요하다.
+
+
 기준일: 2026-10-16 · 프로젝트: `C:\mlo-01-p3-team3\src\demo_sketchon`
 
 이 문서는 **무엇을 수집하고 어디에 저장하는지**를 정리한다. 화면을 이용하는 순서는 [Flow](데모_Flow_이용및처리흐름.md), 기록을 관찰하는 기준은 [로그](데모_로그_종류와확인.md), 세부 Raw 검증 계약은 [수집기준](행동데이터_수집기준.md)을 함께 본다.
@@ -156,7 +178,7 @@ Raw 29개 구간 안의 원본 획은 총 16개, operation은 281개였다. 제�
 - 실제 상품 검색 결과·실판매 가격·실제 판매사이트 방문 성공·구매 전환·광고 노출 수익.
 - 사진 속 기존 물체에 대한 실제 AI 분류와 신뢰도. 현재 ADDED·DEMO_ASSUMPTION은 모의 가정이다.
 - 결과 가구 드래그의 전체 점 시퀀스, 텍스트 한 글자마다의 타이핑 이력, 두 손가락 확대·이동.
-- 로그인·계정별 이력·다른 기기에서 동일인을 연결하는 식별 기능.
+- 소셜 로그인·계정 삭제·비밀번호 복구·보관 기간 정책. 자체 계정·저장 이력·다기기 접근은 8차 구현.
 - Kafka/Spark/S3로의 실제 적재, 운영 규모 부하 성능 보장. 로컬 저장을 AWS 이관 완료라고 부르지 않는다.
 
 근거: [모델](../../sketch/models.py), [사진·수집·생성 API](../../sketch/views.py), [Raw 검증](../../sketch/raw_samples.py), [브라우저 수집기](../../sketch/static/sketch/collector.mjs), [추천 API](../../sketch/platform_views.py), [플랫폼 DTO](../../sketch/platform.py). 조회 명령은 [명령어 문서](행동데이터_및_로그_확인_명령어.md)에 있다.

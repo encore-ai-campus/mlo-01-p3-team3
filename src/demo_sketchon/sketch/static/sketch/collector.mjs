@@ -134,7 +134,14 @@ export class SketchCapture {
     }
 }
 
-export function createCollector({getProject, getDocument, surface, writer, api}) {
+export function createCollector({getProject, getDocument, surface, writer, actor, api}) {
+    const currentWriter = () => typeof writer === "function" ? writer() : writer;
+    let actorKey = actor, suspended = false;
+    async function permitted(sample) {
+        if (suspended) return false;
+        const status = await api('/api/account/status/?project_id=' + encodeURIComponent(sample.project_id));
+        return !suspended && (!actorKey || status.actor_key === actorKey) && status.project_access === true;
+    }
     const status = document.getElementById('collection-status');
     const show = text => { if (status) status.textContent = text; };
     const warn = error => show(`원본 수집 대기: ${error.message}`);
@@ -192,12 +199,13 @@ export function createCollector({getProject, getDocument, surface, writer, api})
         write(tx => tx.objectStore('drafts').put({sample_id: sample.sample_id, tab_id: tabId, sample}));
     }
     async function flush() {
-        if (sending || !pending.size) return;
+        if (suspended || sending || !pending.size) return;
         sending = true;
         try {
             for (const [id, sample] of pending) {
                 if (failed.has(id)) continue;
                 try {
+                    if (!await permitted(sample)) continue;
                     const response = await api(`/api/projects/${sample.project_id}/samples/`, sample);
                     if (response.sample_id !== id) throw new Error('서버의 샘플 ID가 다릅니다.');
                     await write(tx => { tx.objectStore('outbox').delete(id); tx.objectStore('failed').delete(id); tx.objectStore('drafts').delete(id); });
@@ -205,6 +213,9 @@ export function createCollector({getProject, getDocument, surface, writer, api})
                     durable.delete(id); release(id);
                     show(`원본 저장 완료 · ${id.slice(0, 8)} · 품질 ${response.quality_status}${sample.capture_status === 'limited' ? ' · 한도 이후 미수집' : ''}`);
                 } catch (error) {
+                    // A session may change between authorization and POST. Keep
+                    // its outbox retryable instead of quarantining another user's Raw.
+                    if (error.status === 404 && !await permitted(sample)) continue;
                     if (![400, 404, 409, 413, 415, 422].includes(error.status)) throw error;
                     failed.add(id);
                     await write(tx => tx.objectStore('failed').put({sample_id: id, status: error.status, error: error.message}));
@@ -247,6 +258,11 @@ export function createCollector({getProject, getDocument, surface, writer, api})
         show('원본 수집 한도 도달 · 이전 범위 저장 · 이후 작업은 새 작업/새로고침 전까지 미수집');
     }
     const controller = {
+        setAccount(state, denied = false) {
+            suspended = denied;
+            actorKey = state.actor_key;
+            if (!suspended) void flush();
+        },
         begin: safe((event, stroke) => { capture?.begin(event, stroke, rect(), window.devicePixelRatio || 1); checkLimit(); persist(); }),
         move: safe(event => { capture?.move(event, rect()); checkLimit(); }),
         end: safe((event, reason) => {
@@ -269,7 +285,7 @@ export function createCollector({getProject, getDocument, surface, writer, api})
             haltedProject = null;
             if (!capture || (!capture.sample.strokes.length && !capture.sample.operations.length)) {
                 if (capture) release(capture.sample.sample_id);
-                capture = new SketchCapture(getProject(), writer, getDocument(), rect(), window.devicePixelRatio || 1);
+                capture = new SketchCapture(getProject(), currentWriter(), getDocument(), rect(), window.devicePixelRatio || 1);
                 own(capture.sample.sample_id);
             }
         }),
@@ -279,7 +295,7 @@ export function createCollector({getProject, getDocument, surface, writer, api})
         const rejected = await transaction('readonly', ['failed'], tx => tx.objectStore('failed').getAll());
         const rejectedIds = new Set(rejected.map(row => row.sample_id));
         const outbox = await transaction('readonly', ['outbox'], tx => tx.objectStore('outbox').getAll());
-        for (const sample of outbox) if (sample.writer_id === writer) {
+        for (const sample of outbox) if (sample.writer_id === currentWriter() && await permitted(sample)) {
             pending.set(sample.sample_id, sample);
             durable.add(sample.sample_id);
             if (rejectedIds.has(sample.sample_id)) failed.add(sample.sample_id);
@@ -287,12 +303,13 @@ export function createCollector({getProject, getDocument, surface, writer, api})
         const drafts = await transaction('readonly', ['drafts'], tx => tx.objectStore('drafts').getAll());
         for (const row of drafts) {
             const sample = row.sample;
-            if (row.tab_id !== tabId || sample.writer_id !== writer || sample.sample_id === capture?.sample.sample_id) continue;
+            if (row.tab_id !== tabId || sample.writer_id !== currentWriter() || sample.sample_id === capture?.sample.sample_id) continue;
+            if (!await permitted(sample)) continue;
             await recoverIfUnowned(sample, async () => {
                 const [draft, queued] = await transaction('readonly', ['drafts', 'outbox'], tx => [
                     tx.objectStore('drafts').get(sample.sample_id), tx.objectStore('outbox').get(sample.sample_id),
                 ]);
-                if (!draft || queued || draft.sample.writer_id !== writer) return;
+                if (!draft || queued || draft.sample.writer_id !== currentWriter()) return;
                 const recovered = draft.sample;
                 for (const stroke of recovered.strokes) if (stroke.end_reason === 'in_progress') {
                     stroke.end_reason = 'interrupted';
@@ -312,6 +329,7 @@ export function createCollector({getProject, getDocument, surface, writer, api})
         finish('page_exit');
         // Unacknowledged samples stay in outbox, including after a successful beacon.
         for (const sample of pending.values()) {
+            if (suspended) break;
             if (failed.has(sample.sample_id) || !durable.has(sample.sample_id)) continue;
             if (new TextEncoder().encode(JSON.stringify(sample)).length > 45000) continue;
             const form = new FormData();
