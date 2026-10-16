@@ -155,3 +155,11 @@ Application은 외부 해석 API와 입력 검증, 광고 서버는 임베딩 AP
 검증된 실측 참조 저장소가 아직 없으므로 로컬 API는 VERIFIED_DIMENSION을 받지 않는다. TYPICAL_OBJECT_SIZE/RELATIVE_ONLY/NONE만 보존하며 추정폭을 하드 필터나 초기 점수에 사용하지 않는다. 사용자 명시 규격 상한과 원장 규격 비교는 지원한다. 어떤 후보도 실제 공간 설치 적합으로 확정하지 않는다.
 
 로컬 파일 API는 /api/runs와 context/query/ranking 단계다. 전체 서비스의 /api/projects/{id}/recommendations, Bronze 게이트, 데이터베이스 FK·이벤트·현재 링크 검증은 설계 계약으로 남아 있다. 이미지-only 다나와 인덱스는 상품 대응·품목 검증 전 미확인 이미지 후보일 뿐이다. 배치 export로 원장 메타데이터를 연결하며 사용자에게 별도 품목 선택/라벨링을 요구하지 않는다.
+
+## 상품 실버·골드 입력과 점수 저장
+
+2026-10-16 [실버·골드 필드 계약](data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위)을 반영한다. 정제한 상품/옵션·가격 종류·규격 근거·이미지/벡터·링크·준비 상태를 입력받되 미확인 속성을 추정해 MATCH로 바꾸지 않는다. 목록 가격과 판매처 Offer, 상품 규격과 포장 규격, 관측 실패와 실제 값 철회를 구분한다.
+
+현재 추천은 수동 가중치 `weighted-content-v1`을 유지하고 학습은 후속이다. `ranking_score`·`score_components_json`과 run별 정책/인덱스/임베딩 버전을 고정한다. 유사도·색상 기여분·최종 점수는 요청 맥락에 종속되므로 `gold_product_catalog`나 `gold_recommendation_images`의 고정 상품 점수로 저장하지 않는다. 상품 준비 상태와 요청별 필수조건 판정은 별도이며, 가격·규격 결측은 UNKNOWN으로 분리한다.
+
+위 필드의 실제 서비스 직렬화와 추가 ORM/DDL은 [원장 대응](03-data-model.md#실버골드와-서비스-원장-대응)을 확정한 뒤 구현한다. 현재 로컬 코드가 새 Gold 테이블을 직접 읽거나 서비스 연동까지 완료됐다는 뜻은 아니다.

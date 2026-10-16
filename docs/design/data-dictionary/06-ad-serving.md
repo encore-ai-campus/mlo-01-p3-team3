@@ -412,3 +412,9 @@ Delta Silver 벡터 행을 찾는 참조.
 - 해석: COMPARISON_LINK_CLICKED 기준. PURCHASE_LINK_CLICKED의 link_click_count와 별도이며 반복 클릭·재전달은 노출당 한 번 집계한다. 구매 완료가 아니다.
 
 </details>
+
+## 골드 추천 이미지와 요청별 점수
+
+`gold_recommendation_images`는 상품 UUID·이미지 자산 UUID·상품별 연결·checksum·임베딩 모델/차원/전처리·벡터 참조·고정 인덱스 버전을 대응시킨다. [실버·골드 필드 계약](01-raw-delta.md#실버골드-필드-계약-적용-범위)을 따른다. 벡터는 `product_embeddings`의 이미지 asset 단위로 재사용하고 각 상품의 활성 연결과 이용 범위는 따로 확인한다.
+
+`recommendation_ready`가 확인된 이미지 연결만 서비스 카탈로그 준비에 사용한다. 비교/구매 링크 준비 여부는 별도다. 요청별 유사도·선호 색상 기여분·수동 가중합은 `recommendation_items.ranking_score`·`score_components_json`과 run의 정책 버전에 저장한다. 상품 Gold에 요청별 점수를 고정하거나 `model_score`를 현재 학습 예측값으로 만들지 않는다. 학습 모델 참조는 후속 선택 사항이다.
