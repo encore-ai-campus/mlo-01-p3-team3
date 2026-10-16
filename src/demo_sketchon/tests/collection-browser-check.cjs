@@ -15,6 +15,7 @@ const baseURL = process.env.ROOMPICK_TEST_URL || 'http://127.0.0.1:8003';
         });
         // Reject only raw uploads: drawing, old events and mock search must still work.
         await context.route('**/samples/', route => route.fulfill({status: 503, contentType: 'application/json', body: '{"error":"test offline"}'}));
+        await require('./browser-member.cjs')(context,baseURL);
         await page.goto(baseURL);
         const homeClick = page.waitForResponse(response => response.url().endsWith('/events/') && response.status() === 200);
         await page.locator('#start-sketch').click();

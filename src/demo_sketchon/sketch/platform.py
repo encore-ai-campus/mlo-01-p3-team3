@@ -50,7 +50,7 @@ class DemoRecommendationProvider:
     def recommend(self, *, scene_object, request_id, context):
         label = scene_object["label"]
         return {"mode": "mock", "items": [
-            {"sample_key": f"sample-{i}", "product_id": None,
+            {"sample_key": f"sample-{i}", "catalog_key": f"{scene_object['category_id']}:{variant}", "product_id": None,
              "name": f"{label} · {style}", "brand": "SketchOn 예시",
              "image_url": f"/api/results/{scene_object['scene_generation_id']}/samples/{scene_object['placement_id']}/{variant}/?category={scene_object['category_id']}", "price": None,
              "price_note": "실제 판매 상품·가격이 아닙니다",
@@ -93,6 +93,7 @@ def normalize_recommendations(data, request_id):
         price = row.get("price")
         if price is not None and (type(price) is not int or price < 0): raise ValueError("상품 가격이 올바르지 않습니다.")
         items.append({"id": str(uuid5(request_id, f"item:{index}:{product_id or row.get('sample_key', index)}")),
+            "catalog_key": str(row.get('catalog_key',''))[:160],
             "product_id": product_id, "name": row["name"], "brand": str(row.get("brand", ""))[:100],
             "image_url": safe_media_url(row.get("image_url")), "price": price if data["mode"] == "live" else None,
             "price_note": str(row.get("price_note", ""))[:200], "source": str(row.get("source", ""))[:80],

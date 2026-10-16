@@ -12,6 +12,7 @@ const baseURL = process.env.ROOMPICK_TEST_URL || 'http://127.0.0.1:8003';
         page.on('request', request => { if (request.url().endsWith('/events/') && request.headers()['content-type'] === 'application/json') events.push(...request.postDataJSON().events); });
         fs.mkdirSync(path.join(__dirname, '../test-results'), {recursive: true});
         const capture = name => page.screenshot({path: path.join(__dirname, '../test-results/' + name + '.png'), fullPage: true});
+        await require('./browser-member.cjs')(context,baseURL);
         await page.goto(baseURL); assert.equal(await page.locator('#surface').count(), 0); await capture('home');
         await page.locator('.start-button').click(); await page.waitForURL('**/editor/');
         const visitor = await page.locator('#visitor-data').textContent();

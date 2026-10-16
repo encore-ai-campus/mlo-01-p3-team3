@@ -9,7 +9,8 @@ const base=process.env.ROOMPICK_TEST_URL||'http://127.0.0.1:8015';
         for(const [name,width,height] of [['desktop',1366,768],['mobile',390,844]]) {
             const context=await browser.newContext({viewport:{width,height},isMobile:width<600,hasTouch:width<600});
             const page=await context.newPage(), errors=[]; page.on('pageerror',e=>errors.push(e.message));
-            await page.goto(base); await page.locator('.hero-photo img').evaluate(image=>image.decode());
+            await require('./browser-member.cjs')(context,base);
+        await page.goto(base); await page.locator('.hero-photo img').evaluate(image=>image.decode());
             const overflow=()=>page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
             const brand=async()=>{
                 assert.match(await page.title(),/스케치·온 SketchOn/);

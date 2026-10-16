@@ -22,16 +22,14 @@ from .models import Composition, Project, SketchEvent
 from .mock_composition import compose, furniture, render_placements
 from .catalog import CATEGORIES, PRODUCTS
 from .raw_samples import MAX_RAW_BYTES, save_immutable, strict_constant, validate_sample
+from .quota import charge_guest_generation, GuestLimitReached, quota_status
 
 
-def owner(request):
-    if "sketch_owner" not in request.session:
-        request.session["sketch_owner"] = uuid4().hex
-    return request.session["sketch_owner"]
+from .access import visitor_id as owner, project_scope, owned_project, owned_result
 
 
 def serialize(project):
-    return {"id": str(project.id), "title": project.title, "width": project.width, "height": project.height,
+    return {"id": str(project.id), "writer_id":project.owner, "title": project.title, "width": project.width, "height": project.height,
             "photo_url": f"/api/projects/{project.id}/photo/" if project.photo else None,
             "document": project.document, "request_context": project.request_context, "revision": project.revision, "locked": project.locked,
             "editor_url": f"/editor/{project.id}/", "updated_at": project.updated_at.isoformat()}
@@ -40,7 +38,7 @@ def serialize(project):
 @require_GET
 @ensure_csrf_cookie
 def home(request):
-    project = Project.objects.create(owner=owner(request), title="Home 방문")
+    project = Project.objects.create(owner=owner(request), account=request.user if request.user.is_authenticated else None, title="Home 방문")
     SketchEvent.objects.create(project=project, event_type="home.viewed", payload={})
     return render(request, "sketch/home.html", {"initial": {"id": str(project.id)}, "visitor_id": project.owner, "platform_config": {"mode": "mock"}})
 
@@ -49,9 +47,9 @@ def home(request):
 @ensure_csrf_cookie
 def editor(request, project_id=None):
     if project_id:
-        project = get_object_or_404(Project, id=project_id, owner=owner(request))
+        project = owned_project(request, project_id)
     else:
-        project = Project.objects.create(owner=owner(request), title="나의 공간 스케치")
+        project = Project.objects.create(owner=owner(request), account=request.user if request.user.is_authenticated else None, title="나의 공간 스케치")
     if project.locked:
         result = project.composition_set.order_by("-created_at").first()
         return redirect("result-page", result_id=result.id)
@@ -91,10 +89,14 @@ def prepare_photo(upload):
 def projects(request):
     session_owner = owner(request)
     if request.method == "GET":
-        rows = Project.objects.filter(owner=session_owner).order_by("-updated_at")
+        rows = Project.objects.filter(project_scope(request)).order_by("-updated_at")
         return JsonResponse({"projects": [{"id": str(row.id), "title": row.title, "updated_at": row.updated_at.isoformat()} for row in rows[:100]]})
     try:
-        project = Project(owner=session_owner, title=validation.title(request.POST.get("title", "나의 공간")))
+        project = Project(owner=session_owner, account=request.user if request.user.is_authenticated else None, title=validation.title(request.POST.get("title", "나의 공간")))
+        source_id = request.POST.get('source_project_id')
+        if source_id:
+            source = owned_project(request, UUID(source_id))
+            project.saved_project = source.saved_project
         upload = request.FILES.get("photo")
         content = None
         original_bytes = None
@@ -127,7 +129,7 @@ def projects(request):
 
 @require_http_methods(["GET", "POST"])
 def project_detail(request, project_id):
-    project = get_object_or_404(Project, id=project_id, owner=owner(request))
+    project = owned_project(request, project_id)
     if request.method == "GET":
         return JsonResponse(serialize(project))
     if project.locked:
@@ -167,7 +169,7 @@ def project_detail(request, project_id):
 
 @require_GET
 def photo(request, project_id):
-    project = get_object_or_404(Project, id=project_id, owner=owner(request))
+    project = owned_project(request, project_id)
     if not project.photo:
         return JsonResponse({"error": "사진이 없습니다."}, status=404)
     try:
@@ -180,7 +182,7 @@ def photo(request, project_id):
 
 @require_http_methods(["POST"])
 def collect_events(request, project_id):
-    project = get_object_or_404(Project, id=project_id, owner=owner(request))
+    project = owned_project(request, project_id)
     try:
         if request.content_type == "application/json":
             payload = json.loads(request.body)
@@ -202,7 +204,7 @@ def collect_events(request, project_id):
 
 @require_http_methods(["POST"])
 def collect_sample(request, project_id):
-    project = get_object_or_404(Project, id=project_id, owner=owner(request))
+    project = owned_project(request, project_id)
     try:
         if request.content_type == "application/json":
             body = request.body
@@ -235,7 +237,7 @@ def collect_sample(request, project_id):
 def serialize_result(result):
     root = f"/api/results/{result.id}"
     from .platform import scene_objects
-    return {"schema_version": 1, "status": "SUCCEEDED", "scene_generation_id": str(result.id), "scene_objects": scene_objects(result), "category_options": {key: value for key, value in CATEGORIES.items() if key != "other"}, "generation_context": result.generation_context, "mode": "mock", "result_id": str(result.id), "project_id": str(result.project_id),
+    return {"schema_version": 1, "status": "SUCCEEDED", "writer_id":result.project.owner, "scene_generation_id": str(result.id), "scene_objects": scene_objects(result), "category_options": {key: value for key, value in CATEGORIES.items() if key != "other"}, "generation_context": result.generation_context, "mode": "mock", "result_id": str(result.id), "project_id": str(result.project_id),
         "revision": result.revision, "version": result.version,
         "image_url": root + f"/image/?v={result.version}", "download_url": root + f"/image/?download=1&v={result.version}",
         "data_url": root + "/data/", "placements": result.placements, "initial_placements": result.initial_placements or result.placements, "page_url": f"/results/{result.id}/",
@@ -245,7 +247,7 @@ def serialize_result(result):
 
 @require_http_methods(["POST"])
 def search(request, project_id):
-    project = get_object_or_404(Project, id=project_id, owner=owner(request))
+    project = owned_project(request, project_id)
     result = None
     try:
         payload = json.loads(request.body)
@@ -273,12 +275,24 @@ def search(request, project_id):
         content, placements = compose(project, document, context.get("text_requirements", ""), context.get("style_preferences", []))
         result = Composition(id=identifier, project=project, input_document=document, placements=placements, initial_placements=copy.deepcopy(placements), revision=revision + 1, generation_context=context)
         with transaction.atomic():
+            # Re-read after acquiring the write transaction: a concurrent replay
+            # may have completed while image composition ran outside the lock.
+            Project.objects.select_for_update().get(pk=project.pk)
+            existing = Composition.objects.filter(id=identifier).first()
+            if existing:
+                if existing.project_id != project.id or existing.input_document != document or existing.generation_context != context or existing.revision != revision + 1:
+                    raise ValueError("중복 검색 요청의 내용이 다릅니다.")
+                return JsonResponse(serialize_result(existing))
             if not Project.objects.filter(id=project.id, revision=revision, locked=False).update(document=document, request_context=context, revision=revision + 1, locked=True, updated_at=timezone.now()):
                 return JsonResponse({"error": "작업 버전이 변경됐습니다. 다시 시도해 주세요."}, status=409)
+            charge_guest_generation(request)
             result.image.save(f"{result.id}.png", ContentFile(content), save=False)
             result.save()
             SketchEvent.objects.create(project=project, event_type="search.completed", payload={"mode": "mock", "result_id": str(result.id), "placement_count": len(placements)})
         return JsonResponse(serialize_result(result), status=201)
+    except GuestLimitReached as error:
+        SketchEvent.objects.create(project=project, event_type='guest.generation_limited', payload={})
+        return JsonResponse({'error':str(error), 'quota':quota_status(request)}, status=429)
     except (ValueError, UnicodeDecodeError, RequestDataTooBig) as error:
         if result and result.image:
             result.image.delete(save=False)
@@ -291,7 +305,7 @@ def search(request, project_id):
 
 @require_GET
 def result_image(request, result_id):
-    result = get_object_or_404(Composition, id=result_id, project__owner=owner(request))
+    result = owned_result(request, result_id)
     try:
         response = FileResponse(result.image.open("rb"), content_type="image/png", as_attachment=request.GET.get("download") == "1", filename="sketchon-result.png")
     except FileNotFoundError:
@@ -303,7 +317,7 @@ def result_image(request, result_id):
 @require_GET
 @ensure_csrf_cookie
 def result_page(request, result_id):
-    result = get_object_or_404(Composition.objects.select_related("project"), id=result_id, project__owner=owner(request))
+    result = owned_result(request, result_id)
     labels = list(dict.fromkeys(CATEGORIES[row["category"]] for row in result.placements))
     SketchEvent.objects.create(project=result.project, event_type="result.viewed", payload={"result_id": str(result.id)})
     return render(request, "sketch/result.html", {"initial": serialize_result(result), "visitor_id": result.project.owner,
@@ -313,7 +327,7 @@ def result_page(request, result_id):
 
 @require_GET
 def result_sprite(request, result_id, placement_id):
-    result = get_object_or_404(Composition, id=result_id, project__owner=owner(request))
+    result = owned_result(request, result_id)
     item = next((row for row in result.placements if row["id"] == placement_id), None)
     if not item:
         return JsonResponse({"error": "배치 요소를 찾을 수 없습니다."}, status=404)
@@ -329,7 +343,7 @@ def result_sprite(request, result_id, placement_id):
 
 @require_http_methods(["POST"])
 def update_placements(request, result_id):
-    result = get_object_or_404(Composition.objects.select_related("project"), id=result_id, project__owner=owner(request))
+    result = owned_result(request, result_id)
     new_image = None
     committed = False
     try:
@@ -382,7 +396,7 @@ def update_placements(request, result_id):
 
 @require_http_methods(["POST"])
 def redraw(request, result_id):
-    result = get_object_or_404(Composition.objects.select_related("project"), id=result_id, project__owner=owner(request))
+    result = owned_result(request, result_id)
     try:
         payload = json.loads(request.body) if request.body and request.content_type == "application/json" else {}
         if not isinstance(payload, dict) or payload.get("mode", "blank") not in ("blank", "sketch", "new"):
@@ -391,7 +405,7 @@ def redraw(request, result_id):
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({"error": "다시 그리기 요청이 올바르지 않습니다."}, status=400)
     with transaction.atomic():
-        project = Project.objects.create(owner=result.project.owner, title=result.project.title,
+        project = Project.objects.create(owner=result.project.owner, account=result.project.account, saved_project=result.project.saved_project if mode != "new" else None, title=result.project.title,
             photo=result.project.photo.name if mode != "new" else "",
             original_photo=result.project.original_photo.name if mode != "new" else "",
             original_checksum=result.project.original_checksum if mode != "new" else "",
@@ -404,7 +418,7 @@ def redraw(request, result_id):
 
 @require_http_methods(["POST"])
 def crop_photo(request, project_id):
-    source_project = get_object_or_404(Project, id=project_id, owner=owner(request))
+    source_project = owned_project(request, project_id)
     if source_project.locked:
         return JsonResponse({"error": "결과 페이지에서 다시 그리기를 선택해 주세요."}, status=409)
     project = None
@@ -426,7 +440,7 @@ def crop_photo(request, project_id):
                 raise ValueError("자르기 영역은 가로·세로 4픽셀 이상이어야 합니다.")
             image = original.crop((x, y, right, bottom)).convert("RGB")
             stream = io.BytesIO(); image.save(stream, format="JPEG", quality=90)
-        project = Project(owner=source_project.owner, title=source_project.title, width=image.width, height=image.height,
+        project = Project(owner=source_project.owner, account=source_project.account, saved_project=source_project.saved_project, title=source_project.title, width=image.width, height=image.height,
             original_photo=source_project.original_photo.name, original_checksum=source_project.original_checksum,
             request_context=copy.deepcopy(source_project.request_context))
         with transaction.atomic():
@@ -444,7 +458,7 @@ def crop_photo(request, project_id):
 
 @require_GET
 def result_data(request, result_id):
-    result = get_object_or_404(Composition, id=result_id, project__owner=owner(request))
+    result = owned_result(request, result_id)
     response = JsonResponse({**serialize_result(result), "input_document": result.input_document,
         "width": result.project.width, "height": result.project.height, "created_at": result.created_at.isoformat()}, json_dumps_params={"ensure_ascii": False})
     response["Content-Disposition"] = 'attachment; filename="sketchon-result.json"'
@@ -455,7 +469,7 @@ def result_data(request, result_id):
 @require_GET
 def result_sample(request, result_id, placement_id, variant):
     """Local illustrative cards only; no seller image or catalog lookup."""
-    result = get_object_or_404(Composition, id=result_id, project__owner=owner(request))
+    result = owned_result(request, result_id)
     item = next((row for row in result.placements if row["id"] == placement_id), None)
     category = request.GET.get("category", item["category"] if item else "")
     if not item or variant not in {"cream", "wood", "sage"} or category not in CATEGORIES or category == "other":

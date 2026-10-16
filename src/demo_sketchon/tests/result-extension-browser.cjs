@@ -33,6 +33,7 @@ function html() {
         await context.route('http://roompick.test/**',async route=>{
             const request=route.request(),url=new URL(request.url()),body=request.method()==='POST'?request.postDataJSON():null;
             const json=(data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+            if(url.pathname==='/api/account/status/')return json({authenticated:false,actor_key:'unknown',nickname:'',csrf_token:'test',project_access:true,quota:{remaining:3}});
             if(url.pathname==='/result/')return route.fulfill({contentType:'text/html',body:html()});
             if(url.pathname.startsWith('/static/')) {
                 const file=path.join(root,'sketch/static',url.pathname.slice('/static/'.length));
@@ -68,7 +69,7 @@ function html() {
         assert.equal(await page.locator('#edit-placement, #resize-selection, #search-region, .region-numbers, #region-x, #region-y').count(),0);
         assert.equal(await page.locator('#region-width, #region-height').count(),2);
         assert.equal(await page.locator('h1').innerText(),'visitor1 님이 원하시는 “소파”을 생성하였습니다.');
-        assert.deepEqual(await page.locator('.result-board .board-result-actions > button').evaluateAll(nodes=>nodes.map(node=>node.id)),['download-png','redraw','edit-sketch','new-search']);
+        assert.deepEqual(await page.locator('.result-board .board-result-actions > button:visible').evaluateAll(nodes=>nodes.map(node=>node.id)),['download-png','redraw','edit-sketch','new-search']);
         assert.deepEqual(await page.locator('.board-result-actions [data-restart]').evaluateAll(nodes=>nodes.map(node=>node.dataset.restart)),['blank','sketch','new']);
         assert.equal(await page.locator('#download-png').innerText(),'이미지 내려받기');
         assert.equal(await page.locator('#download-png, #redraw, #edit-sketch, #new-search').count(),4);

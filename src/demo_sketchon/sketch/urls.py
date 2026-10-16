@@ -1,11 +1,25 @@
 from django.urls import path
-from . import views, platform_views
+from . import views, platform_views, accounts, library
 
 # UI integration seam: the scene-generation route currently wraps the legacy mock.
 # Replace its handler with the Application job submission/lookup implementation
 # after durable input-revision storage and Bronze acknowledgement are connected.
 # Keep provider credentials, Ad transport and FAISS access out of browser code.
 urlpatterns = [
+    path('api/results/<uuid:result_id>/save/', library.save_result, name='save-result'),
+    path('api/saved-versions/<uuid:version_id>/image/', library.saved_version_image, name='saved-version-image'),
+    path('api/saved-versions/<uuid:version_id>/edit/', library.edit_saved_version, name='edit-saved-version'),
+    path('api/wishlist/', library.wishlist_list_add, name='wishlist-api'),
+    path('api/wishlist/<uuid:entry_id>/remove/', library.wishlist_remove, name='wishlist-remove'),
+    path('my/projects/', library.saved_projects, name='saved-projects'),
+    path('my/projects/<uuid:project_id>/', library.saved_project_detail, name='saved-project-detail'),
+    path('my/compare/', library.saved_compare, name='saved-compare'),
+    path('my/wishlist/', library.wishlist_page, name='wishlist'),
+    path('accounts/login/', accounts.login_page, name='login'),
+    path('accounts/signup/', accounts.signup_page, name='signup'),
+    path('accounts/logout/', accounts.logout_action, name='logout'),
+    path('api/account/status/', accounts.account_status, name='account-status'),
+    path('my/profile/', accounts.profile_page, name='profile'),
     path("api/scene-objects/<uuid:object_id>/revisions/", platform_views.revise_object, name="object-revise"),
     path("api/results/<uuid:result_id>/samples/<str:placement_id>/<str:variant>/", views.result_sample, name="result-sample"),
     path("api/projects/<uuid:project_id>/scene-generations/", views.search, name="scene-generate"),

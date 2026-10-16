@@ -11,7 +11,8 @@ export function identifier() {
 
 export function createTracker(projectId, visitor) {
     let project = {id: projectId};
-    const queueKey = 'roompick.events.' + visitor;
+    const actor = window.__sketchAccountState?.actor_key || JSON.parse(document.getElementById?.('account-initial')?.textContent || '{}').actor_key || visitor;
+    const queueKey = 'roompick.events.' + actor;
     let sending = false;
     const queue = createDurableQueue(queueKey);
     // Migrate a previous version's pending rows once; identifiers still deduplicate on the server.
@@ -33,6 +34,7 @@ export function createTracker(projectId, visitor) {
     // Bound both response headers and body reads. Analytics never owns navigation.
     async function api(path, body, {timeoutMs = 30000, signal} = {}) {
         if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Application 내부 API 주소가 필요합니다.');
+        const epoch = window.__sketchAccountEpoch || 0;
         const controller = new AbortController();
         const cancel = () => controller.abort();
         signal?.addEventListener('abort', cancel, {once: true});
@@ -52,6 +54,7 @@ export function createTracker(projectId, visitor) {
                 error.status = response.status; throw error;
             }
             const data = await response.json();
+            if (epoch !== (window.__sketchAccountEpoch || 0)) throw new Error("계정이 변경되었어요. 현재 계정에서 다시 시도해 주세요.");
             if (!response.ok) {
                 const error = new Error(data.error || `요청 실패 (HTTP ${response.status}).`);
                 error.status = response.status; throw error;
