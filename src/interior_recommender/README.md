@@ -6,13 +6,17 @@
 
 2026-10-15: 웹 기본 흐름은 직접 추천이다. 기존 생성 CLI·일괄 임베딩은 유지하고 생성 웹은 `--legacy-generation`으로 실행한다. 아래 접힘 영역은 이전 생성 MVP 이력이다.
 
+## SketchOn 단일 서버 통합
+
+`demo_sketchon`의 `/interior-recommand/`에서는 기존 로컬 295개 상품과 Gemini를 재사용한다. [설치·환경 변수·API·권한·검증](../demo_sketchon/docs/ver2/직접추천_통합_실행.md)을 따른다. 이 구성은 아래 독립 추천 웹 서버를 실행하지 않는다.
+
 ## 실행
 
-이 문서는 저장소 루트에서 실행하는 명령을 안내한다. 프로젝트 설정은 `src/`에, 패키지는 `src/interior_recommender/`에 있으며 먼저 `python -m pip install --no-deps -e .\src`로 설치한다. 테스트·데모·일괄 임베딩의 모듈 이름은 모두 `interior_recommender`다.
+이 문서는 저장소 루트에서 실행하는 명령을 안내한다. 패키지와 pyproject.toml은 `src/interior_recommender/`에 있으며 먼저 `python -m pip install --no-deps -e .\src\interior_recommender`로 설치한다. 테스트·데모·일괄 임베딩의 모듈 이름은 모두 `interior_recommender`다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r .\src\requirements-mvp.lock.txt
-.\.venv\Scripts\python.exe -m pip install --no-deps -e .\src
+.\.venv\Scripts\python.exe -m pip install -r .\src\interior_recommender\requirements-mvp.lock.txt
+.\.venv\Scripts\python.exe -m pip install --no-deps -e .\src\interior_recommender
 .\.venv\Scripts\python.exe -m interior_recommender.web --demo --output-root outputs/direct-demo --port 8765
 ```
 
@@ -26,11 +30,11 @@
 
 사진/텍스트/스케치→멀티모달 direct_context API→코드 스키마·원문/단위 검사·질의 조립→질의 embed_text API→필수 조건 대조·불일치 제외/결측 분리→scikit-learn cosine_similarity→수동 가중합·상품 중복 제거→직접 상품 표시다. 정상 요청은 해석 1회+질의 임베딩 1회이며 재시도/제공처 오류가 있으면 달라진다. 상품별 온라인 임베딩·이미지 생성·참조 구조/생성 후 검사는 호출하지 않는다.
 
-초기 추천은 라벨 없이 scikit-learn `cosine_similarity`와 수동 초기 가중치로 수행한다. `weighted-content-v1`은 선호 색상이 있으면 `0.85 × 유사도 + 0.15 × 색상 일치`, 없으면 유사도만 사용한다. 필수 조건 불일치는 제외하고 결측·미지원 필수 조건은 UNKNOWN 목록으로 분리한다. 가중치는 학습값이 아니며 점수는 확률이 아니다. 사람의 6만 이미지 전수 적합/부적합 라벨링·LogisticRegression 학습·직렬화 모델 파일은 초기 실행 조건이 아니다. 반응 자료를 충분히 확보한 뒤 지도학습을 별도 평가한다.
+초기 추천은 라벨 없이 scikit-learn `cosine_similarity`와 수동 초기 가중치로 수행한다. 기본 `weighted-content-v2`는 선호 색상이 있으면 `0.85 × 유사도 + 0.15 × 색상 일치`, 없으면 유사도만 사용한다. 재질은 원문을 질의 임베딩에 넣는 검색 참고이며 결측·불일치로 제외하거나 미확인 후보로 분리하지 않는다. 나머지 필수 조건 불일치는 제외하고 결측·미지원 필수 조건은 UNKNOWN 목록으로 분리한다. 가중치는 학습값이 아니며 점수는 확률이 아니다. 사람의 6만 이미지 전수 적합/부적합 라벨링·LogisticRegression 학습·직렬화 모델 파일은 초기 실행 조건이 아니다. 반응 자료를 충분히 확보한 뒤 지도학습을 별도 평가한다.
 
-`--ranking-policy policy.json`으로 {"version":"weighted-content-v1","similarity_weight":0.85,"color_weight":0.15}를 지정할 수 있다. 유한한 0~1 가중치의 합이 1이어야 하며 run 접수 때 전체 값을 고정한다. 변경 정책은 새 요청에만 적용한다. 동점은 유사도 내림차순→product_id→image_id 오름차순이다. 선호 색상 미지정 때는 유사도만 사용하며 누락 상품만 가중치를 재정규화하지 않는다.
+`--ranking-policy policy.json`으로 {"version":"weighted-content-v2","similarity_weight":0.85,"color_weight":0.15}를 지정할 수 있다. 유한한 0~1 가중치의 합이 1이어야 하며 run 접수 때 전체 값을 고정한다. 변경 정책은 새 요청에만 적용한다. `weighted-content-v1`은 과거 재질 필수 판정과 저장 run 재시도 호환용으로 지원한다. 동점은 유사도 내림차순→product_id→image_id 오름차순이다. 선호 색상 미지정 때는 유사도만 사용하며 누락 상품만 가중치를 재정규화하지 않는다.
 
-required는 사용자 텍스트에 인용 근거가 있는 필수 색상/재질/형태 EQ/NE, 가격·폭/깊이/높이 LE 상한을 지원한다. 실제 원장 결측은 UNKNOWN 목록, 불일치는 제외다. 미지원 조건은 unapplied_conditions에 보존하고 충족 목록으로 안내하지 않는다. 원문 인용이 AI 해석의 정답을 보증하지 않는다. 색상/재질 값은 원장과 같은 표준 어휘를 사용해야 하며 동의어 정제는 상품 준비 범위다.
+required는 사용자 텍스트에 인용 근거가 있는 색상/재질/형태 EQ/NE, 가격·폭/깊이/높이 LE 상한을 지원한다. v2에서 재질 대조는 `preference_checks`에만 기록하며 일치·부정 재질 제외를 보장하지 않는다. 나머지 실제 원장 결측은 UNKNOWN 목록, 불일치는 제외다. 미지원 조건은 unapplied_conditions에 보존하고 충족 목록으로 안내하지 않는다. 원문 인용이 AI 해석의 정답을 보증하지 않는다. 색상/재질 값은 원장과 같은 표준 어휘를 사용해야 하며 동의어 정제는 상품 준비 범위다.
 
 현재 검증된 실측 참조 저장소가 없어 공간 크기는 TYPICAL_OBJECT_SIZE/RELATIVE_ONLY/NONE만 받는다. 추정폭은 저장/표시만 하고 필수 제외나 초기 점수에는 사용하지 않는다. 사용자 명시 상한은 확인된 상품 규격과 비교하지만 실제 방 설치 가능성은 항상 UNKNOWN이다.
 
@@ -163,8 +167,8 @@ float32 NPY mmap은 시작할 때 검증 후 재사용하며 2,048행씩 질의 
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r .\src\requirements-mvp.lock.txt
-.\.venv\Scripts\python.exe -m pip install -e .\src --no-deps
+.\.venv\Scripts\python.exe -m pip install -r .\src\interior_recommender\requirements-mvp.lock.txt
+.\.venv\Scripts\python.exe -m pip install -e .\src\interior_recommender --no-deps
 # src/interior_recommender/.env가 아직 없다면 예제 파일을 복사한다.
 # Copy-Item .\src\.env.example .\src\interior_recommender\.env
 ```

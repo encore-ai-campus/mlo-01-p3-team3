@@ -1,5 +1,13 @@
 # 스케치·온 SketchOn — 상상한 공간을 켜다
 
+## 직접 상품 추천 통합 MVP (2026-10-16)
+
+같은 Django 서버의 **`/interior-recommand/`**에서 회원·비회원 모두 사진+설명/스케치로 상품을 직접 추천받는다. Home→‘내 공간 꾸미기’의 기존 그림판에서 사진·스케치·요청사항을 입력하고 ‘상품 추천받기’를 누른다. 추천 화면은 전달된 입력과 결과만 표시하며 별도 입력 폼을 두지 않는다. run 없이 추천 경로를 열면 기존 편집기로 이동한다. 화면 표시명·로고·색상은 SketchOn을 사용한다. 기존 모의 공간 만들기는 펼침 메뉴에서, 회원·저장·찜·Raw 수집은 기존 경로에서 유지하며, 아래 기존 모의 생성 설명과 직접 추천을 구분한다.
+
+추천은 `interior_recommender/sample/crawl_test/full/catalog-with-links/products.json`의 기존 295개 로컬 상품과 완료 벡터를 재사용한다. 입력 해석·질의 임베딩은 기존 Gemini 설정을 사용한다. 별도 `interior_recommender.web` 서버·추천용 DB·MySQL·Kafka·FAISS는 필요하지 않다. 기존 로그인·세션·Canvas는 로컬 SQLite를 유지한다.
+
+**현재 저장소 경로의 설치·실행, 환경 변수, API·권한과 검증은 [직접 추천 통합 실행 안내](docs/ver2/직접추천_통합_실행.md)를 따른다.** 아래 `C:\mlo-01-p3-team3` 경로는 이전 데모 환경의 기록이다.
+
 Python / Django / HTML Canvas로 구현한 로컬 웹서비스입니다. 사진 위에 마우스·터치·펜으로 그림·텍스트·도형을 표시하거나 별도 설명을 입력해 모의 공간을 만들고, 결과 물체를 선택해 모의 상품을 추천받습니다. 서비스 표시명은 **스케치·온 SketchOn**이며 현재 데모 위치는 `C:\mlo-01-p3-team3\src\demo_sketchon`입니다. 익명 방문·작업 데이터 식별자와 기존 `ROOMPICK_*` 환경 변수·쿠키·브라우저 저장소 키는 유지합니다.
 
 확정 로고는 검정 영문 한 줄 **Sketch · On**과 점을 찍는 기하학적 연필입니다. 선택한 이미지 원본은 `sketch/static/sketch/assets/sketchon-logo-approved.png`에 저장했으며 세 화면과 기존 푸터는 공통 `brand.html`로 표시합니다.
