@@ -18,6 +18,42 @@
 
 로컬 구현은 `src/interior_recommender/recommendation.py`와 `src/interior_recommender/web/direct.py`다. `python -m interior_recommender.web` 기본 경로가 직접 추천이며 기존 Canvas의 `POST /api/runs`를 재사용한다. 해석 1회와 질의 임베딩 1회를 기본으로 하며 성공 receipt를 재사용한다. 별도 입력 절차·템플릿 선택·이미지 생성은 없다. 실제 DB·Kafka·Delta Bronze·광고 서버 HTTP·FAISS·상품 링크 검증 API 통합 및 운영 배포는 아직 미구현이다. 논리 서비스 계약을 로컬 파일 구현 완료와 혼동하지 않는다.
 
+## 실버·골드 필드 적용
+
+2026-10-16 반영한 논리 계약이다. Silver는 관측별 정제·출처·확인 상태를, Gold는 추천 카탈로그·링크·현재 판매 조건·이력·품질 집계를 관리한다. 실제 Delta 테이블 생성·데이터 적재 완료를 뜻하지 않는다. 상세 입력 경로와 필드는 [실버·골드 데이터 사전](data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위)을 기준으로 한다.
+
+1. API 원본·수집 관리·상세 추출·다운로드 결과를 원천 참조로 구분한다. 수집 출력의 `product_id`는 `source_product_id`로 받아 내부 UUID와 분리한다.
+2. 상품 관측·옵션 속성·가격 관측·이미지 연결·링크 관측·품질 문제를 각각 정제한다. 가격과 이미지를 펼쳐 조인해 상품 행이 곱해지지 않도록 각 테이블의 행 기준과 안정 키를 유지한다.
+3. 필드별 관측 시각·확인 상태·출처 우선순위로 Gold 현재 값을 선택한다. 최신 상세 수집 실패만으로 이전 확인 규격을 NULL로 지우지 않고 유지값의 시각과 최신 실패를 함께 기록한다. 명시적 철회·비활성화는 별도로 적용한다.
+4. 승인 이미지의 호환 벡터·행 대응을 확인해 추천 준비 상태를 만들고, 비교 링크와 직접 구매 링크는 각각 검증한다. 가격·규격 결측은 일괄 추천 제외가 아니라 요청별 MATCH/DIFFERENT/UNKNOWN 판단에 사용한다.
+5. 고정 Delta 버전 → staging 건수/중복/참조 검증 → 안정 키로 기존 UUID 재사용 → MySQL 반영 순서를 지킨다. 사용자·추천 실행·검수 원장은 상품 ETL이 변경하지 않는다. 이번 배치에 없는 것만으로 삭제하지 않는다.
+
+| Silver 논리 테이블 | 행 기준 |
+|---|---|
+| `silver_product_observations` | 상품 수집 관측 1건 |
+| `silver_product_attributes` | 상품/옵션의 속성 관측 1건 |
+| `silver_price_observations` | 상품/옵션·가격 종류의 관측 1건 |
+| `silver_product_images` | 상품과 이미지의 연결 관측 1건 |
+| `silver_link_observations` | 상품/판매 항목 링크의 관측 1건 |
+| `silver_quality_issues` | 대상·필드·원천·처리 버전에 연결한 품질 문제 1건 |
+
+| Gold 논리 테이블 | 결과 |
+|---|---|
+| `gold_product_catalog` | 옵션·원천 대응을 유지한 현재 추천 상품 |
+| `gold_recommendation_images` | 승인 이미지·상품·호환 벡터/행·인덱스 버전 대응 |
+| `gold_product_links` | 상품별 비교 URL·검증 상태·확인 시각 |
+| `gold_offers_current` | 안정 판매 항목별 현재 판매처·옵션·가격 조건·구매 링크 |
+| `gold_offer_snapshots` | 해당 판매 항목의 관측 시점별 조건 이력 |
+| `gold_catalog_quality_daily` | 기준일·품목별 상품/이미지/속성 확보·준비·보류 집계 |
+
+이 이름은 논리 테이블명이다. 기존 `silver/normalized_offers`, `gold/product_catalog`, `gold/current_offers`, `gold/offer_history`, `quality_issues` 등의 저장 경로를 이번 문서 작업으로 생성·이름 변경하지 않는다. 실제 경로·변환 대응·중복 키는 구현 전에 명시한다.
+
+`catalog_ready`는 식별·이름·품목 매핑, `recommendation_ready`는 카탈로그와 활성·이용 승인 이미지·호환 벡터, `comparison_link_ready`는 비교 주소, `purchase_link_ready`는 판매처·옵션·판매 조건·직접 구매 주소를 각각 확인한다. 사유·평가 버전도 보존하며 다운로드 성공으로 모두 true를 만들지 않는다.
+
+초기 추천은 `weighted-content-v1` 수동 가중치다. 선호 색상이 있으면 0.85×유사도+0.15×색상 일치, 없으면 유사도만 사용하며 색상 결측 상품만 가중치를 다시 정규화하지 않는다. 요청별 점수·기여분은 추천 run/item에 저장하고 상품 Gold 고정 속성에 넣지 않는다. 학습·라벨·모델 배포는 후속 평가이며 현재 추천의 선행 조건이 아니다.
+
+대표가격 종류·조건·유효 기간, 필드별 출처 우선순위·동일 시각 충돌, 속성 사전·옵션 식별, 복합 키/hash 규칙은 구현 전에 팀이 확정한다. 품목별 속성 확보율·추천 준비율 임계값은 실제 표본 측정 후 정한다. 미확정값을 이미 검증한 사실로 기록하지 않는다.
+
 <details>
 <summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
 

@@ -19,6 +19,12 @@ erDiagram
 
 운영 추천은 run별 ranking_policy_json(수동 가중치·결측/미선호 정책·MANUAL_INITIAL)·ranking_version·인덱스/임베딩 버전을 고정한다. item별 ranking_score·score_components_json과 조건별 상태를 보존한다. 초기에는 학습 모델 artifact가 필요 없으며 후속 학습 모델 참조는 선택 사항이다. 상세 필드는 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)을 따른다. 실제 DB/DDL 반영은 별도 작업이다.
 
+## 상품 실버·골드 관계 요약
+
+원천 관측 → 상품/옵션·속성·가격·이미지·링크별 Silver → 현재 상품 카탈로그·검색 이미지·링크·판매 이력·품질 Gold → 검증한 MySQL 게시 순서다. 같은 상품의 다중 이미지·가격을 한 행에 펼쳐 상품 수를 늘리지 않는다. `catalog_ready`·`recommendation_ready`·`comparison_link_ready`·`purchase_link_ready`를 구분하고 요청 점수는 추천 run/item에 보존한다.
+
+Delta 논리 테이블은 MySQL 엔터티와 구분한다. [논리 연결 표](03-erd-full.md#실버골드의-논리-연결과-원장-경계)와 [필드·원장 대응](03-data-model.md#실버골드와-서비스-원장-대응)을 기준으로 읽는다. 실제 DDL·마이그레이션은 별도다.
+
 <details>
 <summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
 
