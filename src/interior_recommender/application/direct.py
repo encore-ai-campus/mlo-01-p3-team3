@@ -17,6 +17,14 @@ from ..catalog.danawa import DanawaCatalog
 from ..web.workflow import DemoAdapter, Studio
 
 
+# Versioned SketchOn choices describe color/tone, not required product materials.
+STYLE_COLORS_V2 = {
+    "크림 패브릭": ("ivory", "크림색 아이보리 밝은 뉴트럴 톤 cream ivory color"),
+    "오크 우드": ("brown", "밝은 갈색 베이지 내추럴 톤 light brown beige color"),
+    "세이지 그린": ("green", "차분한 세이지 초록색 톤 muted sage green color"),
+}
+
+
 class DirectDemoAdapter(DemoAdapter):
     def call(self, kind, prompt, images, schema=None):
         if kind == "direct_context":
@@ -183,12 +191,44 @@ class DirectStudio(Studio):
             p.manifest["status"] = context.decision
             p.save()
             return
+        policy = RankingPolicy.model_validate(p.manifest["direct_contract"]["ranking_policy"])
         query_text = " | ".join([context.category_code, *context.search_terms, context.room_context])
+        if policy.version == "weighted-content-v2":
+            # Preserve the original wording (including negation) in semantic search.
+            query_text = " | ".join([query_text, *(c.source_quote for c in context.required if c.field == "material")])
+        # SketchOn's optional style is query context, never evidence for required conditions.
+        external = request.get("external_project")
+        style_color = None
+        color_source = "context" if context.preferred_color else "none"
+        if isinstance(external, dict) and external.get("style_policy") in {"search-only-v1", "color-first-v2"}:
+            preferences = external.get("style_preferences", [])
+            if (not isinstance(preferences, list) or len(preferences) > 1
+                    or any(not isinstance(value, str) or len(value) > 100 for value in preferences)):
+                raise ValueError("Invalid optional style preferences")
+            if external["style_policy"] == "color-first-v2":
+                if preferences:
+                    if preferences[0] not in STYLE_COLORS_V2:
+                        raise ValueError("Unsupported style color preference")
+                    style_color, color_query = STYLE_COLORS_V2[preferences[0]]
+                    query_text = " | ".join([query_text, color_query])
+                    # Explicit requirements and preferences from the original text take precedence.
+                    required_color = next((c.value for c in context.required if c.field == "color" and c.operator == "EQ"), None)
+                    if required_color:
+                        context = context.model_copy(update={"preferred_color": required_color})
+                        color_source = "context"
+                    elif not context.preferred_color:
+                        context = context.model_copy(update={"preferred_color": style_color})
+                        color_source = "style"
+            else:
+                query_text = " | ".join([query_text, *preferences])
         query = p.stage("query", "embed_text", "task: search result | query: " + query_text, [],
                         lambda value: {"values": normalized_vector(value["values"], p.settings.dimension)})["values"]
         started = time.monotonic()
         try:
-            result = self.index.rank(query, context, RankingPolicy.model_validate(p.manifest["direct_contract"]["ranking_policy"]))
+            result = self.index.rank(query, context, policy)
+            if isinstance(external, dict) and external.get("style_policy") == "color-first-v2":
+                result["color_preference"] = {"value": context.preferred_color, "source": color_source,
+                                              "style_color": style_color}
             result["ranking_duration_ms"] = round((time.monotonic() - started) * 1000)
             # Snapshot only returned images. The full catalog/vector matrix is reused in memory.
             for item in result["items"] + result["unverified_items"]:
