@@ -85,7 +85,7 @@ class IntegrationTests(TestCase):
         self.assertContains(response, 'id="requested-text"')
         self.completed(self.client, run)
         self.assertEqual(self.client.get("/").status_code, 200)
-        self.assertContains(self.client.get("/editor/"), "상품 추천받기")
+        self.assertContains(self.client.get("/editor/"), "공간 만들기")
         self.assertEqual(len(self.engine.index.products), 295)
         self.assertEqual(self.engine.index.dimension, 768)
 

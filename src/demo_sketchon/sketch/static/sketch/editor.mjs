@@ -13,7 +13,6 @@ let project = JSON.parse($('initial-data').textContent), drawing = structuredClo
 let mode = 'pen', selected = null, gesture = null, busy = false, changed = false;
 let resizeMode = false;
 let past = [], future = [], requestId = null, textEdit = null;
-let directRequestId = null;
 let cropSelection = null, clipboard = null, pasteCount = 0;
 let marquee = null, boxed = null, thicknessBefore = null;
 let savedHistory = null;
@@ -747,9 +746,6 @@ dropZone.addEventListener('drop', event => {
     void operation(() => newProject(files[0], true));
 });
 function searchProducts() {
-    return recommendDirectly();
-}
-function previewMockSpace() {
     commitText(); finishRequirements();
     if (busy || gesture) return;
     if (!project.photo_url) { showEditorTab('sketch'); message('공간 사진을 먼저 업로드하거나 예시 공간을 선택해 주세요.', true); $('upload-empty').focus(); return; }
@@ -769,54 +765,6 @@ function previewMockSpace() {
         } finally { dialog.close(); }
     });
 }
-async function recommendDirectly() {
-    commitText(); finishRequirements();
-    if (busy || gesture) return;
-    if (!project.photo_url) { message('공간 사진을 먼저 선택해 주세요.', true); return; }
-    const text = $('text-requirements').value.trim();
-    if (!drawing.items.length && !drawing.strokes.length && !text) {
-        showEditorTab('description'); message('원하는 가구를 스케치하거나 설명해 주세요.', true); return;
-    }
-    const beforeActor = initialAccount().actor_key;
-    return operation(async () => {
-        message('사진과 요청을 상품 추천으로 보내고 있어요.');
-        const preferences = project.request_context?.style_preferences || [];
-        const signature = () => JSON.stringify([project.id, project.revision, drawing, text, preferences]);
-        if (directRequestId?.signature !== signature()) {
-            // Persist the existing editor input once, so the result's edit link restores it.
-            const saved = await api(`/api/projects/${project.id}/`, {title:project.title, document:drawing,
-                revision:project.revision, events:[], request_context:project.request_context});
-            project.revision = saved.revision;
-            directRequestId = {signature:signature(), id:identifier()};
-            saveHistory();
-        }
-        const photoResponse = await fetch(project.photo_url, {credentials:'same-origin'});
-        if (!photoResponse.ok) throw new Error('공간 사진을 읽지 못했습니다.');
-        const form = new FormData();
-        form.set('photo', await photoResponse.blob(), 'room.jpg');
-        form.set('document', JSON.stringify(drawing));
-        form.set('project', JSON.stringify({id:project.id,revision:project.revision}));
-        // Optional style is saved separately; it must never become quoted hard user text.
-        form.set('text', text);
-        form.set('request_id', directRequestId.id);
-        if (drawing.items.length || drawing.strokes.length) {
-            const canvas = document.createElement('canvas'); canvas.width=project.width; canvas.height=project.height;
-            renderArtwork(canvas.getContext('2d'), canvas);
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-            if (!blob) throw new Error('스케치를 내보내지 못했습니다.');
-            form.set('sketch', blob, 'sketch.png');
-        }
-        const response = await fetch('/interior-recommand/api/runs', {method:'POST', credentials:'same-origin',
-            headers:{'X-CSRFToken':document.querySelector('[name=csrfmiddlewaretoken]').value}, body:form});
-        const next = await response.json();
-        if (beforeActor !== initialAccount().actor_key) throw new Error('계정이 변경되었습니다. 현재 계정으로 다시 요청해 주세요.');
-        if (!response.ok) throw new Error(next.error || '추천 요청을 접수하지 못했습니다.');
-        // A recommendation UUID is not a Composition/result UUID.
-        collector.submit(null); void flushEvents();
-        window.location.assign(next.page_url);
-    });
-}
-$('preview-mock').addEventListener('click', previewMockSpace);
 $('generation-progress').addEventListener('cancel', event => event.preventDefault());
 $('search').addEventListener('click', searchProducts);
 $('search-top').addEventListener('click', searchProducts);
