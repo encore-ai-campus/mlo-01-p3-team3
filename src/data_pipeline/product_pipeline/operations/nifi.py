@@ -27,6 +27,17 @@ def processor_plan(python, config, working_directory, *, period='30 sec'):
                     'Working Directory':working_directory,'Argument Delimiter':';','Redirect Error Stream':'false'}))
 
 
+def remote_processor_plan(ssh_config, working_directory, *, target='pj3-pipeline-tick', period='30 sec'):
+    """SSH config pins identity/host key; server forces a single tick command."""
+    if not isinstance(target,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,62}',target):
+        raise PipelineError('NIFI_REMOTE_TARGET_INVALID')
+    plan=processor_plan('/usr/bin/ssh',ssh_config,working_directory,period=period)
+    plan['name']='product-pipeline-remote-tick'
+    plan['config']['properties'].update({'Command':'/usr/bin/ssh',
+        'Command Arguments':'-F;'+ssh_config+';'+target+';tick'})
+    return plan
+
+
 class Client:
     def __init__(self, base, *, ca_file=None, token=None, request=None):
         if not base.startswith('https://') or '@' in base:raise PipelineError('NIFI_TLS_REQUIRED')
@@ -46,7 +57,7 @@ class Client:
     def prepare(self, group, spec, *, expected_version, apply=False):
         try:UUID(group)
         except ValueError as exc:raise PipelineError('NIFI_GROUP_UUID_REQUIRED') from exc
-        about=self.request('GET','/controller/about')['about']
+        about=self.request('GET','/flow/about')['about']
         if not expected_version or about['version']!=expected_version:raise Conflict('NIFI_VERSION_MISMATCH')
         kinds=self.request('GET','/flow/processor-types?type='+TYPE)['processorTypes']
         candidates=[v for v in kinds if v['type']==TYPE and v['bundle']['version']==expected_version]
@@ -73,7 +84,7 @@ class Client:
     def set_running(self,processor_id,spec,*,expected_version,running):
         try:UUID(processor_id)
         except ValueError as exc:raise PipelineError('NIFI_PROCESSOR_UUID_REQUIRED') from exc
-        if self.request('GET','/controller/about')['about']['version']!=expected_version:raise Conflict('NIFI_VERSION_MISMATCH')
+        if self.request('GET','/flow/about')['about']['version']!=expected_version:raise Conflict('NIFI_VERSION_MISMATCH')
         entity=self.request('GET','/processors/'+processor_id);component=entity['component']
         if component['type']!=spec['type'] or component['name']!=spec['name']:raise Conflict('NIFI_PROCESSOR_IDENTITY_CHANGED')
         for key,value in spec['config'].items():

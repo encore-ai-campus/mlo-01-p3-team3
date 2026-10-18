@@ -158,12 +158,23 @@ class MigrationTests(unittest.TestCase):
 
 
 class NiFiTests(unittest.TestCase):
+    def test_remote_plan_runs_only_tick_through_fixed_ssh_config(self):
+        from product_pipeline.operations.nifi import remote_processor_plan
+        plan=remote_processor_plan('/etc/pj3/ssh.conf','/var/lib/pipeline')
+        self.assertEqual(plan['config']['properties']['Command'],'/usr/bin/ssh')
+        self.assertEqual(plan['config']['properties']['Command Arguments'],
+                         '-F;/etc/pj3/ssh.conf;pj3-pipeline-tick;tick')
+        self.assertEqual(plan['config']['concurrentlySchedulableTaskCount'],1)
+        for target in ['-oProxyCommand=bad','host;id','host name','host${x}']:
+            with self.assertRaises(PipelineError):remote_processor_plan('/etc/pj3/ssh.conf','/tmp',target=target)
+        with self.assertRaises(PipelineError):remote_processor_plan('/etc/pj3/ssh;bad','/tmp')
+
     def setUp(self):
         self.spec=processor_plan('/opt/venv/bin/python','/etc/pipeline/ops.json','/opt/project')
         self.calls=[];self.existing=[]
         def request(method,path,body=None):
             self.calls.append((method,path,body))
-            if path=='/controller/about':return {'about':{'version':'2.fixture'}}
+            if path=='/flow/about':return {'about':{'version':'2.fixture'}}
             if path.startswith('/flow/processor-types'):return {'processorTypes':[dict(type=TYPE,bundle=dict(group='org.apache.nifi',artifact='nifi-standard-nar',version='2.fixture'))]}
             if method=='GET':return {'processors':self.existing}
             return {'id':'created-id'}
@@ -192,7 +203,7 @@ class NiFiTests(unittest.TestCase):
         component={**copy.deepcopy(self.spec),'validationStatus':'VALID'}
         def request(method,path,body=None):
             calls.append((method,path,body))
-            if path=='/controller/about':return {'about':{'version':'2.fixture'}}
+            if path=='/flow/about':return {'about':{'version':'2.fixture'}}
             if method=='GET':return dict(revision={'version':7},component=component)
             return {}
         client=Client('https://nifi.example/nifi-api',request=request)

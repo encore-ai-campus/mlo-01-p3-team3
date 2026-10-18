@@ -87,7 +87,10 @@ def main(argv=None):
     release=sub.add_parser('release');release.add_argument('--source',type=Path,required=True);release.add_argument('--output',type=Path,required=True)
     release_verify=sub.add_parser('release-verify');release_verify.add_argument('--bundle',type=Path,required=True)
     n=sub.add_parser('nifi')
-    for name in ('url','group','version','python','working-directory','config'):n.add_argument('--'+name,required=True)
+    for name in ('url','group','version','working-directory','config'):n.add_argument('--'+name,required=True)
+    execution=n.add_mutually_exclusive_group(required=True)
+    execution.add_argument('--python');execution.add_argument('--remote-ssh-config')
+    n.add_argument('--remote-target',default='pj3-pipeline-tick')
     n.add_argument('--ca-env',default='NIFI_CA_FILE');n.add_argument('--token-env',default='NIFI_TOKEN');n.add_argument('--apply',action='store_true')
     n.add_argument('--processor-id');n.add_argument('--start',action='store_true');n.add_argument('--stop',action='store_true')
     args=p.parse_args(argv);started=time.monotonic()
@@ -119,7 +122,7 @@ def main(argv=None):
             else:result=verify(args.bundle)
             result={k:v for k,v in result.items() if k!='files'}
         else:
-            from .nifi import Client,processor_plan
+            from .nifi import Client,processor_plan,remote_processor_plan
             c=configuration(args.config)
             if args.apply and not args.stop:
                 receipt_path=Path(c['audit_root'])/'manual-smoke.json'
@@ -129,7 +132,8 @@ def main(argv=None):
                     receipt.get('config_sha256')!=sha_file(args.config)):
                     raise PipelineError('NIFI_MANUAL_RECOVERY_SMOKE_REQUIRED')
             client=Client(args.url,ca_file=os.environ.get(args.ca_env),token=os.environ.get(args.token_env))
-            spec=processor_plan(args.python,args.config,args.working_directory)
+            spec=(remote_processor_plan(args.remote_ssh_config,args.working_directory,target=args.remote_target)
+                  if args.remote_ssh_config else processor_plan(args.python,args.config,args.working_directory))
             if args.start or args.stop:
                 if args.start==args.stop or not args.apply or not args.processor_id:raise PipelineError('NIFI_EXPLICIT_PROCESSOR_ACTION_REQUIRED')
                 result=client.set_running(args.processor_id,spec,expected_version=args.version,running=args.start)
