@@ -1,11 +1,14 @@
 # 3차 프로젝트 문서
 
+2026-10-18 범위 확장: 추천 후 상품을 선택하면 외부 API로 [상품 배치 미리보기](interior-recommender/product-preview.md)를 생성한다. 아래 2026-10-15 이미지 생성 제외 결정은 선택형 미리보기 추가 이전 기준이다.
+
 2026-10-18 추천 구현 갱신: 신규 로컬 요청은 [방 특징 추천](interior-recommender/interior-ranking.md)의 `interior-content-v3`를 기본으로 사용한다. 아래 v1/v2 수동 가중치 설명은 당시 정책이며 기존 저장 실행은 유지한다. MySQL 연결·운영 배포는 후속 작업이다.
 
 2026-10-15 현행은 **이미지 생성 없는 공간 맞춤 상품 추천**, 설계 direct-recommendation-v3이다. scikit-learn CPU 콘텐츠 유사도와 수동 초기 가중합을 사용하며 전수 사람 라벨링이나 학습 모델이 초기 실행 조건은 아니다. 로컬 웹 구현과 전체 서비스 통합 상태를 구분한다.
 
 | 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| 추천 이후 상품 배치 이미지 생성 | [상품 배치 미리보기](interior-recommender/product-preview.md) | [실행·복구](interior-recommender/execution.md), [직접 추천](design/12-direct-recommendation.md) |
 | SketchOn SQLite 실행·복구·비동기/동기 경계 | [작업 실행](interior-recommender/execution.md) | [역할별 라우팅](interior-recommender/README.md), [호출 구조](interior-recommender/call-structure.md) |
 | interior_recommender 코드·호출·담당별 변경 | [역할별 코드·문서 라우팅](interior-recommender/README.md) | [현재 호출 구조](interior-recommender/call-structure.md), [설계 라우팅](design/index.md) |
 | 사업·사용자 범위 | [BRD](BRD_3차.md) | [PRD](PRD_3차_초안.md) |

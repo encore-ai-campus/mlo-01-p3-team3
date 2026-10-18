@@ -18,7 +18,7 @@ from interior_recommender.assets import read_json
 from interior_recommender.errors import LeaseLost
 from sketch.access import owned_project, visitor_id
 from sketch.validation import document as validate_document
-from . import queue, services, submissions
+from . import queue, services, submissions, preview_submissions
 from .execution_config import scope
 from .models import RecommendationJob
 
@@ -101,7 +101,10 @@ def index(request):
     if not run_id:
         return redirect("editor")
     directory, _ = owned_run(request, run_id)
-    project = read_json(directory / "manifest.json")["request"].get("external_project", {})
+    manifest = read_json(directory / "manifest.json")
+    if "preview_contract" in manifest:
+        return redirect(reverse("recommendations:index") + "?run=" + manifest["request"]["parent_run_id"])
+    project = manifest["request"].get("external_project", {})
     visitor_id(request)
     get_token(request)
     editor_url = reverse("project-editor", args=[project["id"]]) if project.get("id") else reverse("editor")
@@ -114,6 +117,12 @@ def csrf(request):
     visitor_id(request)
     return JsonResponse({"csrf_token": get_token(request), "demo": settings.INTERIOR_RECOMMENDER_DEMO,
                          "mode": "LOCAL_DIRECT_SAMPLE", "bronze_verified": False})
+
+
+@require_GET
+def preview_client(request):
+    from importlib.resources import files
+    return FileResponse(files("interior_recommender.web").joinpath("ui/product-preview.mjs").open("rb"), content_type="text/javascript")
 
 
 def form_json(request, name, default):
@@ -180,6 +189,18 @@ def state(request, run_id):
     result["retry_supported"] = job is not None
     result["demo"] = settings.INTERIOR_RECOMMENDER_DEMO
     return JsonResponse(result)
+
+
+@require_POST
+@api
+def submit_preview(request, run_id):
+    directory, owner = owned_run(request, run_id)
+    data = json.loads(request.body or b"{}")
+    if not isinstance(data, dict):
+        raise ValueError("JSON object required")
+    preview_id, job = preview_submissions.submit(directory, owner, data.get("image_id"))
+    return JsonResponse({"run_id": preview_id, "parent_run_id": str(run_id), "job": job,
+                         "state_path": reverse("recommendations:state", args=[preview_id])}, status=202)
 
 
 @require_POST

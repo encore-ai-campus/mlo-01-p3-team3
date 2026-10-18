@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import io
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -42,6 +43,39 @@ def test_multipart_fields_and_neuron_estimate(credentials):
     assert result["usage_json"]["estimated_neurons"] == 36.79
     assert result["provider_request_id"] == "test-request"
     adapter.close()
+
+
+def test_native_async_generation_preserves_multipart_and_provider_route(credentials, monkeypatch):
+    from unittest.mock import AsyncMock
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"success": True, "result": {"image": "test-image"}})
+
+    async def exercise():
+        adapter = CloudflareAdapter(Settings())
+        adapter.async_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        try:
+            result = await adapter.acall("generate", "place selected product", [image_bytes(), image_bytes()])
+            assert result["payload"]["image_base64"] == "test-image"
+        finally:
+            await adapter.aclose()
+            adapter.close()
+
+    asyncio.run(exercise())
+    assert b'name="input_image_1"' in requests[0].content
+    cloudflare = Mock()
+    cloudflare.acall = AsyncMock(return_value={"payload": {"image_base64": "test"}})
+    monkeypatch.setattr("interior_recommender.adapters.router.CloudflareAdapter", lambda _: cloudflare)
+    def forbidden(_):
+        raise AssertionError("Generation must not initialize Gemini")
+    monkeypatch.setattr("interior_recommender.adapters.router.GeminiAdapter", forbidden)
+    router = ModelAdapter(Settings())
+    router.prepare_async("generate")
+    assert asyncio.run(router.acall("generate", "", []))["payload"]["image_base64"] == "test"
+    cloudflare.acall.assert_awaited_once()
+    router.close()
 
 
 def test_limits_rejected_before_network(credentials):

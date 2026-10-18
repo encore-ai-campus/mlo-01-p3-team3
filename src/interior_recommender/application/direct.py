@@ -1,4 +1,4 @@
-"""Direct recommendations on the existing owned-run/Canvas API, without generation."""
+"""Direct recommendations and optional selected-product placement previews."""
 import json
 import time
 from pathlib import Path
@@ -32,8 +32,8 @@ class DirectDemoAdapter(DemoAdapter):
             value = RecommendationContext(decision="ACCEPTED", category_code="CHAIR", search_terms=["의자"],
                                           reason="데모 고정 해석입니다. 실제 사진/요구사항 분석이 아닙니다.")
             return {"payload": {"text": value.model_dump_json()}, "usage_json": {"demo": True}, "provider_request_id": None}
-        if kind not in {"embed_text"}:
-            raise ValueError("Direct recommendation does not generate or inspect generated images")
+        if kind not in {"embed_text", "generate"}:
+            raise ValueError("Unsupported direct recommendation or optional preview operation")
         return super().call(kind, prompt, images, schema)
 
 
@@ -149,14 +149,35 @@ class DirectStudio(Studio):
             raise ValueError("이 실행은 SketchOn 작업 워커에서만 처리합니다.")
         return super().launch(run_id, owner, action, retry)
 
+    def submit_preview(self, parent_id, owner, image_id):
+        from . import preview
+        source = preview.selected_source(self.directory(parent_id, owner), owner, image_id)
+        settings = Settings.from_env()
+        fingerprint = preview.source_hash(source, settings)
+        event_path = self.root / "events" / f"preview-{owner}-{fingerprint}.json"
+        with self.guard:
+            if event_path.exists():
+                saved = read_json(event_path)
+                self.directory(saved["run_id"], owner)
+                return saved["run_id"]
+            run_id = str(uuid4())
+            preview.snapshot(self.root / "runs" / run_id, run_id, source, settings)
+            write_json(event_path, {"run_id": run_id, "hash": fingerprint})
+            return run_id
+
     def _work(self, directory, action, job, retry):
         started = time.monotonic()
         try:
             with run_lock(directory):
                 pipeline = Pipeline(directory, self.factory)
                 try:
-                    self.validate_run(pipeline)
-                    self.prepare(pipeline)
+                    if "preview_contract" in pipeline.manifest:
+                        from . import preview
+                        preview.validate(pipeline, self.demo)
+                        preview.prepare(pipeline)
+                    else:
+                        self.validate_run(pipeline)
+                        self.prepare(pipeline)
                 finally:
                     if pipeline.adapter is not None:
                         pipeline.adapter.close()
@@ -268,6 +289,14 @@ class DirectStudio(Studio):
             raise
 
     def state(self, run_id, owner):
+        directory = self.directory(run_id, owner)
+        if "preview_contract" in read_json(directory / "manifest.json"):
+            from . import preview
+            output = preview.state(directory, owner)
+            job = output.get("job", {})
+            if job.get("status") == "RUNNING" and job.get("instance") != self.instance:
+                job.update(status="FAILED", error="서버가 재시작되었습니다. 미리보기를 재시도하세요.")
+            return output
         output = super().state(run_id, owner)
         directory = self.directory(run_id, owner)
         manifest = read_json(directory / "manifest.json")

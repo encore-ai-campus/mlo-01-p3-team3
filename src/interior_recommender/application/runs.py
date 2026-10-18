@@ -20,6 +20,9 @@ class DirectRunReader:
     def state(self, run_id, owner):
         directory = self.directory(run_id, owner)
         manifest = read_json(directory / "manifest.json")
+        if "preview_contract" in manifest:
+            from .preview import state
+            return state(directory, owner)
         request = manifest["request"]
         output = {"run_id": str(run_id), "status": manifest["status"], "flow": "direct", "demo": self.demo,
                   "local_sample": True, "bronze_verified": False, "contract": manifest["direct_contract"],

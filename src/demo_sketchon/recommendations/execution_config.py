@@ -26,6 +26,7 @@ def limits():
 
 def config_key():
     value = {"products": str(settings.INTERIOR_RECOMMENDER_PRODUCTS),
+             "preview_version": "product-preview-v1",
              "context_version": CONTEXT_VERSION, "ranking_defaults": RankingPolicy().model_dump(),
              "policy": settings.INTERIOR_RECOMMENDER_RANKING_POLICY,
              "demo": settings.INTERIOR_RECOMMENDER_DEMO, "models": Settings.from_env().model_dump(),

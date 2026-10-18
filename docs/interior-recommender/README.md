@@ -10,6 +10,7 @@
 
 | 담당·작업 | 먼저 읽을 문서 | 함께 확인할 문서 | 구현 위치 |
 |---|---|---|---|
+| 추천 이후 선택 상품 이미지 생성 | [상품 배치 미리보기](product-preview.md) | [웹](roles/web.md), [실행·복구](execution.md) | `application/preview.py`, `recommendations/preview_submissions.py`, worker/adapters |
 | SketchOn 단일 서버 MVP | [SQLite 실행·복구](execution.md), [통합 설치·실행](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md) | [웹 담당](roles/web.md), [호출 구조](call-structure.md) | `recommendations/{views,submissions,queue,worker}.py` → `application/direct.py`, `application/deferred.py` |
 | 전체 호출·영향 분석 | [호출 구조](call-structure.md) | [전체 아키텍처](../design/00-architecture.md) | 아래 전체 계층 |
 | 방 인테리어 특징·v3 점수·구버전 호환 | [방 특징 추천](interior-ranking.md) | [추천 규칙](roles/domain.md), [카탈로그](roles/catalog.md) | `domain/interior.py`, `domain/recommendation.py`, `application/direct.py` |

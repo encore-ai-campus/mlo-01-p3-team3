@@ -1,6 +1,8 @@
 import {initAccountState} from "../sketch/account-state.mjs";
 const $ = id => document.getElementById(id);
 const base = document.body.dataset.baseUrl;
+const {createProductPreview} = await import(base + "ui/product-preview.mjs");
+const preview = createProductPreview({api, base, parent:()=>runId, panel:document.getElementById("product-preview")});
 let epoch = 0;
 let runId = new URLSearchParams(location.search).get("run");
 let timer;
@@ -67,6 +69,8 @@ function cards(target, items, emptyMessage = "표시할 상품이 없습니다."
     const unknownRoom = Object.entries(item.interior_match?.checks || {}).filter(([,v])=>v.state === "UNKNOWN").map(([key])=>roomLabels[key]);
     if (unknownRoom.length) card.append(node("p", `상품 정보가 부족해 방과의 조화를 비교하지 못한 특징: ${unknownRoom.join(", ")}`));
     card.append(node("p", checks), node("p", "실제 공간의 크기 적합성: 미확인"));
+    const generate=node("button", "이 상품을 방에 배치해 보기"); generate.type="button";
+    generate.addEventListener("click", () => preview.start(item)); card.append(generate);
     target.append(card);
   }
   if (!items.length && emptyMessage) target.append(node("p", emptyMessage));
@@ -109,6 +113,7 @@ async function poll() {
   }
 }
 function clearResults() {
+  preview.clear();
   $("items").replaceChildren(); $("verified-panel").hidden=true;
   $("room").removeAttribute("src"); $("room").hidden=true;
   $("sketch-overlay").removeAttribute("src"); $("sketch-overlay").hidden=true;

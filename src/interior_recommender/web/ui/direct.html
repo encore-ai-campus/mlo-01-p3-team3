@@ -23,9 +23,10 @@
       <div id="context" class="panel" hidden></div>
       <div class="panel"><h2>조건을 확인한 상품</h2><div id="items" class="candidates"></div></div>
       <div id="unverified-panel" class="panel" hidden><h2>필수 정보 미확인 후보</h2><p class="hint">품목·규격 등 필요한 정보가 없어 조건 충족 여부를 확인하지 못했습니다.</p><div id="unverified" class="candidates"></div></div>
+      <section id="product-preview" class="panel" hidden><h2 data-preview-title>상품 배치 미리보기</h2><p data-preview-status role="status"></p><img data-preview-image class="room" alt="AI가 만든 상품 배치 미리보기" hidden><button data-preview-retry type="button" hidden>미리보기 재시도</button><p class="hint">실제 상품의 형태·색상·크기 및 설치 가능성은 원래 상품 정보에서 확인하세요. 같은 상품을 다시 선택하면 기존 작업과 결과를 불러옵니다.</p></section>
     </section>
   </div>
   <p class="hint">추정 크기는 실측이 아닙니다. 설치 가능 여부는 확인된 상품 규격과 실제 공간을 기준으로 확인해야 합니다. 가격·상품 연결이 없는 이미지 후보에는 구매 링크를 제공하지 않습니다.</p>
 </main>
-<script src="ui/direct.js" defer></script>
+<script type="module" src="ui/direct.js"></script>
 </body></html>

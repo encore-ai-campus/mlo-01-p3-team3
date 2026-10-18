@@ -69,6 +69,7 @@ RECOMMENDATION_EXECUTION = {
         "staging_seconds": 120, "max_recoveries": 10, "blas_threads": 1,
         "analysis_concurrency": 2, "analysis_rpm": 10,
         "embedding_concurrency": 2, "embedding_rpm": 30,
+        "generation_concurrency": 1, "generation_rpm": 2,
     }.items()
 }
 if not DEBUG:

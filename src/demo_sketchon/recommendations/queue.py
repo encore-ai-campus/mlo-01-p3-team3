@@ -168,11 +168,11 @@ def finish(claimed, status, duration_ms, *, retry_at=None, error=""):
             status=status, finished_at=timezone.now(), duration_ms=duration_ms)
 
 
-def acquire_provider(claimed, model, kind):
+def acquire_provider(claimed, model, kind, provider="gemini"):
     """One account/model gate shared by every worker using this database."""
     cfg = limits()
-    group = "embedding" if kind == "embed_text" else "analysis"
-    key = hashlib.sha256((settings.RECOMMENDATION_API_ACCOUNT + ":gemini:" + model).encode()).hexdigest()
+    group = "embedding" if kind == "embed_text" else "generation" if kind == "generate" else "analysis"
+    key = hashlib.sha256((settings.RECOMMENDATION_API_ACCOUNT + ":" + provider + ":" + model).encode()).hexdigest()
     ProviderGate.objects.get_or_create(key=key)
     with transaction.atomic():
         gate = ProviderGate.objects.select_for_update().get(pk=key)
@@ -182,11 +182,11 @@ def acquire_provider(claimed, model, kind):
         active = ProviderPermit.objects.filter(gate=gate)
         if gate.next_call_at > current:
             return None, gate.next_call_at
-        if active.count() >= cfg[group + "_concurrency"]:
+        if active.count() >= cfg.get(group + "_concurrency", 1):
             return None, current + timedelta(seconds=cfg["poll_seconds"])
         permit = ProviderPermit.objects.create(gate=gate, job_id=claimed["id"], lease_token=claimed["token"],
             expires_at=current + timedelta(seconds=cfg["lease_seconds"]))
-        gate.next_call_at = current + timedelta(seconds=60 / cfg[group + "_rpm"])
+        gate.next_call_at = current + timedelta(seconds=60 / cfg.get(group + "_rpm", 2))
         gate.save(update_fields=["next_call_at"])
         return str(permit.pk), None
 

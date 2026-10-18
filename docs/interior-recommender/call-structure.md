@@ -1,5 +1,7 @@
 # 역할별 코드 계층과 호출 구조
 
+2026-10-18 선택 생성: 추천 카드 → `POST previews` → `application.preview.selected_source/snapshot` → SQLite 큐/워커 preview 분기 → `preview.prepare` → `DeferredPipeline` → `ModelAdapter.acall(generate)` → Cloudflare/Gemini → receipt·generated.png → 공유 `product-preview.mjs`. 독립 웹은 `DirectStudio.submit_preview/launch`의 풀에서 같은 application을 실행한다. [선택 생성 계약](product-preview.md).
+
 2026-10-18: 신규 기본은 [방 특징 추천](interior-ranking.md)의 v3다. 기존 해석 응답의 `room_profile` → `domain/interior.query_terms` → 질의 임베딩 → `ProductIndex.rank`의 코사인 유사도 + `domain/interior.compatibility` → 설명/점수 보존으로 확장했다. 특징은 인덱스 시작 시 캐시한다. 외부 API 추가 호출과 상품 벡터 재생성은 없다. 아래 v1/v2 설명은 당시 정책이며 MySQL 연결은 여전히 후속 작업이다.
 
 [역할별 라우팅](README.md) · [추천 서비스 설계](../design/12-direct-recommendation.md)
