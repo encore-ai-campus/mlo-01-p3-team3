@@ -1,5 +1,7 @@
 # 실제 서비스 인수 검증
 
+2026-10-18 실제 3상품/9이미지 시험을 통과했다. [최신 결과·실제/fixture 경계](service_validation_20261018.md)를 우선한다. `--resume-registered`는 같은 snapshot·불변 등록 정보가 일치하고 raw/event/image 완료·활성 lease가 전혀 없는 등록 단계에서만 명시적으로 허용한다. 기존 raw가 있으면 여전히 차단하며, 재개 후 처음 발급한 원천 ID가 같은지도 검증한다. 이번에는 JSON 등록 이력의 BSON datetime 오류를 수정한 뒤 이 경로를 실제 시험했다.
+
 `tests.smoke_live_services`는 실제 MongoDB → S3 이미지 → Kafka → Spark Kafka source → Bronze Delta 경로를 검증한다. 모의 구현으로 대체하거나 연결 실패를 건너뛰지 않는다. 현재 로컬 리허설 결과만으로 이 검증을 PASS로 기록하면 안 된다.
 
 ## 실행 전 준비

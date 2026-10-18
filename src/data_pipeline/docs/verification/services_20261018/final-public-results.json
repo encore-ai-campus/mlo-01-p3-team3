@@ -1,0 +1,173 @@
+{
+  "mysql-reference-result.json": {
+    "scope": "VM MySQL reference DDL and synthetic owner fixtures over local Unix socket",
+    "actual_service_ddl": false,
+    "service_data_modified": false,
+    "checks": [
+      "partial_write_rolls_back_all_service_rows_staging_survives",
+      "same_plan_keeps_product_image_asset_publication_uuids",
+      "new_image_links_inactive_until_owner_activation",
+      "read_only_reconciliation_detects_wrong_product_image_link_and_rollback_preserves_evidence",
+      "owner_guard_changed_since_plan_blocks_commit",
+      "unknown_commit_reconciles_existing_receipt_no_new_ids",
+      "older_price_name_cannot_overwrite_newer_confirmed_values",
+      "offer_and_history_conditions_are_preserved_with_existing_parent_uuid",
+      "reconciliation_checks_offer_parent_and_immutable_history_terms_without_overwriting_newer_values"
+    ],
+    "preflight": {
+      "status": "MYSQL_SCHEMA_VERIFIED",
+      "contract_hash": "5d7758a814f5711fc0910c997c7e4f5ddbe2a23a91d583dd79b5b59f9771d027",
+      "target": "68ef88d7703630a20698caee93f0dde2d1a1ea8c02bb8982c5c069e773a429b2",
+      "server_version": "8.4.11-0ubuntu0.26.04.1"
+    },
+    "passed": true,
+    "counts": {
+      "products": 1,
+      "assets": 1,
+      "product_images": 2,
+      "offers": 1,
+      "offer_snapshots": 2,
+      "pipeline_publications": 4,
+      "pipeline_publication_staging": 4
+    },
+    "product_id": "845e0b2eddd54b9d853a9726072d3179",
+    "port": 3306,
+    "status": "VM_REFERENCE_PUBLICATION_VERIFIED",
+    "test_schema_and_user_deleted": true
+  },
+  "ssh-master-result.json": {
+    "status": "SSH_GATE_CONFIGURED",
+    "manual_recovery": {
+      "status": "ACTUAL_PROCESS_QUEUE_RECOVERY_VERIFIED",
+      "interrupted_process_exit": 130,
+      "task_id": "0416a29bf1c135912cd0a869cba7069c8e1e727dbf247c2c5a28649ad30b79a9",
+      "tick": {
+        "processed": 1,
+        "succeeded": 1,
+        "retry_wait": 0,
+        "quarantined": 0,
+        "retry_exhausted": 0,
+        "recovered_succeeded": 1,
+        "duration_ms": 1285,
+        "discovered": 0,
+        "queue_counts": {
+          "SUCCEEDED": 1
+        },
+        "status": "TICK_COMPLETED"
+      }
+    },
+    "host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGJQClUYxSMHxHcE28Zo0JmBZKFof7UkALurQeWaFMA5 root@pj3-spark-master"
+  },
+  "ssh-client-result.json": {
+    "status": "DEDICATED_REMOTE_TICK_VERIFIED",
+    "tick": {
+      "processed": 0,
+      "succeeded": 0,
+      "retry_wait": 0,
+      "quarantined": 0,
+      "retry_exhausted": 0,
+      "recovered_succeeded": 0,
+      "duration_ms": 0,
+      "discovered": 0,
+      "queue_counts": {
+        "SUCCEEDED": 1
+      },
+      "status": "TICK_COMPLETED"
+    },
+    "negative_command_checks": [
+      {
+        "command": "id",
+        "blocked": true
+      },
+      {
+        "command": "tick;id",
+        "blocked": true
+      }
+    ],
+    "host_key_pinned": true,
+    "port_forwarding_disabled": true
+  },
+  "nifi-remote-result.json": {
+    "status": "FAIL",
+    "scope": "isolated NiFi -> restricted SSH -> Master durable queue tick",
+    "error_type": "ValueError",
+    "error_code": "NIFI_TICK_NOT_OBSERVED",
+    "process_group_id": "4e743959-01a1-1000-bc08-5f3d31a5c4bd",
+    "processor_id": "4e743983-01a1-1000-8d2e-a86dd3ea2b5c",
+    "processor_stopped": true,
+    "production_flow_modified": false
+  },
+  "remote-tick-master-audit.json": {
+    "before": {
+      "scheduler_files": 2
+    },
+    "after": {
+      "scheduler_files": 14
+    }
+  },
+  "nifi-remote-final-result.json": {
+    "status": "NIFI_REMOTE_TICK_VERIFIED",
+    "version": "2.12.0",
+    "process_group_id": "4e743959-01a1-1000-bc08-5f3d31a5c4bd",
+    "processor_id": "4e743983-01a1-1000-8d2e-a86dd3ea2b5c",
+    "processor_stopped": true,
+    "production_flow_modified": false,
+    "master_scheduler_receipts_before": 2,
+    "master_scheduler_receipts_after": 14,
+    "evidence": "master durable audit increment, verified SSH restriction and stopped NiFi processor",
+    "nifi_counter_poll_was_inconclusive": true,
+    "full_seven_stage_flow_tested": false,
+    "scope": "real timer -> restricted SSH -> fixed Master queue tick; manually recovered actual INGEST task, scheduled empty queue ticks"
+  },
+  "nifi-final-deploy.json": {
+    "release_id": "128dbd37d879b397df15b9d9b21b0e2b438a934fec4614d1a455120d062cffaa",
+    "role": "nifi",
+    "profile": "base",
+    "source": "/opt/pj3/product-pipeline/releases/128dbd37d879b397df15b9d9b21b0e2b438a934fec4614d1a455120d062cffaa",
+    "python": "/var/lib/pj3/product-pipeline/nifi/venvs/128dbd37d879b397-base/bin/python",
+    "status": "RUNTIME_VERIFIED",
+    "receipt": "/opt/pj3/product-pipeline/deployments/nifi-128dbd37d879b397-base.json",
+    "freeze": "/var/lib/pj3/product-pipeline/nifi/audit/128dbd37d879b397-base-freeze.txt",
+    "service_activated": false,
+    "database_written": false,
+    "duration_ms": 6355
+  },
+  "spark-final-deploy.json": {
+    "release_id": "128dbd37d879b397df15b9d9b21b0e2b438a934fec4614d1a455120d062cffaa",
+    "role": "spark",
+    "profile": "spark",
+    "source": "/opt/pj3/product-pipeline/releases/128dbd37d879b397df15b9d9b21b0e2b438a934fec4614d1a455120d062cffaa",
+    "python": "/var/lib/pj3/product-pipeline/spark/venvs/128dbd37d879b397-spark/bin/python",
+    "status": "RUNTIME_VERIFIED",
+    "receipt": "/opt/pj3/product-pipeline/deployments/spark-128dbd37d879b397-spark.json",
+    "freeze": "/var/lib/pj3/product-pipeline/spark/audit/128dbd37d879b397-spark-freeze.txt",
+    "service_activated": false,
+    "database_written": false,
+    "duration_ms": 14204
+  },
+  "final-release-remote-tick.json": {
+    "status": "FINAL_RELEASE_REMOTE_TICK_VERIFIED",
+    "release_id": "128dbd37d879b397df15b9d9b21b0e2b438a934fec4614d1a455120d062cffaa",
+    "tick": {
+      "processed": 0,
+      "succeeded": 0,
+      "retry_wait": 0,
+      "quarantined": 0,
+      "retry_exhausted": 0,
+      "recovered_succeeded": 0,
+      "duration_ms": 1,
+      "discovered": 0,
+      "queue_counts": {
+        "SUCCEEDED": 1
+      },
+      "status": "TICK_COMPLETED"
+    }
+  },
+  "final-source-metadata.json": {
+    "status": "RELEASE_BUILT",
+    "release_id": "128dbd37d879b397df15b9d9b21b0e2b438a934fec4614d1a455120d062cffaa",
+    "files": 200,
+    "bytes": 1271522,
+    "archive_sha256": "b545ea8674aa053c33492dc42cefd92deea041e979b7e8bd2f62613f82d7ebf0"
+  }
+}

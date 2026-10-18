@@ -1,5 +1,7 @@
 # 구현 요구사항 대조와 남은 작업
 
+실서버 후속은 [2026-10-18 검증 범위와 남은 입력](service_validation_20261018.md)을 우선한다. 실제 Mongo/Garage/Kafka/Bronze·Worker 3대·Silver/Gold 엔진·MySQL 문서 계약·제한 SSH/NiFi timer를 소량 시험했다. 아래 과거 미실행 표와 구분하며, 실제 업무 DDL/등록/승인 자료의 전체 FLOW·운영 이관 인수는 남아 있다.
+
 2026-10-18 갱신. Issue #13, 최신 `origin/dev` 병합 후 `feature/#13` 기준이다. **구현·로컬 검증·외부 계약·실제 서버 인수**를 구분한다. 주요 단계와 FLOW 자동 연결·고정 범위 종단 대조를 구현하고 로컬 시험했지만 실제 전체 worker/서버 종단 운영 완료는 아니다. [현재 현황](status.md), [이슈 대조표](issue13_acceptance.md), [검증 기록](validation_20261018.md)을 함께 따른다.
 
 ## 현재 요구사항 대조

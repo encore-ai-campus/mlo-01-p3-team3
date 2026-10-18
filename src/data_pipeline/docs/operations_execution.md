@@ -1,5 +1,10 @@
 # 예약 실행·재시도·NiFi 연계
 
+## 서로 다른 NiFi/Driver VM의 고정 tick
+2026-10-18: `nifi` CLI는 기존 `--python` 대신 `--remote-ssh-config /etc/pj3-clients/pipeline-trigger/ssh.conf --remote-target pj3-pipeline-tick`을 받을 수 있다. 두 방식은 상호 배타적이다. SSH config는 서비스 전용 키·검증한 known_hosts를 고정하고 서버는 해당 키에 tick 강제 명령을 적용한다. 임의 원격 명령·포워딩을 허용하지 않는다. 로컬 config는 실제 원격 config/수동 복구 receipt와 일치해야 한다. config/launcher/queue를 바꿀 때 수동 검증을 다시 수행한다.
+
+검증에서는 NiFi 2.12.0 timer→제한 SSH→Master 큐를 실제 확인하고 프로세서를 STOPPED로 남겼다. 실제 처리한 수동 복구 작업은 INGEST이고 타이머의 후속 tick은 빈 큐다. 전체 7단계 FLOW 예약 성공으로 보지 않는다. [정확한 경로·범위·결과](service_validation_20261018.md)를 따른다.
+
 2026-10-18. 기존 capture/send/receive/ingest 및 새 MySQL 게시기를 명시적인 작업으로 연결한다. 크롤러 네트워크/파서를 변경하거나 현재 수집 프로세스를 시작/중단하지 않는다.
 
 ## 실행 책임

@@ -1,5 +1,9 @@
 # 데이터 파이프라인
 
+최신 [실서버 소량 검증](docs/service_validation_20261018.md): 실제 3상품/9이미지의 Mongo→Garage→Kafka→Bronze 반복·재전달, Worker 3대, Silver/Gold 엔진, MySQL 8.4.11 문서 계약과 제한 SSH/NiFi timer를 확인했다. 실제 업무 등록·승인·서비스 DDL의 전체 FLOW 인수는 별도다. 검증 프로세서는 STOPPED이며 최종 배포 소스는 128dbd37...이다.
+
+2026-10-18 서버 준비 후속: NiFi/Spark Master에 전용 venv를 배포하고 S3·Kafka 인증 및 MongoDB majority/journal·3멤버 읽기·내부 writer 잠금을 소량 검증했다. [현재 경로·결과·다른 담당자와의 경계](docs/runtime_validation_20261018.md)를 확인한다. 전체 상품 적재·업무 Kafka 전달·NiFi 일정·사용자 입력/추천 연동은 실행하지 않았다.
+
 기존 Garage 2.4.1 연결은 [전용 실행 프로필](docs/garage_v241_profile.md)과 [최신 보완 검증](docs/garage_v241_validation_20261018.md)을 따른다. 내용 주소 객체 저장과 단일 작성자 Delta 설정을 구분한다. 과거 5533c0a 소스 묶음에는 이 보완이 없다.
 
 분리 브랜치: `feature/#13`, 최초 기준 `dev`의 `e35b2a3`(2026-10-16). 2026-10-18 최신 `origin/dev`의 `22168b8`을 병합해 `f85e59e`까지 푸시했다. [현재 제작 상태·기준 문서 차이](docs/status.md)를 먼저 확인한다. 크롤러 코드는 이 브랜치에 포함하지 않으며 완료된 export 파일로 인계받는다.
