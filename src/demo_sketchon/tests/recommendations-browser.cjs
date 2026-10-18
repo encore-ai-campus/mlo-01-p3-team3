@@ -12,7 +12,27 @@ const prefix = '/interior-recommand/';
     page.on('pageerror', error => errors.push(error.message));
     const mode = await (await context.request.get(base+prefix+'api/csrf')).json();
     assert.equal(mode.demo,true,'browser check requires offline mode before submission');
+    const pendingRun = '00000000-0000-4000-8000-000000000001';
+    await page.route(base+prefix+'api/runs/'+pendingRun, route => route.fulfill({json:{
+      status:'PENDING', job:{status:'RUNNING'}, text:'테스트 입력', external_project:null,
+      recommendations:{items:[],unverified_items:[]}, context:{reason:'테스트용 해석 노출 검증'}
+    }}));
+    await page.goto(base+prefix+'?run='+pendingRun);
+    await page.getByText('요청하신 조건을 확인하고 상품을 찾고 있어요. 결과가 준비되면 여기에 표시됩니다.',{exact:true}).waitFor();
+    assert.equal(await page.locator('#context').count(),0,'input interpretation has no customer-facing panel');
+    assert.equal(await page.locator('#unverified-panel').count(),0,'unverified candidates have no customer-facing panel');
+    assert.doesNotMatch(await page.locator('body').innerText(),/테스트용 해석 노출 검증|입력 해석|필수 정보 미확인 후보/);
+    await page.unroute(base+prefix+'api/runs/'+pendingRun);
+    const unverifiedRun = '00000000-0000-4000-8000-000000000002';
+    await page.route(base+prefix+'api/runs/'+unverifiedRun, route => route.fulfill({json:{
+      status:'UNVERIFIED_ONLY', job:{status:'SUCCEEDED'}, text:'테스트 입력', external_project:null,
+      recommendations:{items:[],unverified_items:[{name:'미확인 후보'}]}
+    }}));
+    await page.goto(base+prefix+'?run='+unverifiedRun);
+    await page.getByText('요청하신 조건을 확인할 수 있는 상품을 찾지 못했어요. 조건을 바꾸거나 입력을 수정해 다시 추천해 주세요.',{exact:true}).waitFor();
+    assert.equal(await page.locator('#unverified-panel, #items .candidate').count(),0,'unverified products are not rendered');
     await page.goto(base+prefix);
+    await page.unroute(base+prefix+'api/runs/'+unverifiedRun);
     assert.ok(new URL(page.url()).pathname.startsWith('/editor/'),'no run opens the existing SketchOn editor');
     await page.waitForFunction(() => !document.querySelector('#sample-empty').disabled);
     assert.equal(await page.locator('#search').evaluate(el => getComputedStyle(el).backgroundColor),'rgb(36, 79, 66)');
