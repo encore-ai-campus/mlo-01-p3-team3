@@ -55,6 +55,20 @@ def test_missing_image_is_failure():
         GeminiAdapter(Settings(), client).call("generate", "request", [])
 
 
+def test_native_async_image_generation_uses_selected_image_model():
+    client = Mock()
+    response = types.GenerateContentResponse(candidates=[types.Candidate(content=types.Content(parts=[
+        types.Part.from_bytes(data=image_bytes(), mime_type="image/png")]))])
+    client.aio.models.generate_content = AsyncMock(return_value=response)
+    adapter = GeminiAdapter(Settings(image_provider="gemini", image_model="image-test-model"), client)
+    result = asyncio.run(adapter.acall("generate", "place a chair", [image_bytes(), image_bytes()]))
+    assert result["payload"]["image_base64"]
+    kwargs = client.aio.models.generate_content.call_args.kwargs
+    assert kwargs["model"] == "image-test-model"
+    assert len(kwargs["contents"]) == 3
+    assert kwargs["config"].response_modalities == ["IMAGE"]
+
+
 def test_image_embedding_has_no_text_and_explicit_dimension():
     client = Mock()
     client.models.embed_content.return_value = types.EmbedContentResponse(

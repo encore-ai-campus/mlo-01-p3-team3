@@ -16,6 +16,7 @@ from django.utils import timezone
 from threadpoolctl import threadpool_limits
 
 from interior_recommender.application.deferred import DeferredPipeline
+from interior_recommender.application import preview
 from interior_recommender.application.locks import RunBusy, execution_lock
 from interior_recommender.assets import checksum, png_bytes, read_json, write_json
 from interior_recommender.config import Settings
@@ -182,6 +183,9 @@ class Worker:
         pipeline = DeferredPipeline(directory, self.engine.factory, functools.partial(queue.assert_lease, claimed), claimed["generation"])
         if pipeline.manifest.get("execution_backend") != "sqlite-jobs-v1":
             raise ValueError("Old runs must not be silently migrated")
+        if "preview_contract" in pipeline.manifest:
+            preview.validate(pipeline, self.engine.demo)
+            return pipeline
         self.engine.validate_run(pipeline)
         if not pipeline.manifest["stages"].get("input", {}).get("status") == "SUCCEEDED":
             sizes = []
@@ -202,12 +206,15 @@ class Worker:
 
     def _advance(self, pipeline):
         pipeline.guard()
-        self.engine.prepare(pipeline)
+        if "preview_contract" in pipeline.manifest:
+            preview.prepare(pipeline)
+        else:
+            self.engine.prepare(pipeline)
 
-    def _adapter(self, pipeline):
+    def _adapter(self, pipeline, kind):
         adapter = self.engine.factory(pipeline.settings)
         if hasattr(adapter, "prepare_async"):
-            adapter.prepare_async()
+            adapter.prepare_async(kind)
         return adapter
 
     async def execute(self, claimed):
@@ -230,15 +237,16 @@ class Worker:
                     outcome, error = "SUCCEEDED", ""
                     break
                 except ProviderCallRequired as call:
-                    model = pipeline.settings.embedding_model if call.kind == "embed_text" else pipeline.settings.analysis_model
+                    model = pipeline.settings.embedding_model if call.kind == "embed_text" else pipeline.settings.image_model if call.kind == "generate" else pipeline.settings.analysis_model
                     permit = None
                     if not self.engine.demo:
-                        permit, due = await db(queue.acquire_provider, claimed, model, call.kind)
+                        provider = pipeline.settings.image_provider if call.kind == "generate" else "gemini"
+                        permit, due = await db(queue.acquire_provider, claimed, model, call.kind, provider)
                         if due:
                             raise RetryScheduled(due.timestamp())
                     try:
                         if adapter is None:
-                            adapter = await self.pool.run(self._adapter, pipeline)
+                            adapter = await self.pool.run(self._adapter, pipeline, call.kind)
                         await self.pool.run(pipeline.begin_call, call)
                         api_started = time.monotonic()
                         try:

@@ -19,15 +19,17 @@ class ModelAdapter:
         for adapter in self.providers.values():
             adapter.close()
 
-    def prepare_async(self):
+    def prepare_async(self, kind="direct_context"):
         # Called in the shared synchronous pool before entering the event loop.
-        if "gemini" not in self.providers:
-            self.providers["gemini"] = GeminiAdapter(self.settings)
+        provider = self.settings.image_provider if kind == "generate" else "gemini"
+        if provider not in self.providers:
+            self.providers[provider] = (CloudflareAdapter if provider == "cloudflare" else GeminiAdapter)(self.settings)
 
     async def acall(self, kind, prompt, images, schema=None):
-        if kind not in {"direct_context", "embed_text"}:
+        if kind not in {"direct_context", "embed_text", "generate"}:
             raise ValueError("Unsupported asynchronous recommendation operation")
-        return await self.providers["gemini"].acall(kind, prompt, images, schema)
+        provider = self.settings.image_provider if kind == "generate" else "gemini"
+        return await self.providers[provider].acall(kind, prompt, images, schema)
 
     async def aclose(self):
         for adapter in self.providers.values():

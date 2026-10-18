@@ -11,6 +11,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
 
 from ..assets import read_json
+from ..catalog.server import ServerCatalogError
 from ..schemas import Template
 from .workflow import Studio
 
@@ -51,6 +52,8 @@ def api(view):
             return JsonResponse({"error": "이 실행에 접근할 수 없습니다."}, status=403)
         except FileNotFoundError:
             return JsonResponse({"error": "요청한 실행 또는 파일을 찾을 수 없습니다."}, status=404)
+        except ServerCatalogError:
+            return JsonResponse({'error': '상품 DB·인덱스·이용 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.'}, status=503)
         except (ValueError, TypeError, KeyError, OSError):
             # User input errors have no request credentials, but avoid dumping validation inputs.
             return JsonResponse({"error": "요청 형식 또는 파일을 확인하세요. 사진과 스케치 크기·품목·실행 ID를 확인해 주세요."}, status=400)
@@ -141,6 +144,18 @@ def state(request, run_id):
     return JsonResponse(studio().state(str(run_id), owner(request)))
 
 
+@require_POST
+@api
+def submit_preview(request, run_id):
+    target = studio()
+    if not getattr(target, "direct", False):
+        raise FileNotFoundError
+    run = target.submit_preview(str(run_id), owner(request), body(request).get("image_id"))
+    job = target.launch(run, owner(request), "prepare")
+    return JsonResponse({"run_id": run, "parent_run_id": str(run_id), "job": job,
+                         "state_path": f"api/runs/{run}"}, status=202)
+
+
 @require_GET
 @api
 def product_link(request, run_id):
@@ -195,7 +210,7 @@ def catalog_image(request, template_id):
 
 @require_GET
 def static_file(request, name):
-    allowed = {"studio.css": "text/css", "studio.js": "text/javascript", "direct.js": "text/javascript", "roompick-client.mjs": "text/javascript"}
+    allowed = {"studio.css": "text/css", "studio.js": "text/javascript", "direct.js": "text/javascript", "roompick-client.mjs": "text/javascript", "product-preview.mjs": "text/javascript"}
     if name not in allowed:
         return JsonResponse({"error": "Not found"}, status=404)
     return FileResponse((Path(__file__).parent / "ui" / name).open("rb"), content_type=allowed[name])

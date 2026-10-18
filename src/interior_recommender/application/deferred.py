@@ -50,7 +50,7 @@ class DeferredPipeline(Pipeline):
         state = self.manifest["stages"][call.key]
         attempt = {"id": str(uuid4()), "attempt_no": len(state["attempts"]) + 1,
                    "started_at": now(), "status": "RUNNING", "estimated_cost_usd": None, "usage_json": None,
-                   "model": self.settings.embedding_model if call.kind == "embed_text" else self.settings.analysis_model,
+                   "model": self.settings.embedding_model if call.kind == "embed_text" else self.settings.image_model if call.kind == "generate" else self.settings.analysis_model,
                    "prompt_version": PROMPT_VERSION, "schema_version": SCHEMA_VERSION}
         # A lost process is counted, not silently overwritten or given a fresh budget.
         for previous in state["attempts"]:
@@ -58,7 +58,11 @@ class DeferredPipeline(Pipeline):
                 previous.update(status="INTERRUPTED", finished_at=now())
         state["attempts"].append(attempt)
         state["status"] = "RUNNING"
-        self.manifest["status"] = "INTERPRETING" if call.key == "context" else "SEARCHING"
+        if call.kind == "generate":
+            attempt.update(provider=self.settings.image_provider, output_width=self.settings.output_width,
+                           output_height=self.settings.output_height,
+                           preprocessing_version=self.settings.generation_preprocessing_version)
+        self.manifest["status"] = "GENERATING" if call.kind == "generate" else "INTERPRETING" if call.key == "context" else "SEARCHING"
         self.save()
 
     def accept_call(self, call, response, duration_ms):
@@ -84,6 +88,14 @@ class DeferredPipeline(Pipeline):
         diagnostic = provider_message(error)
         if diagnostic:
             attempt["error_message"] = diagnostic
+        if getattr(error, "budget_exhausted", False):
+            from datetime import datetime, timedelta, timezone
+            attempt.update(status="BUDGET_WAIT", error_code="3036")
+            reset = (datetime.now(timezone.utc) + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            state.update(status="BUDGET_WAIT", next_retry_at=reset.timestamp())
+            self.manifest["status"] = "BUDGET_WAIT"
+            self.save()
+            raise RetryScheduled(state["next_retry_at"])
         transient = code in {429, 500, 502, 503, 504} or isinstance(error, (httpx.TimeoutException, httpx.NetworkError, TimeoutError))
         used = len(state["attempts"]) - state.get("attempt_base", 0)
         if transient and used < self.settings.max_attempts:

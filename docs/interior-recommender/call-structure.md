@@ -1,5 +1,11 @@
 # 역할별 코드 계층과 호출 구조
 
+2026-10-19 [서버 연결](server-catalog.md): 배치 `catalog.server`가 읽기 전용 MySQL + Garage + 고정 Delta export에서 기존 형식의 불변 상품 카탈로그를 만든다. `ProductIndex.load`는 서버 binding을 인식하고 `rank` 반환 전 `LiveGuard`로 현재 상태를 대조한다. `DirectRunReader/DirectStudio.product_link`도 현재 MySQL 링크를 재검증하고 선택 생성은 별도 이용 범위를 확인한다. 기존 파일/데모 카탈로그는 DB를 조회하지 않는다. 운영 배포와 광고 서버 HTTP 분리는 미실행이며 아래 과거 MySQL 미구현 설명과 구분한다.
+
+2026-10-18 선택 생성: 추천 카드 → `POST previews` → `application.preview.selected_source/snapshot` → SQLite 큐/워커 preview 분기 → `preview.prepare` → `DeferredPipeline` → `ModelAdapter.acall(generate)` → Cloudflare/Gemini → receipt·generated.png → 공유 `product-preview.mjs`. 독립 웹은 `DirectStudio.submit_preview/launch`의 풀에서 같은 application을 실행한다. [선택 생성 계약](product-preview.md).
+
+2026-10-18: 신규 기본은 [방 특징 추천](interior-ranking.md)의 v3다. 기존 해석 응답의 `room_profile` → `domain/interior.query_terms` → 질의 임베딩 → `ProductIndex.rank`의 코사인 유사도 + `domain/interior.compatibility` → 설명/점수 보존으로 확장했다. 특징은 인덱스 시작 시 캐시한다. 외부 API 추가 호출과 상품 벡터 재생성은 없다. 아래 v1/v2 설명은 당시 정책이며 MySQL 연결은 여전히 후속 작업이다.
+
 [역할별 라우팅](README.md) · [추천 서비스 설계](../design/12-direct-recommendation.md)
 
 2026-10-16 로컬 구현 기준. 아래 화살표는 런타임 호출이며 프로세스/서버 분리나 엄격한 단방향 import를 뜻하지 않는다.

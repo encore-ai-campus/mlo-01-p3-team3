@@ -1,0 +1,21 @@
+{
+  "contract": "mysql-delta-catalog-v1",
+  "scope": "PRODUCT_IMAGES",
+  "embedding_model": "gemini-embedding-2",
+  "preprocessing_version": "exif-rgb-fit1024-png-l2-v1",
+  "dimension": 768,
+  "mysql": {
+    "host": "MYSQL_PRIMARY",
+    "port": 3306,
+    "database": "pj3_products",
+    "user": "RECOMMENDATION_READ_ONLY_ACCOUNT",
+    "password": "SET_ONLY_IN_PRIVATE_FILE",
+    "ssl_ca": "/etc/pj3-clients/mysql/ca.pem"
+  },
+  "s3": {
+    "endpoint": "https://GARAGE_ENDPOINT:8443",
+    "bucket": "pj3-data",
+    "ssl_ca": "/etc/pj3-clients/s3/ca.pem",
+    "credentials_file": "/etc/pj3-clients/s3/spark.properties"
+  }
+}
