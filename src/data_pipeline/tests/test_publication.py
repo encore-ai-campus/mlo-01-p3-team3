@@ -105,7 +105,7 @@ class PublicationV2Tests(unittest.TestCase):
         with patch.dict(EXTRA,product_catalog=EXTRA['product_catalog']+' unexpected_column'):
             with self.assertRaises(PipelineError):dispositions()
     def test_reference_sql_matches_schema_generator(self):
-        sql=Path(__file__).resolve().parents[1]/'sql/publication_reference_v1.sql'
+        sql=Path(__file__).resolve().parents[1]/'sql/publication_reference_v2.sql'
         self.assertEqual(sql.read_text(encoding='utf-8-sig'),reference_ddl())
     def test_extended_fields_links_and_representative_image_are_written(self):
         plan,db,result=self.published(price_amount='1000')

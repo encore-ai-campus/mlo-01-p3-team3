@@ -20,6 +20,7 @@ from product_pipeline.files import atomic_json
 from product_pipeline.publication.mysql import MySQL
 from product_pipeline.publication.schema import reference_ddl
 from product_pipeline.publication.runner import publish
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from publication_fixture import fixture
 
 

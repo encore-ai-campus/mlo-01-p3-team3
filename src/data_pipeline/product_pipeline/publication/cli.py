@@ -51,6 +51,8 @@ def main(argv=None):
     p=argparse.ArgumentParser(description='문서 계약 기반 Gold→MySQL 게시')
     sub=p.add_subparsers(dest='action',required=True)
     ddl=sub.add_parser('reference-ddl');ddl.add_argument('--output',type=Path,required=True)
+    migration=sub.add_parser('migration-check',help='적용/롤백 SQL과 코드 계약의 일치 검사. DB 연결·DDL 없음')
+    migration.add_argument('--directory',type=Path,default=Path(__file__).resolve().parents[2]/'sql/migrations')
     prep=sub.add_parser('prepare')
     for name in ('gold-export','gold-root','archive-root','guard-hashes','mysql-config','output'):prep.add_argument('--'+name,required=True)
     prep.add_argument('--batch-size',type=int,default=100)
@@ -66,6 +68,9 @@ def main(argv=None):
     audit.add_argument('--local-test',action='store_true')
     args=p.parse_args(argv);db=None;spark=None;began=time.monotonic()
     try:
+        if args.action=='migration-check':
+            from .migration import verify_bundle
+            emit({**verify_bundle(args.directory),'duration_ms':round((time.monotonic()-began)*1000)});return 0
         if args.action=='reference-ddl':
             args.output.parent.mkdir(parents=True,exist_ok=True)
             with args.output.open('x',encoding='utf-8',newline='\n') as f:f.write(reference_ddl())

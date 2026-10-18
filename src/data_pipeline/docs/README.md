@@ -6,6 +6,7 @@
 
 | 문서 | 용도 |
 |---|---|
+| [MySQL v2 스키마 반영](mysql_schema_rollout.md) | 적용/롤백 SQL·계약 검사·기존 데이터 보완·운영 전 게이트 |
 | [서버 배포·인계](deployment.md) | 서버 역할·보호 설정 경로·설치·배포·초기 적재·재개 |
 | [실서버 검증·남은 인수](service_validation_20261018.md) | 현재 확인 범위·최종 release·증거·운영 전 필요한 입력 |
 | [이슈 #13 대조](issue13_acceptance.md) | 요구사항별 구현·검증·미완료 구분 |
@@ -38,7 +39,7 @@
 | [Silver 설계](silver_design_v1.md) | 테이블·품질 상태·정규화·재평가 |
 | [Silver/Gold 필드 대조](silver_gold_field_mapping.md) | 필드 제안 46항목과 입력·산출물 대응 |
 | [상위 아키텍처 대조](architecture_alignment.md) | 프로젝트 01/02/03/05/12 설계와 책임 경계 |
-| [Gold→MySQL 게시 필드 계약](../../../docs/design/13-gold-mysql-publication.md) | 서비스 DDL 필수 컬럼·타입·관계·전체 Gold 필드 대응·추천 어댑터 인수. 현재 v1 참조 DDL/게시 코드와 차이 명시 |
+| [Gold→MySQL 게시 필드 계약](../../../docs/design/13-gold-mysql-publication.md) | v2 DDL 필수 컬럼·타입·관계·전체 Gold 필드 대응·추천 어댑터 인수 |
 
 `verification/`의 공개 결과는 성공과 실패를 함께 보존한다. `server_setup/`은 배포 도구와 검증 재현 코드이며, 일부는 특정 시험 경로에 고정돼 있다. 디렉터리 전체를 일괄 실행하거나 일반 설치기로 사용하지 않는다. 비밀 설정·키·로컬 원천 데이터는 포함하지 않는다.
 

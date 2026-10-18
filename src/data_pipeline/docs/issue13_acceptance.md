@@ -43,7 +43,7 @@ at-least-once 전달이다. 응답 미확인은 같은 이벤트를 재전송할
 | 작업별 checkpoint·단일 작성자 | cluster ID/fingerprint 바인딩·MongoLease, 실제 잠금 중복 차단·Worker 3대 Delta | 다른 Driver로 장애 후 재개 |
 | Silver 분류/규격/가격/이미지/검수·품질 | 8개 테이블·고정 입력·재평가·receipt 구현, 실제 원천 1상품/4이미지 관계 엔진·QUALITY_WAIT | 담당 NORMALIZATION/매핑/검수 export와 운영 CLI |
 | Gold 안정 키/관측 시각·현재 판매/이력 | 8개 테이블·고정 Silver/export·반복 재사용, 실제 저장소 엔진 시험 | 담당 GOLD_BUILD/정책 입력·확보율 |
-| 고정 Delta→staging→MySQL·UUID/검수 보존·역전 방지 | 실제 MySQL01 8.4.11 별도 문서 스키마에서 9개 게시/복구 사례 | 실제 서비스 DDL·기존 UUID/관측 baseline·guard·접속 TLS |
+| 고정 Delta→staging→MySQL·UUID/검수 보존·역전 방지 | 초기 VM v1 9개 사례, 로컬 v2 게시 12개·migration 16개. 후속 신규 업무 DB v2 13테이블/160컬럼·실제 TLS preflight, 별도 검증 DB 게시/REUSED/audit 통과 | 실제 상품 guard·고정 Gold export와 외부 서비스 ORM 인수. 기존 서비스 DB 통합 시 UUID/관측 baseline 확인 |
 
 실제 Silver/Gold는 담당 입력 NOT_PROVIDED, Gold 정책 fixture의 기술 시험이다. 준비 완료/추천 승인이나 운영 CLI 등록 인수가 아니다. 새 이미지 연결은 inactive로 게시하며 담당 원장을 수정하지 않는다. 미확인 집계 가격으로 가상 Offer를 만들지 않는다. 집계 가격/판매 항목, 최초 시각/값별 관측 시각을 구분한다.
 
@@ -73,7 +73,7 @@ LIVE 캐시는 append-only source와 파이프라인 소유 불변 spool을 전�
 
 ## 완료 판단과 지원 경계
 
-- 최종 자동 회귀 **252개/116.362초 통과**. Linux 운영/LIVE/전송 파일·대역 **43개/1.056초 통과**. 실제 시험과 대역을 합산하여 통합 완료로 판정하지 않는다. 로컬 근거는 [로컬 검증 기록](validation_20261018.md), 공개 서버 결과는 실서버 검증 문서에 있다.
+- 최신 자동 회귀 **266개/107.125초 통과**. 이전 Linux 운영/LIVE/전송 파일·대역 **43개/1.056초 통과**와 구분한다. 실제 시험과 대역을 합산하여 통합 완료로 판정하지 않는다. 로컬 초기 근거는 [로컬 검증 기록](validation_20261018.md), 최신 MySQL 결과는 [v2 반영 기록](mysql_schema_rollout.md#신규-vm-스키마와-tls-반영-결과), 공개 서버 결과는 실서버 검증 문서에 있다.
 - 운영 전에 실제 DDL/guard·매핑/검수·NORMALIZATION/GOLD_BUILD 입력 계약을 인수하고 전체 FLOW·운영 일정·백업/복원·부하를 확인한다. 등록 export가 공식 계약이면 서비스 pipeline_runs 직접 생성 어댑터가 반드시 필요한 것은 아니다.
 - queue는 지정 호스트 한 대 소유다. 만료된 Driver lease 자동 takeover·TTL 삭제, Windows Spark checkpoint URI 변환, 다른 Kafka cluster offset 자동 이행은 지원하지 않는다. 이전 Driver 종료 증명 후 명시 복구한다.
 - Silver 상품별 이력 기본 상한은 20,000행/32MiB다. 65,498건 합성 stream 비교는 전체 JSON/ETL 성능 보장이 아니다. 과거 미수집 응답 본문/hash·판매 조건/시각은 생성하지 않고 NULL/UNKNOWN/LEGACY_EXTRACTED_ONLY를 유지한다.

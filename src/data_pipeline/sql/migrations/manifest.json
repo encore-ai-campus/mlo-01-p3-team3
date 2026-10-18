@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "schema_version": "document-publication-v2",
+  "contract_hash": "b09eee8814c9f602b55a1429f8883f6ccf11c955f4dda319384d065dab444b0a",
+  "migration_key": "feature25-publication-v2-b09eee8814c9",
+  "hash_normalization": "utf8-no-bom-lf",
+  "source": "feature25 handoff 2026-10-18",
+  "scripts": {
+    "feature25_apply.sql": {
+      "sha256": "d56eeb064906eb1bcec32842c6fbcb1b9705b47fe8e0b66da414019a4f4f354b",
+      "handoff_bytes_sha256": "d56eeb064906eb1bcec32842c6fbcb1b9705b47fe8e0b66da414019a4f4f354b"
+    },
+    "feature25_rollback.sql": {
+      "sha256": "1541b68d25423f20fcd1ada5064f03ae5ec5a3a6541165837c25609b23d16efa",
+      "handoff_bytes_sha256": "1541b68d25423f20fcd1ada5064f03ae5ec5a3a6541165837c25609b23d16efa"
+    }
+  }
+}

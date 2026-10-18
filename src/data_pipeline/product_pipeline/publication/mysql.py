@@ -104,7 +104,10 @@ class MySQL:
 
     def get(self,table,key,*,locking=True):
         if table not in TABLES or not key or any(k not in TABLES[table] for k in key):raise PipelineError('MYSQL_IDENTIFIER_NOT_ALLOWED')
-        return self.one('SELECT * FROM `'+table+'` WHERE '+' AND '.join('`'+k+'`=%s' for k in key)+(' FOR UPDATE' if locking else ''),tuple(key.values()))
+        # Owner inputs are read-only to the publisher. A shared row lock blocks
+        # owner changes until commit without granting publisher UPDATE rights.
+        lock=(' FOR SHARE' if table in {'categories','pipeline_publication_guards'} else ' FOR UPDATE') if locking else ''
+        return self.one('SELECT * FROM `'+table+'` WHERE '+' AND '.join('`'+k+'`=%s' for k in key)+lock,tuple(key.values()))
 
     def insert(self,table,values):
         if table not in TABLES or not values or any(k not in TABLES[table] for k in values):raise PipelineError('MYSQL_IDENTIFIER_NOT_ALLOWED')
