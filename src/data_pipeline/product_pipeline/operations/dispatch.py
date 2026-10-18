@@ -89,7 +89,7 @@ def handlers(config,queue):
         if not settings.handoff_bucket:raise PipelineError('HANDOFF_BUCKET_REQUIRED')
         endpoint=_env(settings.s3_endpoint_env)
         if endpoint!='aws' and not endpoint.startswith('https://'):raise PipelineError('S3_TLS_ENDPOINT_REQUIRED')
-        objects=S3Objects(settings.handoff_bucket,None if endpoint=='aws' else endpoint)
+        objects=S3Objects.from_settings(settings,endpoint,bucket=settings.handoff_bucket)
         def fetch(key,limit=CHUNK_BYTES):
             obj=objects.client.get_object(Bucket=settings.handoff_bucket,Key=key)
             try:data=obj['Body'].read(limit+1)
@@ -162,7 +162,7 @@ def discover_remote(config,queue):
     if not settings.handoff_bucket:raise PipelineError('HANDOFF_BUCKET_REQUIRED')
     endpoint=_env(settings.s3_endpoint_env)
     if endpoint!='aws' and not endpoint.startswith('https://'):raise PipelineError('S3_TLS_ENDPOINT_REQUIRED')
-    objects=S3Objects(settings.handoff_bucket,None if endpoint=='aws' else endpoint)
+    objects=S3Objects.from_settings(settings,endpoint,bucket=settings.handoff_bucket)
     marker=queue.root/'discovery.json'
     with lock(queue.root/'discovery.lock'):
         state=read_json(marker) if marker.exists() else dict(target=queue.target,continuation=None)

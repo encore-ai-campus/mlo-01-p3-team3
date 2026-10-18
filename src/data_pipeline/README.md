@@ -1,8 +1,10 @@
 # 데이터 파이프라인
 
+기존 Garage 2.4.1 연결은 [전용 실행 프로필](docs/garage_v241_profile.md)과 [최신 보완 검증](docs/garage_v241_validation_20261018.md)을 따른다. 내용 주소 객체 저장과 단일 작성자 Delta 설정을 구분한다. 과거 5533c0a 소스 묶음에는 이 보완이 없다.
+
 분리 브랜치: `feature/#13`, 최초 기준 `dev`의 `e35b2a3`(2026-10-16). 2026-10-18 최신 `origin/dev`의 `22168b8`을 병합해 `f85e59e`까지 푸시했다. [현재 제작 상태·기준 문서 차이](docs/status.md)를 먼저 확인한다. 크롤러 코드는 이 브랜치에 포함하지 않으며 완료된 export 파일로 인계받는다.
 
-다나와 수집 결과를 인계받는 독립 Python 파이프라인이다. **FULL_EXPORT/LIVE_DELTA → 이미지·MongoDB → Kafka → Bronze/Silver/Gold → 고정 계획의 MySQL 게시** 실행 코드를 제공한다. 실제 서버에 대한 쓰기/장애 인수는 아직 수행하지 않았다.
+다나와 수집 결과를 인계받는 독립 Python 파이프라인이다. **FULL_EXPORT/LIVE_DELTA → 이미지·MongoDB → Kafka → Bronze/Silver/Gold → 고정 계획의 MySQL 게시** 실행 코드를 제공한다. 실제 Garage 소량 객체 시험과 전체 서버 종단의 쓰기/장애 인수는 구분하며, 전체 종단 인수는 아직 수행하지 않았다.
 
 범위는 저장된 수집 결과의 스냅샷·이미지 적재·MongoDB 원천·Kafka 전달·Spark Bronze/Silver/Gold·상품 영역 MySQL 게시·실패 복구까지다. 크롤링 실행·파서 변경, 인프라 구축, 서비스 API/운영 화면, 이용 승인·매핑 원장 편집, 임베딩 호출·추천·학습은 포함하지 않는다. 해당 담당의 버전이 고정된 결과를 입력으로 받아 검증한다.
 

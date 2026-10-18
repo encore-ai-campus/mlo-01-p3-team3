@@ -113,6 +113,14 @@ class MongoLease:
         self._thread = Thread(target=heartbeat, name='bronze-lease-heartbeat', daemon=True)
         self._thread.start()
 
+    def check_s3_bucket(self, bucket):
+        """Garage S3SingleDriverLogStore requires the existing latched ownership."""
+        from urllib.parse import urlsplit
+        if not self._targets or any(urlsplit(target).scheme != 's3a'
+                or urlsplit(target).netloc != bucket for target in self._targets):
+            raise PipelineError('GARAGE_WRITER_TARGET_MISMATCH')
+        self.check()
+
     def _release_claims(self):
         for key in self._claimed:
             self.collection.delete_one({'_id': key, 'token': self.token})

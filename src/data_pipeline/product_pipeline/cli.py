@@ -37,7 +37,7 @@ def _live(settings, stack):
         raise PipelineError("S3_TLS_ENDPOINT_REQUIRED")
     ledger = MongoLedger(settings, uri)
     stack.callback(ledger.close)
-    objects = S3Objects(settings.image_bucket, None if endpoint == "aws" else endpoint)
+    objects = S3Objects.from_settings(settings, endpoint)
     publisher = KafkaPublisher(settings.kafka_topic, kafka, max_attempts=settings.max_attempts)
     stack.callback(publisher.close)
     return ledger, objects, publisher
@@ -121,7 +121,7 @@ def main(argv=None):
             bucket = config.get('handoff_bucket')
             if not bucket or bucket.startswith('replace-with-'):
                 raise PipelineError('HANDOFF_BUCKET_REQUIRED')
-            store = S3Objects(bucket, None if endpoint == 'aws' else endpoint)
+            store = S3Objects.from_settings(settings, endpoint, bucket=bucket)
             store.preflight()
             if args.command == 'send':
                 result = send_snapshot(args.snapshot, store)

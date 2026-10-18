@@ -111,7 +111,7 @@ def live_audit(context, p, source, bronze, silver, gold):
     outputs=context['outputs'];expected_file=audit_root/'audit-expected.jsonl'
     endpoint=_env(source.s3_endpoint_env)
     if endpoint!='aws' and not endpoint.startswith('https://'):raise PipelineError('S3_TLS_ENDPOINT_REQUIRED')
-    objects=S3Objects(source.image_bucket,None if endpoint=='aws' else endpoint)
+    objects=S3Objects.from_settings(source,endpoint)
     ledger=MongoLedger(source,_env(source.mongo_uri_env))
     image_count=0;image_total=0;count=0
     try:

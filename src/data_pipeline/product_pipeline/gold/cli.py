@@ -68,11 +68,14 @@ def main(argv=None):
                 'quarantine_path':settings.gold_root,'fingerprint':settings.fingerprint})
             lease=MongoLease(proxy,_env(settings.lease_uri_env));lease.acquire()
         from pyspark.sql import SparkSession
+        from ..spark_storage import storage_options,bind_spark_credentials
+        options=storage_options(options,writer=True,lease=lease)
         builder=SparkSession.builder.appName('product-gold-'+settings.environment_id)
         for key,value in options.items():builder=builder.config(key,value)
         spark=(builder.config('spark.sql.session.timeZone','UTC')
             .config('spark.sql.extensions','io.delta.sql.DeltaSparkSessionExtension')
             .config('spark.sql.catalog.spark_catalog','org.apache.spark.sql.delta.catalog.DeltaCatalog').getOrCreate())
+        bind_spark_credentials(spark,writer=True,lease=lease)
         if not args.rehearse:lease.start_heartbeat(lambda:spark.sparkContext.cancelAllJobs())
         from .source import SilverSource
         from .storage import Checkpoint,DeltaSink

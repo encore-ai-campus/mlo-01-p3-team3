@@ -106,7 +106,7 @@ def main(argv=None):
             from product_pipeline.runner import ingest
             ledger = stage('mongo_connect', lambda: MongoLedger(settings, os.environ[settings.mongo_uri_env]))
             stack.callback(ledger.close)
-            objects = S3Objects(settings.image_bucket, None if endpoint == 'aws' else endpoint)
+            objects = S3Objects.from_settings(settings, endpoint)
             publisher = KafkaPublisher(settings.kafka_topic, producer_options, max_attempts=settings.max_attempts)
             stack.callback(publisher.close)
             stage('s3_preflight', objects.preflight)
@@ -119,6 +119,8 @@ def main(argv=None):
             lease = MongoLease(bronze, os.environ[bronze.lease_uri_env])
             stack.callback(lambda: lease.close(release=shutdown['spark_stopped']))
             stage('bronze_writer_lease', lease.acquire)
+            from product_pipeline.spark_storage import storage_options, bind_spark_credentials
+            spark_options = storage_options(spark_options, writer=True, lease=lease)
             from pyspark.sql import SparkSession
             builder = SparkSession.builder.appName('product-live-acceptance')
             for key, value in spark_options.items():
@@ -134,6 +136,7 @@ def main(argv=None):
                 spark.stop()
                 shutdown['spark_stopped'] = True
             stack.callback(stop_spark)
+            bind_spark_credentials(spark, writer=True, lease=lease)
             active = {'query': None}
             def stop_on_lease_loss():
                 try:

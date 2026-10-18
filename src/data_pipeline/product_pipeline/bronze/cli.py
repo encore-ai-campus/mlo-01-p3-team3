@@ -46,6 +46,8 @@ def main(argv=None):
         from .lease import MongoLease
         lease = MongoLease(settings, env(settings.lease_uri_env))
         lease.acquire()  # No Spark job, checkpoint or Delta mutation before ownership.
+        from ..spark_storage import storage_options, bind_spark_credentials
+        spark_options = storage_options(spark_options, writer=True, lease=lease)
         from pyspark.sql import SparkSession
         builder = SparkSession.builder.appName('product-bronze-' + settings.environment_id)
         for key, value in spark_options.items():
@@ -55,6 +57,7 @@ def main(argv=None):
                  .config('spark.sql.catalog.spark_catalog', 'org.apache.spark.sql.delta.catalog.DeltaCatalog')
                  .config('spark.redaction.regex', '(?i)secret|password|token|access[.]?key|connection|sasl[.]jaas')
                  .getOrCreate())
+        bind_spark_credentials(spark, writer=True, lease=lease)
         def stop_on_lease_loss():
             # Called on the heartbeat thread, including while the Driver is idle.
             # Failure to stop leaves the lease latched and each callback fenced.

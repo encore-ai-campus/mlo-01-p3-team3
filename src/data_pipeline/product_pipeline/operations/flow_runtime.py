@@ -66,11 +66,15 @@ def spark_session(environment='GOLD_SPARK_OPTIONS'):
     options = parse(os.environ.get(environment, '{}'))
     if not isinstance(options, dict) or any(not k.startswith('spark.') or not isinstance(v, str) for k,v in options.items()):
         raise PipelineError('FLOW_SPARK_OPTIONS_INVALID')
+    from ..spark_storage import storage_options,bind_spark_credentials
+    options=storage_options(options)
     builder = SparkSession.builder.appName('pipeline-flow-proof')
     for key, value in options.items(): builder = builder.config(key, value)
-    return (builder.config('spark.sql.session.timeZone', 'UTC')
+    spark = (builder.config('spark.sql.session.timeZone', 'UTC')
         .config('spark.sql.extensions', 'io.delta.sql.DeltaSparkSessionExtension')
         .config('spark.sql.catalog.spark_catalog', 'org.apache.spark.sql.delta.catalog.DeltaCatalog').getOrCreate())
+    bind_spark_credentials(spark)
+    return spark
 
 
 def versions(spark, paths):

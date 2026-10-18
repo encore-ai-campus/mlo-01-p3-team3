@@ -67,6 +67,8 @@ def main(argv=None):
             from pyspark.sql import SparkSession
             from .source import GoldSource
             options=parse(os.environ.get('PUBLICATION_SPARK_OPTIONS','{}'))
+            from ..spark_storage import storage_options,bind_spark_credentials
+            options=storage_options(options)
             builder=SparkSession.builder.appName('gold-publication-plan')
             for k,v in options.items():
                 if not k.startswith('spark.') or not isinstance(v,str):raise PipelineError('PUBLISH_SPARK_OPTIONS_INVALID')
@@ -74,6 +76,7 @@ def main(argv=None):
             spark=(builder.config('spark.sql.session.timeZone','UTC')
                 .config('spark.sql.extensions','io.delta.sql.DeltaSparkSessionExtension')
                 .config('spark.sql.catalog.spark_catalog','org.apache.spark.sql.delta.catalog.DeltaCatalog').getOrCreate())
+            bind_spark_credentials(spark)
             config=read_json(args.mysql_config)
             target=digest(dict(target_id=config['target_id'],database=config['database']))
             result=prepare_from_source(GoldSource(spark,args.gold_export,args.gold_root,args.archive_root),

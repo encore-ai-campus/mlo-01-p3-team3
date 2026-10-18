@@ -28,6 +28,8 @@ def main():
         def close(self):pass
     class ObjectsDouble:
         def __init__(self,*args):pass
+        @classmethod
+        def from_settings(cls,*args,**kwargs):return cls()
         def _exists(self,key,checksum,size):
             path=confined(source/'objects',key)
             return path.is_file() and path.stat().st_size==size and sha_file(path)==checksum

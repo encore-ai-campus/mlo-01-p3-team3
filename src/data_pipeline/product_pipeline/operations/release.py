@@ -7,7 +7,7 @@ from ..contracts import digest
 from ..errors import Conflict,PipelineError
 from ..files import atomic_json,confined,read_json,sha_file,sync_dir
 
-ALLOWED={'.py','.md','.txt','.toml','.json','.sql'}
+ALLOWED={'.py','.md','.txt','.toml','.json','.sql','.scala'}
 EXCLUDE={'.runtime','.venv','.git','__pycache__','spark-warehouse'}
 
 

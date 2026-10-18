@@ -20,8 +20,15 @@ class Settings:
     lease_seconds: int = 120
     max_attempts: int = 3
     handoff_bucket: str | None = None
+    s3_profile: str = 'conditional'
+    s3_credentials_file_env: str | None = None
 
     def __post_init__(self):
+        if self.s3_profile not in {'conditional', 'garage_v241'}:
+            raise PipelineError('S3_PROFILE_INVALID')
+        if self.s3_credentials_file_env is not None and (not isinstance(self.s3_credentials_file_env, str)
+                or not re.fullmatch(r'[A-Z][A-Z0-9_]*', self.s3_credentials_file_env)):
+            raise PipelineError('INVALID_SECRET_ENV_NAME')
         for value in (self.environment_id, self.mongo_database, self.mongo_replica_set, self.image_bucket, self.kafka_topic):
             if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
                 raise PipelineError("INVALID_TARGET_CONFIG")

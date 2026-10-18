@@ -81,11 +81,14 @@ def main(argv=None):
             proxy=SimpleNamespace(**{**asdict(settings),'bronze_path':settings.silver_root,
                 'events_path':settings.silver_root,'quarantine_path':settings.silver_root,'fingerprint':settings.fingerprint})
             lease=MongoLease(proxy,lease_uri);lease.acquire()
+        from ..spark_storage import storage_options,bind_spark_credentials
+        spark_options=storage_options(spark_options,writer=True,lease=lease)
         builder=SparkSession.builder.appName('product-silver-'+settings.environment_id)
         for key,value in spark_options.items():builder=builder.config(key,value)
         spark=(builder.config('spark.sql.session.timeZone','UTC')
             .config('spark.sql.extensions','io.delta.sql.DeltaSparkSessionExtension')
             .config('spark.sql.catalog.spark_catalog','org.apache.spark.sql.delta.catalog.DeltaCatalog').getOrCreate())
+        bind_spark_credentials(spark,writer=True,lease=lease)
         if not args.rehearse:lease.start_heartbeat(lambda:spark.sparkContext.cancelAllJobs())
         from .source import BronzeSource,MongoStates,FileStates
         from .delta import DeltaSink
