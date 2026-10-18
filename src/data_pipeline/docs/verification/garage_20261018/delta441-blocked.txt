@@ -1,0 +1,13 @@
+
+PLAY [Isolated Garage Delta single Driver] *************************************
+
+TASK [pipeline_garage_delta_verify] ********************************************
+[ERROR]: Task failed: Module failed: DELTA_TEST_CONFLICTING_INFRA_DEPENDENCY
+Origin: /home/team3ops/pipeline-garage-delta-c98238a1d6e441e28f0cb25c9815ea58/verify.json
+
+fatal: [pj3-spark-master]: FAILED! => {"censored": "the output has been hidden due to the fact that 'no_log: true' was specified for this result", "changed": false}
+
+PLAY RECAP *********************************************************************
+pj3-spark-master           : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+
+
