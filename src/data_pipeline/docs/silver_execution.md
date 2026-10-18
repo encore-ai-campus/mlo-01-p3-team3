@@ -97,3 +97,7 @@ python -m tests.smoke_silver_delta \
 2026-10-17 실제 로컬 Spark 4.0.1/Delta 4.0.1 결과: `.runtime/silver-delta-v3/report.json`, passed=true, 상품 관측 3·속성 14·가격 42·이미지 관계 9·링크 27·품질 문제 94·확인된 Offer 0·평가 receipt 3. 모두 QUALITY_WAIT이며 같은 입력의 3개 평가를 재사용했다. 외부 데이터 서비스 연결은 0, 운영 lease는 대역이다. 별도 `run_silver.py` 실행도 `.runtime/silver-cli-v2.log` 및 같은 출력의 `cli-logs/runs`에 COMPLETED/processed=3/reused=3/source_drained=true를 남겼다. Windows JVM 종료 시 잠긴 임시 JAR 삭제 경고는 로그에 남지만 종료 코드와 데이터/receipt 검증은 통과했다.
 
 Silver 완료 시 자동 회귀 시험은 **145개 통과 / 70.951초**다(`.runtime/silver-unit-tests.txt`). Silver 관련 23개는 순수 정규화·입력·실행 차단·부분 출력·이미지 revision·발견 cursor 손상·불완전 입력 archive 복구 등을 검증한다. 실제 데이터 서비스와의 종단 시험으로 표시하지 않는다. 시험 산출물은 Git 제외 경로에 보관하며 코드와 재현 명령은 저장소에 남긴다.
+
+## FLOW·새 입력의 부분 스캔 보호
+
+Silver CLI에 선택적 `--scan-id <64자리 flow hash>`를 추가했다. discovery cursor를 업무 입력 hash·normalizer 버전·rehearsal 상태·scan-id에 연결한다. 같은 범위 재개는 기존 cursor를 사용하고 새 입력/다른 flow·기존 scope 없는 cursor는 처음부터 검증한다. 기존 Delta/receipt를 삭제하지 않고 동일 평가를 재사용하므로 안전한 전체 재스캔이다. 전체 FLOW는 이 ID를 자동 전달한다. [실행·복구](flow_execution.md)를 따른다.

@@ -75,15 +75,16 @@ LIVE 실행 중 검증 캐시는 append-only source와 파이프라인 소유 �
 | preflight/누락 차단 | ingest 읽기 전용 Mongo/S3/Kafka 검사; Bronze 설정/cluster/ops claim 확인 | 실제 권한/토폴로지 |
 | 제한 재시도/lease/중복 실행 | 기존 잠금 및 파일 queue의 due/Retry-After·한도·격리·token 복구 구현 | 지정 실행 호스트 한 대 운영, 실제 다중 호스트/노드 장애 |
 | 로그/건수/실패/duration | ingest audit, capture 결과, drain_report/receipts, Bronze 배치·인수 보고서 | 서버 로그 보관/알림 |
-| 수동 복구 후 NiFi 예약 | ready 발견·허용 작업 queue·수동 복구 확인, REST 버전/bundle·STOPPED 생성·명시 start/stop 구현·대역 시험 | 실제 NiFi 버전/권한·일정 활성화, 전체 Spark 단계 자동 연결 |
-| 주기 대조·상태 이관 | snapshot↔Mongo Raw/접수/발행 대조·repair, 파일 상태 hash/ID 보존 pack/restore·코드 release 구현 | 전체 Delta/서비스 대조·외부 저장소 실제 백업/복원·Linux/AWS 재개 |
+| 수동 복구 후 NiFi 예약 | ready 발견·허용 작업 queue·수동 복구 확인, REST 버전/bundle·STOPPED 생성·명시 start/stop 구현·대역 시험 | 실제 NiFi 버전/권한·일정 활성화, FLOW 전체 worker 종단 인수 |
+| 주기 대조·상태 이관 | snapshot↔Mongo Raw/접수/발행 대조·repair, 파일 상태 hash/ID 보존 pack/restore·코드 release 구현 | FLOW의 고정 Delta/SQL 대조 로컬 시험 추가. 외부 저장소 실제 백업/복원·Linux/AWS 재개 대기 |
 | 실행/재개/재처리/배포 문서 | README, execution, live_execution, bronze_execution, deployment, acceptance | 담당자 운영 인수 |
 
 정상 재개는 확인된 외부 단계에 다시 요청하지 않는다. 원장 성공 상태를 신뢰하므로 외부에서 삭제된 raw는 `--repair-raw` 명시 실행으로 원래 ID 아래 확인/복구한다. 이벤트 replay와 분리했다.
 
 ## 검증 기록과 완료 판단
 
-- 최신 dev 병합 후 전체 자동 테스트: **192개 통과, 74.540초**, `.runtime/post-dev-merge-regression-20261018.txt`.
+- FLOW 후속 구현 최종 전체 자동 테스트: **218개 통과, 104.135초**, `.runtime/flow-regression-final.txt`. 이전 dev 병합 직후 시험은 192개/74.540초였다.
+- 실제 로컬 Delta 연결·Gold commit 후 재개/7단계 재사용, production 대조 로직의 명시 파일 대역 시험, 격리 MySQL 이미지/가격 이력 대조 통과. [FLOW 실행·검증 경계](flow_execution.md).
 - 실제 격리 MySQL 8.0.46의 UUID/롤백/guard/응답 유실/시각 역전 및 실제 로컬 Delta 고정 게시 계획 시험 통과. NiFi는 REST 대역, 이관은 로컬 파일/원장 시험이다. [최신 검증 기록](validation_20261018.md).
 - 과거 이슈 보완 시험: **122개/64.058초**, `.runtime/issue13-gap-tests.txt`; Gold 구현 당시 **162개/67.157초**. 최신 결과와 구분한다.
 - 저장된 실제 journal: 확정 관측 **5건**, 첫 drain 1배치, 재실행 신규 적재 **0배치**, source config/state/journal hash 유지. `.runtime/actual-live-gap-v2/report.json`.
@@ -93,6 +94,6 @@ LIVE 실행 중 검증 캐시는 append-only source와 파이프라인 소유 �
 - 로컬 경로 이전 후 원장/ID/receipt 보존을 시험했다. VM/AWS의 실제 DB·객체·Delta·Kafka 이전을 검증한 것은 아니다.
 - `tests.smoke_live_services`는 실제 연결 인수 코드다. 설정이 없으면 **NOT_RUN**, 실제 전부 통과해야 PASS다. 노드 failover 시험을 자동 수행하지 않는다.
 
-이슈는 아직 닫을 수 없다. MySQL 게시기·예약 재시도·NiFi 제어·파일 상태 이관은 구현했다. 남은 것은 **전체 단계 자동 연결·등록/게시 입력 계약**, **전체 종단 대조**, **실제 서버 종단·장애 인수**, **환경 이전·NiFi 운영 인수**, **대량 부하 시험**이다. Silver/Gold와 무관한 LIVE·복구·중복 실행 제어를 단순히 후속 설계로 미루지 않고 코드와 로컬 검증까지 보완했다. 테스트 코드가 있다는 이유로 실제 환경 인수 조건을 완료 체크하지 않는다.
+이슈는 아직 닫을 수 없다. MySQL 게시기·예약 재시도·NiFi 제어·파일 상태 이관은 구현했다. FLOW로 **전체 단계 자동 연결·고정 범위 종단 대조**를 추가 구현·로컬 시험했다. 남은 것은 **등록/게시 입력 계약**, **실제 전체 worker/서버 종단·장애 인수**, **환경 이전·NiFi 운영 인수**, **대량 부하 시험**이다. Silver/Gold와 무관한 LIVE·복구·중복 실행 제어를 단순히 후속 설계로 미루지 않고 코드와 로컬 검증까지 보완했다. 테스트 코드가 있다는 이유로 실제 환경 인수 조건을 완료 체크하지 않는다.
 
-현재 지원 경계와 남은 서버 외 연결(전체 단계 자동화·등록 입력 방식·실제 DDL/guard·종단 대조)은 [최신 누락 대조](requirements_gap_review.md)가 기준이다. 이슈 체크는 담당자가 수행한다.
+현재 FLOW 구현·검증과 남은 계약/인수(등록 입력 방식·실제 DDL/guard·실제 worker·서버 종단)는 [최신 누락 대조](requirements_gap_review.md)가 기준이다. 이슈 체크는 담당자가 수행한다.

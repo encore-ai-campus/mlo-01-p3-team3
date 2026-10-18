@@ -27,6 +27,18 @@ def configuration(path):
 def tick(config_path):
     from .dispatch import handlers,discover_remote,discover_local_plans
     c=configuration(config_path);q=Queue(c['queue_root'],c['logical_target'])
+    storage=None
+    if c.get('storage_policy'):
+        from .storage import report as storage_report
+        policy=c['storage_policy'];storage=storage_report(policy['root'],policy['max_bytes'],policy['min_free_bytes'],policy.get('log_retention_days',30))
+        if set(storage['alerts']) & {'STATE_SIZE_LIMIT','FREE_SPACE_LOW'}:raise PipelineError('OPERATIONS_STORAGE_BACKPRESSURE')
+    for root in c.get('flow_directories',[]):
+        from .flow import load
+        plan=load(root)
+        if plan['target']!=c['logical_target']:raise PipelineError('FLOW_QUEUE_TARGET_MISMATCH')
+        flow_file=Path(root)/'flow.json'
+        q.enqueue('FLOW',dict(state=str(Path(root).resolve()),flow=str(flow_file.resolve()),
+            flow_sha256=sha_file(flow_file),flow_id=plan['content_hash']))
     discovered=discover_remote(c,q) if c.get('discover_remote') else 0
     for path in c.get('publication_ready_directories',[]):
         if (Path(path)/'ready.json').exists():discovered+=discover_local_plans(path,q,c['mysql_config'])
@@ -36,6 +48,7 @@ def tick(config_path):
             q.enqueue('RECONCILE',dict(snapshot=path,period=period,config=c['pipeline_config'],config_sha256=sha_file(c['pipeline_config'])))
     report=q.tick(handlers(c,q),limit=c.get('max_tasks_per_tick',10));report['discovered']=discovered
     report['queue_counts']=q.summary()
+    if storage is not None:report['storage']=storage
     report['status']='ATTENTION_REQUIRED' if any(report['queue_counts'].get(k,0) for k in
         ('RUNNING','QUARANTINED','RETRY_EXHAUSTED')) else 'TICK_COMPLETED'
     atomic_json(Path(c['audit_root'])/'scheduler'/(now().replace(':','-')+'.json'),report)
@@ -51,12 +64,20 @@ def main(argv=None):
     for name in ('tick','enqueue','recover','retry'):
         cmd=sub.add_parser(name);cmd.add_argument('--config',type=Path,required=True)
         if name=='enqueue':
-            cmd.add_argument('--kind',required=True,choices=['INGEST','PUBLISH','RECEIVE','RECONCILE']);cmd.add_argument('--spec',type=Path,required=True)
+            cmd.add_argument('--kind',required=True,choices=['INGEST','PUBLISH','RECEIVE','RECONCILE','FLOW']);cmd.add_argument('--spec',type=Path,required=True)
             cmd.add_argument('--max-attempts',type=int,default=5)
         if name=='recover':
             cmd.add_argument('--task-id',required=True);cmd.add_argument('--expected-token',required=True);cmd.add_argument('--stop-evidence',required=True)
         if name=='retry':
             cmd.add_argument('--task-id',required=True);cmd.add_argument('--evidence',required=True);cmd.add_argument('--additional-attempts',type=int,default=1)
+    flow=sub.add_parser('flow-prepare');flow.add_argument('--config',type=Path,required=True);flow.add_argument('--output',type=Path,required=True)
+    flow=sub.add_parser('flow-run');flow.add_argument('--state',type=Path,required=True)
+    flow=sub.add_parser('flow-audit');flow.add_argument('--state',type=Path,required=True)
+    flow=sub.add_parser('flow-recover');flow.add_argument('--state',type=Path,required=True)
+    flow.add_argument('--stage',required=True);flow.add_argument('--expected-token',required=True);flow.add_argument('--stop-evidence',required=True)
+    storage=sub.add_parser('storage-report');storage.add_argument('--root',type=Path,required=True)
+    storage.add_argument('--max-bytes',type=int,required=True);storage.add_argument('--min-free-bytes',type=int,required=True)
+    storage.add_argument('--log-retention-days',type=int,default=30)
     for name in ('migration-pack','migration-restore','migration-verify'):
         cmd=sub.add_parser(name)
         if name=='migration-pack':cmd.add_argument('--roots',type=Path,required=True)
@@ -72,6 +93,16 @@ def main(argv=None):
     args=p.parse_args(argv);started=time.monotonic()
     try:
         if args.action=='tick':result=tick(args.config)
+        elif args.action.startswith('flow-'):
+            from .flow import prepare,run,recover,audit
+            if args.action=='flow-prepare':result=prepare(args.config,args.output)
+            elif args.action=='flow-run':result=run(args.state)
+            elif args.action=='flow-audit':result=audit(args.state)
+            else:result=recover(args.state,args.stage,args.expected_token,args.stop_evidence)
+            result={k:v for k,v in result.items() if k!='outputs'}
+        elif args.action=='storage-report':
+            from .storage import report
+            result=report(args.root,args.max_bytes,args.min_free_bytes,args.log_retention_days)
         elif args.action in {'enqueue','recover','retry'}:
             c=configuration(args.config);q=Queue(c['queue_root'],c['logical_target'])
             if args.action=='enqueue':row=q.enqueue(args.kind,read_json(args.spec),max_attempts=args.max_attempts)
@@ -106,6 +137,11 @@ def main(argv=None):
                 result=client.prepare(args.group,spec,expected_version=args.version,apply=args.apply)
         emit({**result,'duration_ms':round((time.monotonic()-started)*1000)})
         return 2 if result.get('status')=='ATTENTION_REQUIRED' else 0
+    except KeyboardInterrupt as exc:
+        from .flow import WorkerUnconfirmed
+        emit(dict(status='STOP_VERIFICATION_REQUIRED' if isinstance(exc,WorkerUnconfirmed) else 'INTERRUPTED',
+                  duration_ms=round((time.monotonic()-started)*1000)))
+        return 130
     except Exception as exc:
         failure=dict(status='FAILED',error_code=exc.code if isinstance(exc,PipelineError) else type(exc).__name__,
                      duration_ms=round((time.monotonic()-started)*1000))

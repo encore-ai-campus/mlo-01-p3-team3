@@ -74,3 +74,9 @@ python run_operations.py nifi \
 ## 시험 근거
 
 `test_operations.py`는 실제 파일로 기한 대기, Retry-After, 중단→수동 복구, token 충돌, 한도 소진→제한 재시도, 중복 실행, 실제 sealed snapshot→file rehearsal 연결, 이관 hash/ID 보존을 검증한다. NiFi는 REST 대역으로 계획/버전/구성 충돌을 검증했다. 실제 NiFi 서버를 설치·변경했다고 표시하지 않는다. SQL 테스트는 별도 실제 로컬 MySQL 인스턴스이며 VM 적재가 아니다.
+
+## 전체 FLOW와 용량 정책 추가
+
+기존 네 작업에 `FLOW`를 추가했다. `flow-prepare`로 입력/hash·담당 계약·단계 대상 일치를 봉인하고 `flow_directories`의 준비된 경로를 tick이 등록한다. 각 단계는 자식 Driver/기존 CLI와 별도 checkpoint를 유지한다. 순서·실패 단계 재개·품질 보류·`flow-audit`·정지 불명확 복구는 [전체 단계 실행](flow_execution.md)을 따른다. INGEST만 연결한 것을 전체 Spark 자동화로 취급하던 이전 지원 경계는 이 후속 구현으로 대체됐다. 실제 서버 전체 worker CLI/NiFi 실행은 미인수다.
+
+선택적 `storage_policy`는 root/max_bytes/min_free_bytes/log_retention_days로 tick 진입 시 용량 backpressure와 오래된 진행 로그 경보를 제공한다. worker 진행 로그는 시도당 허용 JSON만 최대 1MiB이며 원천/증거 자동 삭제는 없다. 중앙 로그 전송·운영 경보 채널은 배포 담당이 인수한다.

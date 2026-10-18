@@ -9,7 +9,7 @@ import threading
 import time
 from uuid import uuid4
 
-from ..contracts import now
+from ..contracts import now,digest
 from ..errors import PipelineError
 from ..files import atomic_json,parse,read_json
 from ..cli import emit,_env
@@ -27,6 +27,7 @@ def main(argv=None):
     parser.add_argument('--rehearse',action='store_true')
     parser.add_argument('--image-states',type=Path,help='rehearsal 전용 명시 상태 export')
     parser.add_argument('--max-observations',type=int,default=0,help='0=고정 Bronze 전체, 양수=소량 검증')
+    parser.add_argument('--scan-id',help='자동 실행의 고정 flow hash. 다른 실행의 부분 cursor 재사용 방지')
     args=parser.parse_args(argv)
     spark=lease=states=None
     started,execution=time.monotonic(),str(uuid4())
@@ -34,6 +35,8 @@ def main(argv=None):
     code=2;previous=None
     try:
         settings=SilverSettings.load(args.config)
+        if args.scan_id is not None and (len(args.scan_id)!=64 or any(c not in '0123456789abcdef' for c in args.scan_id)):
+            raise PipelineError('SILVER_SCAN_ID_INVALID')
         if args.bronze_version<0 or args.max_observations<0:raise PipelineError('SILVER_INVALID_LIMIT')
         if args.rehearse:
             if not args.image_states or any(not p.startswith('file:') for p in (settings.bronze_path,settings.silver_root,settings.checkpoint_path)):
@@ -93,7 +96,11 @@ def main(argv=None):
         checkpoint=Checkpoint(spark,settings,lease)
         checkpoint.archive(inputs);checkpoint.archive(run)
         sink=DeltaSink(spark,settings,lease=lease)
-        cursor=checkpoint.cursor(args.bronze_version)
+        from .checkpoint import bind_scan
+        from .normalize import VERSION
+        scan_scope=digest(dict(inputs=inputs,normalizer_version=VERSION,scan_id=args.scan_id,
+            image_states=read_json(args.image_states) if args.image_states else None))
+        cursor=bind_scan(checkpoint.cursor(args.bronze_version),scan_scope)
         as_of=now()
         while True:
             lease.check(settings)

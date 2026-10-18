@@ -4,7 +4,7 @@
 
 ## 완료 판단
 
-**주요 처리 단계 구현·로컬 검증 완료, 전체 자동화·실제 서버 운영 인수 대기**다. 단계별 코드 존재, 문서 계약 검증, 업무 승인, 실제 종단 운영 완료를 구분한다. 이슈 종료 여부는 담당자가 [이슈 대조표](issue13_acceptance.md)로 확인한다.
+**주요 단계·자동 연결·종단 대조 구현 및 로컬 시험 완료, 실제 서버 운영 인수 대기**다. 단계별 코드 존재, 문서 계약 검증, 업무 승인, 실제 종단 운영 완료를 구분한다. 이슈 종료 여부는 담당자가 [이슈 대조표](issue13_acceptance.md)로 확인한다.
 
 | 영역 | 현재 구현·검증 | 남은 연결·인수 |
 |---|---|---|
@@ -16,22 +16,23 @@
 | Gold | 8개 Delta의 현재값/Offer/이력/이미지/링크/집계/평가, 고정 export | 실제 업무 입력·GOLD_BUILD 등록 export 인수 |
 | MySQL 게시 | 문서 계약 preflight, 고정 계획·staging·UUID/검수/시각 보호·원자 게시·응답 유실 복구 | 실제 서비스 DDL·기존 상품 baseline·담당 guard·권한/TLS/Primary |
 | 예약 재시도 | 단일 소유 파일 queue, due·Retry-After·한도·격리·token 수동 복구 | 지정 실행 호스트·보관/로그 운영 인수 |
-| 자동 발견·대조 | 원격 ready/게시 계획 ready 발견, 지정 snapshot과 Mongo Raw·접수/발행 상태 대조·repair | Bronze/Silver/Gold/MySQL까지의 전체 종단 대조 |
+| 자동 발견·대조 | 기존 ready/Raw 대조·repair 및 FLOW 단계 연결·고정 snapshot/Delta/SQL 근거 대조·fresh audit | 실제 worker/데이터 서비스 종단·Kafka 보관 인수 |
 | NiFi | REST 버전/bundle 대조·계획·STOPPED 생성·명시 시작/정지, REST 대역 시험 | 실제 버전/권한·수동 복구 확인 후 일정 활성화 |
 | 상태 이관·전달 | 정지/외부 백업 증거, 파일 hash/ID 보존 pack/verify/restore·task 경로 별칭, source release | 외부 DB/객체/Kafka/Delta 백업·복원·Linux/AWS 실제 재개 |
 
 ## 자동화 지원 경계
 
-현재 queue의 허용 작업은 `RECEIVE`, `INGEST`, `PUBLISH`, `RECONCILE`이다. Bronze/Silver/Gold 실행과 고정 게시 계획 생성을 자동으로 이어주는 전체 일정·의존성·실패 재개 연결은 아직 없다. 해당 CLI를 수동 실행할 수 있다는 사실로 전체 자동화 완료를 표시하지 않는다. Silver/Gold 등록은 담당 export를 검증·보관하며 서비스 `pipeline_runs` 직접 생성/상태 갱신 어댑터는 없다. export를 공식 운영 입력으로 인수할지 직접 어댑터를 추가할지 확정해야 한다.
+기존 RECEIVE/INGEST/PUBLISH/RECONCILE에 FLOW를 추가했다. [전체 실행기](flow_execution.md)가 INGEST→BRONZE→SILVER→GOLD→PREPARE→PUBLISH→RECONCILE을 봉인 입력·고정 버전·단계 receipt로 연결한다. 확인된 앞 단계는 재사용하고 실패 단계부터 재개한다. 새 flow/업무 입력은 Silver 부분 cursor의 scan_scope를 분리해 이전 실행의 행을 건너뛰지 않는다. fresh flow-audit는 원천·객체·Bronze/Silver/Gold·계획/보류·SQL 연결을 읽기 전용으로 재대조한다. 실제 전체 worker CLI/NiFi 종단 인수는 남아 있다. Silver/Gold 등록은 담당 export를 검증·보관하며 서비스 `pipeline_runs` 직접 생성/상태 갱신 어댑터는 없다. export를 공식 운영 입력으로 인수할지 직접 어댑터를 추가할지 확정해야 한다.
 
 queue는 지정 호스트 한 대 소유이며 분산 scheduler가 아니다. 상태 이관 도구는 외부 저장소 백업 자체나 Windows Spark checkpoint URI/다른 Kafka cluster offset 자동 변환을 수행하지 않는다. 이 지원 한계를 모두 필수 개발 누락으로 취급하지 않고 실제 배포 요구와 구분한다.
 
 ## 검증 근거
 
-- 최신 dev 병합 후 전체 회귀 **192개 / 74.540초 / OK**: `.runtime/post-dev-merge-regression-20261018.txt`.
+- FLOW 후속 구현 최종 전체 회귀 **218개 / 104.135초 / OK**: `.runtime/flow-regression-final.txt`. 이전 dev 병합 직후 192개/74.540초와 구분한다.
 - 실제 격리 MySQL **8.0.46**: UUID 재사용·롤백·COMMIT 응답 유실·guard 변경·과거 값 차단. 기존 Windows 서비스/VM 데이터 미접속.
 - 실제 로컬 Spark **4.0.1/Delta**: 고정 Gold export→게시 계획, 후속 Delta 행 제외. 실제 서버 클러스터 시험과 구분한다.
 - 코드 전달 묶음 140파일 checksum 확인, 묶음 내 게시 5개·운영 25개 테스트 재통과.
+- 후속 실제 Delta 연결·생산 대조 로직(파일 대역)과 격리 MySQL 대조 통과: `.runtime/flow-delta-v1/report.json`, `flow-audit-v1/report.json`, `flow-mysql-final/report.json`. 합성 스트림 65,498건 비교는 전체 ETL 성능 보장이 아니다.
 - 세부 결과·경계는 [2026-10-18 검증 기록](validation_20261018.md). 실제 NiFi는 REST 대역, 파일 이관은 로컬 시험이며 VM/AWS 외부 저장소 복원을 대신하지 않는다.
 
 이전 기록: 2026-10-16 이슈 보완 시험 122개, 2026-10-17 Gold 시험 162개는 당시 결과다. 저장 실제 journal 5건·반복 drain, Bronze 실제 로컬 Delta 3원천/3receipt/2격리, Silver/Gold 표본 3상품·9이미지 관계를 확인했다. Gold 실제 표본은 QUALITY_WAIT·현재 Offer 0이며 확인 가격/완전 준비 경로는 별도 fixture다. 이를 실제 데이터 확보율·추천 승인으로 확대하지 않는다.

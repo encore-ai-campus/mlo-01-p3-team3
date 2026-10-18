@@ -14,5 +14,6 @@
   "discover_remote": false,
   "publication_ready_directories": [],
   "reconciliation_snapshots": [],
-  "path_bindings": {}
+  "path_bindings": {},
+  "flow_directories": []
 }

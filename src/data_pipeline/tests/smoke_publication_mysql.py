@@ -73,6 +73,19 @@ def main():
         assert image and not image['active']
         report['checks'].append('same_plan_keeps_product_image_asset_publication_uuids')
         report['checks'].append('new_image_links_inactive_until_owner_activation')
+        from product_pipeline.operations.flow_audit import sql_plan_audit
+        with db.transaction():
+            audited=sql_plan_audit(plan,db)
+        assert audited['products']==1 and audited['images']==2
+        try:
+            with db.transaction():
+                db.update('product_images',dict(id=image['id']),dict(source_url='https://example.invalid/wrong-product'))
+                sql_plan_audit(plan,db)
+            raise AssertionError('same row counts with wrong image link accepted')
+        except Conflict as exc:
+            assert exc.code=='FLOW_SQL_IMAGE_LINK_CHANGED'
+        with db.transaction():sql_plan_audit(plan,db)
+        report['checks'].append('read_only_reconciliation_detects_wrong_product_image_link_and_rollback_preserves_evidence')
         # Owner state changes after staging must prevent a new plan commit.
         changed=copy.deepcopy(plan);changed['export_hash']='b'*64;changed['plan_id']=digest({k:v for k,v in changed.items() if k!='plan_id'})
         wrong={**guard,'product_active':False}
@@ -113,6 +126,17 @@ def main():
         assert db.one('SELECT COUNT(*) AS n FROM offer_snapshots')['n']==2;db.connection.rollback()
         report['checks'].append('older_price_name_cannot_overwrite_newer_confirmed_values')
         report['checks'].append('offer_and_history_conditions_are_preserved_with_existing_parent_uuid')
+        with db.transaction():
+            assert sql_plan_audit(newer,db)['offers']==1
+            assert sql_plan_audit(older,db)['history']==1
+        snapshot=db.one('SELECT * FROM offer_snapshots WHERE price_amount = 2000');db.connection.rollback()
+        try:
+            with db.transaction():
+                db.update('offer_snapshots',dict(id=snapshot['id']),dict(pricing_terms_json=canonical({'wrong':'terms'})))
+                sql_plan_audit(newer,db)
+            raise AssertionError('changed immutable pricing terms accepted')
+        except Conflict as exc:assert exc.code=='FLOW_SQL_PRICE_HISTORY_CHANGED'
+        report['checks'].append('reconciliation_checks_offer_parent_and_immutable_history_terms_without_overwriting_newer_values')
         counts={t:db.one('SELECT COUNT(*) AS n FROM `'+t+'`')['n'] for t in
                 ('products','assets','product_images','offers','offer_snapshots','pipeline_publications','pipeline_publication_staging')}
         db.connection.rollback();report.update(passed=True,counts=counts,product_id=original_id,port=port)

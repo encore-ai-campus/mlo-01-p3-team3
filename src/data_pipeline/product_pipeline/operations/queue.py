@@ -14,7 +14,7 @@ from ..contracts import digest, now, utc
 from ..errors import Conflict, PipelineError
 from ..files import atomic_json, lock, read_json
 
-KINDS = {'INGEST', 'PUBLISH', 'RECEIVE', 'RECONCILE'}
+KINDS = {'INGEST', 'PUBLISH', 'RECEIVE', 'RECONCILE', 'FLOW'}
 TERMINAL = {'SUCCEEDED', 'RETRY_EXHAUSTED', 'QUARANTINED'}
 
 

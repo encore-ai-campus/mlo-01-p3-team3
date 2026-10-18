@@ -58,3 +58,17 @@ MySQL과 Delta의 최종 계약 hash는 `5d7758a814f5711fc0910c997c7e4f5ddbe2a23
 파일 queue는 지정 실행 호스트 한 대의 소유다. 다중 호스트 분산 scheduler나 NiFi Primary 변경 때의 무조건적인 로컬 queue 자동 인계는 제공하지 않는다. task 경로 별칭은 지원하지만 Windows 로컬 Spark checkpoint 내부 URI를 Linux 운영 checkpoint로 자동 변환하지 않는다. 서비스의 pipeline_runs 직접 등록 어댑터와 전체 Bronze/서비스 원장 대조는 기존 별도 후속 범위로 남는다.
 
 따라서 코드 전달 묶음은 서버 인수 준비 산출물이다. 실제 서비스 운영 완료나 상위 설계의 모든 인수 조건 완료를 의미하지 않는다. 구현 시점에는 Git 작업을 수행하지 않았고, 이후 구현을 `460f6df`로 커밋했다. 최신 `origin/dev`(`22168b8`) 병합 커밋 `f85e59e`을 `feature/#13`에 푸시하고 원격 hash 일치를 확인했다. 병합 후 회귀 시험도 **192개/74.540초/OK**였으며 `.runtime/post-dev-merge-regression-20261018.txt`에 보존했다. 이 문서 후속 갱신 자체의 커밋·푸시를 뜻하지 않는다.
+
+## 후속 FLOW 자동 연결·종단 대조 시험
+
+2026-10-18, 문서 갱신 커밋 cdc4447 이후 후속 구현이다. 기존 CLI를 7단계 FLOW로 연결하고 고정 입력/hash·버전·receipt chain·실패 재개·정지 불명확 latch·fresh audit·저장소 backpressure를 추가했다. Silver discovery는 입력/normalizer/flow scope로 분리했다. 이번 후속 코드의 커밋·푸시는 아직 수행하지 않았다.
+
+- 실제 로컬 Spark 4.0.1/Delta: `.runtime/flow-delta-v1/report.json`, passed=true. 합성 원천 1건·이미지 관계 2건을 FileLedger/Objects/Publisher→Bronze→Silver→Gold→품질 보류로 연결했다. Gold commit 후 flow receipt 전 실패를 주입하고 앞 3단계 재사용·실패 단계 재개·최종 7단계 재사용을 확인했다. MySQL 쓰기 0은 미제공 업무 승인에 대한 정상 보류다. 명시 시험 adapter/로컬 lease 대역이며 실제 Kafka/Mongo/S3 또는 production worker 전체 CLI 시험이 아니다.
+- 운영 `live_audit` 함수 자체: `.runtime/flow-audit-v1/report.json`, passed=true. 실제 저장 Delta와 명시 Mongo/S3 파일 대역으로 원천/이벤트/Silver/Gold/보류 대응·이미지 객체 유실 탐지를 확인했다. 실제 외부 서비스 접속 0.
+- 격리 실제 MySQL 8.0.46: `.runtime/flow-mysql-final/report.json`, passed=true. 기존 게시 장애 시험에 더해 건수 유지 상태의 잘못된 이미지 URL·가격 이력 조건 변조·Offer 부모 관계 대조를 확인했다. 기존 Windows MySQL 서비스·VM 데이터 미접속.
+- 65,498건 합성 정렬 스트림: `.runtime/flow-stream-benchmark.json`, 0.795초·Python traced peak 5,553bytes. 비교 함수만의 측정이며 원본 JSON 파싱·정렬·Spark/MySQL·전체 ETL 처리량/필요 용량을 측정한 결과가 아니다.
+- Windows JVM 종료 시 기존 임시 JAR 삭제 잠금 경고가 남았지만 Delta 검증·프로세스 종료 코드 0 및 passed=true 보고서를 확인했다.
+
+실제 서비스 DDL/등록/guard, 실제 worker 전체 CLI/NiFi·Linux/VM·DB/객체/Kafka/Delta 종단·장애·전체 실데이터 규모 인수는 남아 있다. [FLOW 실행 가이드](flow_execution.md)의 지원 범위와 경로 이관 한계를 따른다.
+
+후속 최종 전체 회귀 시험: **218개 / 104.135초 / OK** (`.runtime/flow-regression-final.txt`). 새 FLOW 관련 26개를 포함한다. 문서/실행 명령의 설정 예시·참조 링크와 변경 범위를 별도로 점검했다.

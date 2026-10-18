@@ -123,7 +123,16 @@ def handlers(config,queue):
                 state=config['ingest_state'],config=spec['config'],config_sha256=spec['config_sha256'],
                 target_fingerprint=settings.fingerprint,repair_raw=True,reconciliation_period=spec['period']))
         return report
-    return dict(INGEST=ingest,PUBLISH=publish,RECEIVE=receive,RECONCILE=audit)
+    def flow(spec):
+        from .flow import load,run
+        root=path(spec['state']);checked(spec,'flow')
+        if root/'flow.json' != path(spec['flow']):raise Conflict('SCHEDULED_FLOW_PATH_CHANGED')
+        plan=load(root)
+        if plan['content_hash']!=spec['flow_id'] or plan['target']!=config['logical_target']:
+            raise Conflict('SCHEDULED_FLOW_TARGET_CHANGED')
+        if config['mode']!='live':raise PipelineError('FLOW_LIVE_CONFIG_REQUIRED')
+        return run(root)
+    return dict(INGEST=ingest,PUBLISH=publish,RECEIVE=receive,RECONCILE=audit,FLOW=flow)
 
 
 def discover_local_plans(directory,queue,config_file):

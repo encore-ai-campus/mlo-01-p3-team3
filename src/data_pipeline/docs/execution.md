@@ -71,7 +71,7 @@ smoke 출력 경로는 새 폴더여야 한다. 선택 상품과 이미지 사�
 - 실제 3노드 MongoDB majority+journal·장애 전환, S3 조건부 쓰기·동시 업로드·인증, Kafka 전달/복구는 시험 환경에서 인수해야 한다. 읽기 전용 preflight는 Mongo topology, 버킷 접근, 토픽 복제 수/ISR까지 확인하며 브로커 minISR 설정은 별도 확인한다.
 - 이번 버전은 단일 프로세스의 순차 상품 처리다. Mongo fencing은 있지만 실제 다중 실행 경쟁·전체 처리량/용량 시험은 남아 있다. SDK timeout은 설정했으나 여러 청크로 읽는 객체 전체 작업 시간의 고정 상한을 보장하지 않는다.
 - 입력 오류는 준비 단계 전체를 fail-fast한다. 잘못된 행을 제외한 부분 스냅샷은 미구현이다. JSONL 한 행 32MiB, 이미지 하나 20MiB, Mongo BSON 문서 16MiB 한도다. 큰 원문 외부 참조 fallback은 미구현으로 한도 초과는 격리한다.
-- LIVE cursor/마이크로배치·이미지 후속·S3 chunk/ready 전송은 이후 구현·로컬 검증했으며 [실행 가이드](live_execution.md)를 따른다. 이후 원격 ready 발견·파일 queue·예약 재시도·NiFi REST 제어·Silver/Gold 재평가·문서 기반 MySQL 게시까지 구현했다. [현재 현황](status.md)과 [운영 가이드](operations_execution.md)를 따른다. 실제 NiFi 일정 활성화와 전체 Spark 단계 자동 연결·종단 인수는 남아 있다.
+- LIVE cursor/마이크로배치·이미지 후속·S3 chunk/ready 전송은 이후 구현·로컬 검증했으며 [실행 가이드](live_execution.md)를 따른다. 이후 원격 ready 발견·파일 queue·예약 재시도·NiFi REST 제어·Silver/Gold 재평가·문서 기반 MySQL 게시까지 구현했다. [현재 현황](status.md)과 [운영 가이드](operations_execution.md)를 따른다. 후속 [FLOW 실행기](flow_execution.md)로 전체 Spark 단계 자동 연결·고정 범위 종단 대조를 구현했다. 실제 NiFi 일정 활성화와 전체 worker·데이터 서비스 종단 인수는 남아 있다.
 - 파일 원자적 교체·파일 fsync 및 POSIX 디렉터리 fsync를 사용한다. Windows/NAS 전원 장애 내구성은 대상 파일시스템 검증이 필요하다. 동결은 writer 잠금과 전후 해시에 의존하므로 입력 작업 종료를 운영 절차로 보장한다.
 - VM/Linux/EC2에 이식하도록 환경 설정을 분리했지만 실제 배포·권한·TLS 시험은 남아 있다. 이미지 버킷 역할과 승인된 endpoint를 확정해야 한다.
 

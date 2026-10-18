@@ -1,6 +1,6 @@
 # 다나와 수집 데이터 파이프라인 통합 설계
 
-2026-10-16 기준 **전체 구현 기준안**이며 2026-10-18 MySQL 게시·운영 구현 및 최신 dev 병합 상태를 갱신했다. FULL_EXPORT 스냅샷·이미지 객체 저장·MongoDB 접수/불변 원천·Kafka 발행/복구, LIVE 인계와 상품 Bronze/Silver/Gold 코드를 작성하고 로컬 검증했다. 문서 계약 기반 MySQL 게시·내구성 파일 예약 재시도·NiFi REST 제어·상태 이관도 구현했다. 실제 서비스 DDL/등록/guard 계약, 전체 Spark 단계 자동 연결·종단 대조, 서버 종단 쓰기/장애·운영 인수는 남아 있다. [현재 요구사항 대조](requirements_gap_review.md)와 [게시·운영 검증](validation_20261018.md)을 현재 완료 판단 기준으로 사용한다. 구현 범위·제약·검증 근거는 [첫 단계 실행 기록](execution.md), [Bronze 실행 기록](bronze_execution.md), [Silver 실행 기록](silver_execution.md), 관측 버전·운영 원장·서비스 키는 [데이터·복구 계약 v1](data_contract_v1.md)을 따른다.
+2026-10-16 기준 **전체 구현 기준안**이며 2026-10-18 MySQL 게시·운영 구현 및 최신 dev 병합 상태를 갱신했다. FULL_EXPORT 스냅샷·이미지 객체 저장·MongoDB 접수/불변 원천·Kafka 발행/복구, LIVE 인계와 상품 Bronze/Silver/Gold 코드를 작성하고 로컬 검증했다. 문서 계약 기반 MySQL 게시·내구성 파일 예약 재시도·NiFi REST 제어·상태 이관도 구현했다. 후속 FLOW로 전체 Spark 단계 자동 연결·고정 범위 종단 대조도 구현했다. 실제 서비스 DDL/등록/guard 계약, 실제 전체 worker/서버 종단 쓰기·장애·운영 인수는 남아 있다. [FLOW 실행](flow_execution.md)을 따른다. [현재 요구사항 대조](requirements_gap_review.md)와 [게시·운영 검증](validation_20261018.md)을 현재 완료 판단 기준으로 사용한다. 구현 범위·제약·검증 근거는 [첫 단계 실행 기록](execution.md), [Bronze 실행 기록](bronze_execution.md), [Silver 실행 기록](silver_execution.md), 관측 버전·운영 원장·서비스 키는 [데이터·복구 계약 v1](data_contract_v1.md)을 따른다.
 
 현재 인프라 기준의 접수·이벤트·재평가·최신성 보강은 [보강 계약 v1.1](design_amendment_v1_1.md)을 따른다. 이 문서는 전체 흐름을 요약하고 세부 새 필드/상태/게시 규칙을 중복 정의하지 않는다.
 
@@ -27,8 +27,8 @@
 | 신규 스냅샷 단계 | FULL_EXPORT 구현·로컬 검증 | 일관된 입력 시점 고정·해시·건수·이미지 검증 |
 | 신규 적재 단계 | 어댑터 구현·대역 검증, 실제 서버 인수 대기 | 이미지 업로드, 불변 원천 적재, 처리 상태, 재실행 |
 | 신규 발행·복구 단계 | 어댑터 구현·대역 검증, 실제 서버 인수 대기 | 저장 확인, Kafka 전달 확인, 미발행 재대조 |
-| Spark·게시 | Bronze/Silver/Gold 및 문서 계약 MySQL 게시 구현·로컬 검증, 실제 서버 인수 대기 | 실제 DDL/guard·업무 입력 인수, 전체 자동 단계 연결 |
-| NiFi·예약 실행 | 파이프라인 파일 queue·due/재시도·ready 발견·NiFi REST 제어 구현 | 실제 버전/권한·수동 복구 후 일정 활성화, Spark 전체 자동 연결 |
+| Spark·게시 | Bronze/Silver/Gold 및 문서 계약 MySQL 게시 구현·로컬 검증, 실제 서버 인수 대기 | 실제 DDL/guard·업무 입력 인수, FLOW 전체 worker 종단 인수 |
+| NiFi·예약 실행 | 파이프라인 파일 queue·due/재시도·ready 발견·NiFi REST 제어 구현 | 실제 버전/권한·수동 복구 후 일정 활성화, FLOW의 실제 실행 인수 |
 
 현재 파일의 products는 추출·정규화 중간 결과다. MySQL products나 완성된 Silver와 같은 데이터셋이 아니다. PyMongo가 개발 가상환경에 설치된 것과 파이프라인 구현 완료도 구분한다.
 

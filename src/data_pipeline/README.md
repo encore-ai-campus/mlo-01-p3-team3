@@ -28,7 +28,7 @@
 - [Gold 이후 요구사항·누락 대조](docs/requirements_gap_review.md): 구현/외부 입력/미구현/서버 미검증을 구분한 후속 목록.
 - [서버 배포·인계 가이드](docs/deployment.md): 기능 추가와 함께 갱신하는 실행 위치·권한·초기 적재·재개·백업 절차.
 
-전체 자동화는 아직 인수 전이다. 현재 queue는 RECEIVE/INGEST/PUBLISH/RECONCILE만 지원하며 Bronze/Silver/Gold 실행과 게시 계획 생성까지의 자동 의존성 연결·종단 대조는 남아 있다. 전체 회귀 192개와 로컬 MySQL/Delta 통과를 실제 서버 운영 완료로 해석하지 않는다.
+전체 자동 실행 연결과 고정 범위 종단 대조는 [FLOW 실행기](docs/flow_execution.md)로 추가했다. queue는 기존 작업과 FLOW를 지원하며 INGEST→BRONZE→SILVER→GOLD→PREPARE→PUBLISH→RECONCILE을 완료 증거로 연결한다. 실제 서버/NiFi 적용·전체 실데이터 성능 인수는 남아 있다. 로컬 연결 시험과 실제 서비스 운영 완료를 구분한다.
 
 ## 2026-10-18 게시·운영·서버 인계 추가
 

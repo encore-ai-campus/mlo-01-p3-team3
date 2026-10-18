@@ -1,0 +1,19 @@
+{
+  "contract_version": 1,
+  "mode": "live",
+  "target": "replace-with-deployment-identity",
+  "as_of": "2026-10-18T00:00:00Z",
+  "snapshot": "/srv/pipeline/snapshots/batch-001",
+  "files": {
+    "pipeline_config": "environment.local.json",
+    "bronze_config": "bronze.local.json",
+    "silver_config": "silver.local.json",
+    "silver_inputs": "/srv/pipeline/owner/silver-inputs.json",
+    "silver_registration": "/srv/pipeline/owner/normalization-registration.json",
+    "gold_config": "gold.local.json",
+    "gold_inputs": "/srv/pipeline/owner/gold-inputs.json",
+    "gold_registration": "/srv/pipeline/owner/gold-registration.json",
+    "guard_hashes": "/srv/pipeline/owner/publication-guard-hashes.json",
+    "mysql_config": "mysql_publication.local.json"
+  }
+}

@@ -54,3 +54,7 @@ python run_operations.py migration-restore --bundle /srv/migration/bundle-001 \
 5. 명시적인 소량 수동 재개에서 성공한 원천/이벤트/객체/SQL UUID가 재생성되지 않는지 확인한 뒤 NiFi를 활성화한다.
 
 서버 백업·복원 자체, EC2 IAM/네트워크, 다른 Kafka 클러스터로의 offset 전환, 실제 장애 복원은 현 로컬 대역 시험으로 완료 처리하지 않는다. 복원 결과는 `RESTORED_REQUIRES_DEPLOYMENT_PREFLIGHT`이며 자동 시작하지 않는다.
+
+## FLOW 상태 보존 경계
+
+FLOW 상태에는 봉인 snapshot/업무 입력 경로, 개별 출력 artifact 경로와 설정 hash가 포함된다. 원래 경로 namespace와 공용 lake URI를 목적지에 보존해 인수해야 한다. 기존 task path_bindings가 FLOW 내부의 모든 파일 경로·Spark URI까지 자동 변환하는 것은 아니다. 경로/설정 내용 변경이 필요하면 기존 flow 증거를 보관하고 같은 확정 원천·업무 ID로 새 flow를 준비해 기존 적재/Delta/SQL receipt의 멱등성을 대조한다. 증거 JSON을 임의 치환해 같은 flow ID로 성공 처리하지 않는다. 실제 VM/AWS 전환 인수는 남아 있다.
