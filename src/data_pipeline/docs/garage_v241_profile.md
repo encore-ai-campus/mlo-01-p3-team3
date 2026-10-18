@@ -2,7 +2,7 @@
 
 ## 객체의 내용 주소 계약
 
-Garage 2.4.1의 원자적 조건부 PUT을 가정하지 않는다. 기존 conditional 프로필은 유지하고 이 환경은 명시적으로 garage_v241을 선택한다. [원인 분석](garage_conditional_write_analysis_20261018.md)과 [보완 검증](garage_v241_validation_20261018.md)을 함께 확인한다.
+Garage 2.4.1의 원자적 조건부 PUT을 가정하지 않는다. 기존 conditional 프로필은 유지하고 이 환경은 명시적으로 garage_v241을 선택한다. 아래 원인·실제 검증 근거와 [전체 실서버 검증](service_validation_20261018.md)을 함께 확인한다.
 
 Garage 프로필은 다음 키만 허용한다.
 
@@ -65,3 +65,19 @@ python run_operations.py release-verify --bundle .runtime/garage-v241-release
 ```
 
 같은 버킷/기존 키/ID 및 중단 상태를 보존한다. Mongo/Kafka/MySQL 접속·DDL·업무 입력 인수와 전체 FLOW 시험은 별도다. 자동 테스트·실제 객체 시험·단일 Driver Delta 시험·전체 Worker/업무 잠금 시험을 구분한다.
+
+
+## 인프라 가용성과 검증 근거
+
+팀 TEAM-S3-GUIDE 기준 .141/.142:8443은 같은 Garage 클러스터이며 버킷은 pj3-data다. consistent/RF2의 한 노드 장애 시 읽기는 가능하지만 쓰기는 503으로 거절된다. endpoint 교체가 쓰기 가용성을 복구하지 않는다. 이미지·인계 청크·Delta·checkpoint가 같은 용량을 쓰며 문서의 약 80GB는 엄격한 quota가 아니다. 실패 단계를 보존하고 양 노드 복구 뒤 제한적으로 재개한다.
+
+고정 S3A JAR은 hadoop-aws 3.4.2와 AWS bundle 2.29.52이며 기존 /opt/pj3/s3-clients/hadoop-3.4.2/ 배치를 사용한다. NiFi Controller Service의 키는 Python child에 자동 주입되지 않는다. Java/Python 각각 역할별 보호 파일을 메모리에서 읽어야 한다.
+
+초기 실패는 SDK before-send에서 If-None-Match: *의 존재를 확인했음에도 PUT 200과 다른 본문의 GET을 관측한 것이다. Caddy는 loopback reverse_proxy 구성이었고, [Garage v2.4.1 PUT 구현](https://github.com/deuxfleurs-org/garage/blob/v2.4.1/src/api/s3/put.rs)은 해당 조건을 판정하지 않는다. GET/HEAD 조건 처리와 혼동하지 않는다. 프록시 전 구간 패킷을 캡처한 시험은 아니다. 이후 버전에 대한 일반 판정도 아니다.
+
+- 초기 실패: [NiFi](verification/garage_20261018/nifi-result.json), [Spark](verification/garage_20261018/spark-result.json), [조건 헤더 진단](verification/garage_20261018/nifi-header-diagnosis.json). 시험 객체 삭제/반대 endpoint 404 확인. 실패를 성공으로 재분류하지 않는다.
+- 내용 주소 프로필: [NiFi](verification/garage_20261018/nifi-profile-result.json), [Spark](verification/garage_20261018/spark-profile-result.json). 각각 2개 전용 객체의 최초 저장·재사용·반대 endpoint checksum·PUT 응답 유실 후 GET 복구·다른 바이트 사전 차단·삭제를 확인했다. [실제 코드](server_setup/pipeline_garage_profile_verify.py).
+- Delta 4.4.1 local[1]: [최종 결과](verification/garage_20261018/delta441-result.json). 최초 1행→MERGE 2행, version 0의 1행, 새 세션의 2행, prefix 삭제를 구조화 proof로 대조했다. [Scala](server_setup/garage_delta_verify.scala), [실행기](server_setup/pipeline_garage_delta_verify.py).
+- 이전 실패: [Delta 4.1.0 클래스 오류](verification/garage_20261018/delta410-result.json), [의존성 오분류 차단](verification/garage_20261018/delta441-blocked.txt), [실패 prefix의 빈 상태 조사](verification/garage_20261018/delta-prefix-audit.json). 이후 Worker 3대·실제 업무 잠금/엔진 시험은 실서버 검증 문서를 따른다.
+
+최종 전체 자동 회귀는 252개이며 초기 244/245개 결과와 합산하지 않는다. 공개 결과 JSON과 검증 코드는 유지하고, 중복 초기 계획·분석 보고는 이 절로 통합했다. 저장소 자체 WORM이나 다중 Driver 자동 인계를 검증한 것으로 확대하지 않는다.

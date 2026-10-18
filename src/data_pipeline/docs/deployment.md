@@ -1,30 +1,32 @@
 # 서버 배포·인계 가이드
 
-최신 VM 코드·venv·제한 SSH·NiFi 검증 경로는 [실서버 소량 검증](service_validation_20261018.md)의 최종 128dbd37... 릴리스를 따른다. 운영 입력이 없는 시험과 전체 운영 인수를 구분하며, 검증 전용 큐/launcher를 운영 큐로 자동 전환하지 않는다.
-
-현재 VM의 실제 배포·보호 설정 경로와 검증 결과는 [2026-10-18 전용 실행 환경 기록](runtime_validation_20261018.md)을 우선한다. 아래 최초 작성 당시의 미배포 설명은 과거 기록이다. 업무 적재·전체 단계 인수와 런타임 준비 완료를 구분한다.
-
-Garage 2.4.1은 [전용 실행 프로필](garage_v241_profile.md)과 [최신 검증](garage_v241_validation_20261018.md)을 우선 확인한다. 아래 과거 배포물 전송 기록과 이번 보완을 포함한 새 소스 배포를 구분한다.
-
-2026-10-16. 기능 단계별로 이 가이드와 [README](../README.md#서버-배포-순서)를 함께 갱신한다. 서버 프로그램 설치·인증서·방화벽은 인프라 담당 범위다. 이 문서는 준비된 서버에 코드·설정·작업을 배치하는 절차이며 실제 배포 완료 기록이 아니다. 실제 IP·계정·토큰·키는 Git 밖의 환경별 설정으로 관리한다.
+상품 파이프라인을 준비된 서버에 배치하는 절차다. 인프라 설치·서비스 승인·추천 연동은 다른 담당자 책임이다. 현재 확인된 결과와 최종 release/venv/SSH 경로는 [실서버 검증](service_validation_20261018.md)을 따른다. 운영 입력이 없는 기술 시험을 전체 운영 인수로 취급하지 않는다.
 
 ## 1. 단계별 실행 가능 상태
 
-| 단계 | 현재 진입점 | 상태 |
+| 단계 | 현재 확인 | 운영 전 남은 인수 |
 |---|---|---|
-| 수집 | 별도 크롤러 배포물 | 이 브랜치에 없음. 완료 export로 인계 |
-| 스냅샷·원천 적재 | run_pipeline.py의 prepare/plan/preflight/ingest | 코드·로컬 테스트 있음. 실제 서버 소량 시험 필요 |
-| Bronze | run_bronze.py | 코드·로컬 Delta 시험 있음. 실제 Kafka/Mongo/lake 인수 필요 |
-| Silver | run_silver.py | 고정 Bronze·담당 입력 정규화/재평가 구현·로컬 검증. 실제 서버 인수 필요 |
-| Gold | Spark 실행 서버 | 고정 Silver → Gold Delta/export. 실제 서버 인수 대기 |
-| MySQL 게시 | 게시/Python 실행 서버 | 코드 구현. 실제 서비스 DDL/guard/TLS 대조 후 고정 계획 게시 |
-| NiFi 자동 실행 | NiFi/Python 단일 실행 호스트 | REST 생성/명시 기동 구현. 버전·권한·수동 복구 smoke 후 실제 적용 |
+| snapshot·이미지·Mongo·Kafka·Bronze | 실제 3상품/9이미지 관계 적재·반복·재전달 | 운영 토픽/ACL·전체 데이터·장애/부하 |
+| Silver·Gold | 실제 Mongo/Garage의 엔진·품질 대기·재사용 | 담당 등록/매핑/검수 입력과 운영 CLI |
+| MySQL 게시 | 실제 MySQL01 별도 문서 스키마에서 9개 시나리오 | 실제 서비스 DDL·baseline·guard·네트워크 TLS |
+| NiFi | 제한 SSH·실제 timer·정지 | 승인 업무 입력의 전체 FLOW·운영 일정 활성화 |
+| LIVE·상태 이관 | 파일/대역 및 VM 간 ready-last 전송 | 실제 동시 수집·외부 저장소 백업/복원·환경 이전 |
 
-현재 19대/20대 설계 차이와 논리 서버명은 [현황](status.md)에 명시했다. 실제 VM 배정은 담당자와 확인하고 역할명으로 연결한다. 2026-10-18 실제 서버의 최소 읽기 전용 점검 결과와 실행 차단 조건은 [서버 사전 점검 기록](server_preflight_20261018.md)을 따른다. 코드 전송만 수행됐으며 설치·실제 적재·NiFi 활성화는 하지 않았다.
+## 현재 VM의 보호 설정
+
+원천 DB는 승인된 `pj3_products_raw`, 공용 잠금 DB는 `pipeline_ops`다. `pipeline_ingest`는 원천 DB readWrite와 admin clusterMonitor, `pipeline_spark`는 원천 DB read와 ops DB readWrite 및 clusterMonitor다. 현재 DB 단위 역할이며 컬렉션별 최소 권한 커스텀 역할은 아니다. `bronze_writer_leases`/`pipeline_writer_leases`에 TTL을 두지 않는다.
+
+Mongo01의 계정 원본은 `/etc/pj3-secrets/product-pipeline/mongodb-accounts.json`(root 0600)이다. 서비스별 설정은 `/var/lib/pj3/product-pipeline/{nifi,spark}/config/`(0700), 파일은 서비스 소유 0600이다.
+
+- `mongo-ca.crt`: TLS CA. 내부 Replica Set hostname을 각 환경 DNS/hosts로 해석할 수 있어야 한다.
+- `mongo-accounts.json`: NiFi는 ingest, Master는 ingest와 spark. 관리자 자격을 애플리케이션에 전달하지 않는다.
+- `kafka-python.json`: 역할별 P12/CA 참조. Java Spark Kafka 옵션과 형식이 다르다.
+
+설정 파일 존재만으로 환경변수나 원격 실행이 자동 주입되지는 않는다. 운영 계정으로 읽기 전용 preflight를 통과한 뒤 명시적으로 소량 쓰기를 인수한다. 보호 파일의 내용을 출력하거나 Git에 복사하지 않는다. S3의 계정/CA/JAR 조건은 [Garage 프로필](garage_v241_profile.md)을 따른다.
 
 ## 2. 실행 위치와 데이터
 
-실제 점검에서 확인된 런타임·인증·접속 문제에 대한 사용자 실행 절차는 [서버 준비 명령어](server_setup_commands.md)를 따른다. 해당 명령서는 실행 계획이며 설치 완료 기록이 아니다. 이후 제공된 팀 저장소 가이드는 기존 Garage S3 구성을 명시하므로 [Garage 적용 검토](garage_s3_integration.md)에 따라 재사용하며 신규 저장소 설치안은 적용하지 않는다.
+현재 VM에서는 서비스 계정별 불변 release와 전용 venv를 사용한다. 새 환경은 아래 설치 절차로 준비하고 Garage 설정은 전용 프로필을 따른다. 기존 검증 큐/launcher를 운영 것으로 전환하지 않는다.
 
 | 역할 | 실행 위치 | 보존할 로컬 상태 | 접속 대상 |
 |---|---|---|---|
@@ -32,8 +34,8 @@ Garage 2.4.1은 [전용 실행 프로필](garage_v241_profile.md)과 [최신 검
 | 원천 적재 | 완료 export를 읽을 수 있는 PC/Python 서버 | sealed snapshot·audit·최초 등록 사본·run report | MongoDB·이미지 저장소·Kafka |
 | Bronze Driver | Spark Driver 서버에서 client 모드 제출 | 로그·한도 있는 scratch | Kafka·MongoDB·lake·Master/Workers |
 | Spark Executor | Spark Workers | shuffle/scratch·worker 로그 | Kafka·lake·Driver |
-| Silver Driver(예정) | 기존 Spark 역할의 별도 Silver 작업 | 로그·한도 있는 batch buffer | Bronze·Mongo 운영 상태·고정 의존 입력·Silver |
-| NiFi(예정) | 일정 관리 서버 | 실행 이력/제어 상태 | 검증된 원천 적재·Spark 제출 명령 |
+| Silver Driver | 기존 Spark 역할의 별도 Silver 작업 | 로그·한도 있는 batch buffer | Bronze·Mongo 운영 상태·고정 의존 입력·Silver |
+| NiFi | 일정 관리 서버 | 실행 이력/제어 상태 | 검증된 원천 적재·Spark 제출 명령 |
 
 Bronze·Silver는 서로 다른 테이블/작업/checkpoint를 사용한다. **한 Silver 테이블의 신규 입력과 재평가는 하나의 Silver Driver가 소유**한다. Driver 메모리와 Master 데몬·다른 작업의 자원 경쟁은 배포 전에 측정한다.
 
@@ -42,15 +44,15 @@ Worker가 Driver의 C: 경로를 읽을 수 있다고 가정하지 않는다. �
 ## 3. 설치·권한·설정
 
 1. 배포 커밋을 고정하고 코드 hash·의존성·설정 버전을 기록한다. 미커밋 설계를 서버의 기능으로 취급하지 않는다.
-2. 대상 OS에서 가상환경을 새로 만든다. 원천 적재는 requirements.lock.txt, Spark는 requirements-bronze.lock.txt를 설치한 뒤 해당 디렉터리에서 `python -m pip install --no-deps -e .`를 실행한다. Silver 의존성이 달라지면 이 절도 갱신한다.
-3. Python·Java·Spark·Delta·Scala·Hadoop·hadoop-aws/AWS SDK를 호환 조합으로 배포한다. 로컬 검증은 Python 3.13.14 / Java 21 / Spark 4.0.1 / Delta 4.0.1이며 Ubuntu VM 검증을 대신하지 않는다. JAR·Python 환경을 Driver/Worker 필요 범위에 일관 배포한다.
+2. 대상 OS에서 가상환경을 새로 만든다. 원천 적재는 requirements.lock.txt, 현재 VM Spark는 requirements-spark-server.txt를 설치한 뒤 해당 디렉터리에서 `python -m pip install --no-deps -e .`를 실행한다. 게시 역할은 requirements-publication.lock.txt를 추가한다. 로컬 Spark 4.0.1 전용 lock/extras를 현재 VM에 적용하지 않는다.
+3. Python·Java·Spark·Delta·Scala·Hadoop·hadoop-aws/AWS SDK를 호환 조합으로 배포한다. 로컬 시험은 Python 3.13.14 / Java 21 / Spark 4.0.1 / Delta 4.0.1, 실제 VM 시험은 Python 3.14.4 / Java 21 / Spark 4.1.3 / Delta 4.4.1이다. VM의 고정 JAR과 Delta 전이 의존성은 Garage 프로필을 따른다. JAR·Python 환경을 Driver/Worker 필요 범위에 일관 배포한다.
 4. 비밀은 제한 권한 파일/환경변수/역할로 주입한다. 프로세스 관리기의 작업 디렉터리·환경·계정·로그 위치를 명시하고 Git 예시에 계정·개인키를 넣지 않는다.
 
 | 작업 | 권한·환경 |
 |---|---|
-| 원천 적재 | PIPELINE_MONGO_URI: 접수/원천/감사 쓰기·인덱스·primary/majority 조회. PIPELINE_S3_ENDPOINT·이미지 버킷: 조회·검증·조건부 쓰기. PIPELINE_KAFKA_CONFIG: metadata·발행 |
+| 원천 적재 | PIPELINE_MONGO_URI: 접수/원천/감사 쓰기·인덱스·primary/majority 조회. PIPELINE_S3_ENDPOINT·이미지 버킷: 조회·검증·프로필별 불변 쓰기(현재 Garage는 내용 주소). PIPELINE_KAFKA_CONFIG: metadata·발행 |
 | Bronze | PIPELINE_MONGO_URI: raw_products 읽기. BRONZE_KAFKA_OPTIONS: 클러스터/토픽 metadata·메시지 읽기. BRONZE_SPARK_OPTIONS: lake/checkpoint 읽기·쓰기·S3A/TLS·자원 |
-| Silver(예정) | Bronze 읽기, ingestion_observations의 연결·image vector/revision 읽기, 고정 매핑/검수/링크/사전 export 읽기, Silver·input snapshot·checkpoint 쓰기, 등록된 NORMALIZATION run 연동 |
+| Silver | Bronze 읽기, ingestion_observations의 연결·image vector/revision 읽기, 고정 매핑/검수/링크/사전 export 읽기, Silver·input snapshot·checkpoint 쓰기, 등록된 NORMALIZATION run 연동 |
 
 Silver는 원천·업로드 vector·서비스 승인 원장을 수정하지 않는다. 실제 pipeline_runs 등록 인터페이스/DDL이 없으면 로컬 fixture 시험과 운영 실행을 구분하고 등록 연동을 먼저 인수한다.
 
@@ -120,19 +122,19 @@ Bronze는 `BRONZE_LEASE_MONGO_URI`의 별도 ops 계정을 추가한다. 인프�
 
 Gold 결과에는 원천/이미지 URL/객체 키/checksum/선택 근거와 확인 상태를 보존한다. 백업에는 Gold 데이터·_delta_log뿐 아니라 선택 페이지·입력/등록 export·완료 manifest와 공유 checkpoint를 포함한다. 새 스키마를 기존 root에 덮어쓰거나 Delta 로그를 삭제하지 않는다. 실제 인수 전 NiFi 일정이나 MySQL 게시에 자동 연결하지 않는다.
 
-MySQL 문서 계약 기반 DDL preflight/staging/게시 guard/기존 UUID·검수 보존의 게시기는 구현했고 실제 격리 MySQL로 검증했다. 실제 서비스 DDL·기존 baseline·guard 공급·권한/TLS/Primary 인수는 필요하다. 운영 게시 명령은 서비스 DDL을 생성하거나 검수 원장을 수정하지 않는다. [게시 실행](mysql_publication.md)을 따른다. [요구사항 누락 대조](requirements_gap_review.md)에 서버 시험 외의 남은 구현을 기록했다. SSH hostname 조회 성공은 이 단계의 실제 클러스터 인수와 별개다.
+MySQL 문서 계약 기반 DDL preflight/staging/게시 guard/기존 UUID·검수 보존의 게시기는 구현했고 실제 격리 MySQL로 검증했다. 실제 서비스 DDL·기존 baseline·guard 공급·권한/TLS/Primary 인수는 필요하다. 운영 게시 명령은 서비스 DDL을 생성하거나 검수 원장을 수정하지 않는다. [게시 실행](mysql_publication.md)을 따른다. [요구사항 누락 대조](issue13_acceptance.md)에 서버 시험 외의 남은 구현을 기록했다. SSH hostname 조회 성공은 이 단계의 실제 클러스터 인수와 별개다.
 
 
-## 2026-10-18 게시·운영 확장 배포 순서
+## 게시·운영 배포 순서
 
 1. 검토한 source release를 새 목적지에 복사하고 `python run_operations.py release-verify --bundle RELEASE_DIR`로 hash를 확인한다. 이 묶음은 src/data_pipeline 기준이며 상위 docs/design·인프라 설치·수집 데이터·비밀·가상환경을 포함하지 않는다. 상위 문서는 저장소의 검토한 버전을 함께 참고한다.
-2. Python 3.13/Java 21/Spark 4.0.1/Delta 4.0.1의 검증 조합을 우선 사용해 대상 OS에서 새 venv를 만든다. `requirements.lock.txt`, Spark용 `requirements-bronze.lock.txt`, 게시용 `requirements-publication.lock.txt`를 설치한다. Linux/VM에서 import/CLI 도움말·자동 테스트를 다시 확인한다.
+2. 대상 OS에서 새 venv를 만든다. 현재 VM은 위 3절의 서버 조합과 `requirements-spark-server.txt`를 사용한다. 원천 역할은 `requirements.lock.txt`, 게시 역할은 `requirements-publication.lock.txt`를 설치한다. Linux/VM에서 import/CLI 도움말·자동 테스트를 다시 확인한다.
 3. MySQL 담당이 문서 v1 계약과 실제 DDL을 대조한다. `sql/publication_reference_v1.sql`을 서비스 DB에 무조건 실행하지 않는다. 승인된 DDL, 최소 권한 계정·현재 Primary·TLS/CA·논리 target과 담당 guard를 준비한다.
 4. `run_publication.py preflight` → 고정 Gold 계획 prepare → 소량 `publish --apply` → 동일 계획 재실행·장애 복구를 검증한다. 새 image active/서비스 검수는 담당이 관리한다. 자세한 명령은 [MySQL 게시](mysql_publication.md)를 따른다.
 5. `operations.local.json`에 단일 queue 소유 서버·영속 디스크·감사 경로·전용 handoff bucket을 설정한다. 초기에는 remote discovery를 끄고 명시 등록한 작은 작업으로 tick·실패 재시도를 검증한다.
-6. 같은 설정의 수동 실패→재시도 성공 receipt를 확인한 뒤 [NiFi REST 절차](operations_execution.md)로 STOPPED 프로세서를 생성한다. 실제 버전/bundle/실행 권한을 확인하고 명시적으로 기동한다. 현재 로컬에서는 NiFi 대역만 시험했으므로 실제 서버 기동을 완료로 기록하지 않는다.
+6. 같은 설정의 수동 실패→재시도 성공 receipt를 확인한 뒤 [NiFi REST 절차](operations_execution.md)로 STOPPED 프로세서를 생성한다. 실제 버전/bundle/실행 권한을 확인하고 명시적으로 기동한다. 현재 검증용 NiFi의 timer/정지는 실제 확인했다. 승인 입력의 전체 FLOW 및 운영 일정 활성화는 별도 인수다.
 7. VM→AWS 이전은 [이관 절차](state_migration.md)의 정지·외부 백업/복원·논리 ID/hash 대조·파일 state 복원을 먼저 수행한다. fingerprint를 임의로 바꾸거나 RUNNING/공용 lease/stream checkpoint를 지워서 재개하지 않는다.
 
 기존 queue에 FLOW를 추가했다. [전체 단계 실행](flow_execution.md)의 flow-prepare→flow-run 또는 flow_directories→tick으로 Bronze/Silver/Gold·게시 계획·SQL·고정 범위 대조를 연결한다. 실제 Driver 위치/환경·권한·NiFi 종료 정책과 전체 worker CLI의 소량/장애 인수는 필요하다. Silver/Gold 등록은 담당 export 방식 인수 또는 직접 어댑터의 계약 확정이 필요하다.
 
-실제 서버 배포·상품 적재·NiFi 활성화·관리자 비밀 전송은 이번 로컬 구현에서 수행하지 않았다. 기존 수집 PC와 MongoDB 클러스터 구성은 유지한다.
+실제 소량 기술 시험과 전체 운영 인수의 구분은 실서버 검증 문서를 따른다. 검증용 launcher·queue·시험 원장을 운영 것으로 자동 전환하지 않는다.

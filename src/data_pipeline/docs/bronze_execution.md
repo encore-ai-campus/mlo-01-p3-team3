@@ -134,3 +134,8 @@ Windows 검증에서 초기 경로 표현 차이와 Python worker 종료를 재�
 아직 남은 시험: 실제 Kafka를 통한 available-now/연속 수신·checkpoint 재시작, MongoDB 장애 전환과 서로 다른 호스트의 중복 lease 획득 차단·heartbeat 장애·강제 종료 후 수동 복구, 실제 lake의 Delta commit/재부팅 보존·S3A 인증, 클러스터 네트워크/Worker 배포, 전체 초기 데이터 건수/처리량 대조. 로컬 성공을 VM 서버 연동 완료로 표현하지 않는다.
 
 공식 기준: [Spark Kafka source](https://spark.apache.org/docs/4.0.1/streaming/structured-streaming-kafka-integration.html), [Structured Streaming foreachBatch](https://spark.apache.org/docs/4.0.0/streaming/apis-on-dataframes-and-datasets.html), [Delta MERGE](https://docs.delta.io/delta-update/), [Spark/Delta 호환표](https://docs.delta.io/releases/), [Delta 저장소](https://docs.delta.io/delta-storage/).
+
+
+## 로컬 호환성 기록
+
+초기 Delta CREATE의 file:///와 Hadoop file:/ 표현 차이는 Hadoop 경로로 통일했다. Windows Python worker 종료 문제 때문에 Driver의 JSON을 Spark SQL from_json으로 전달하며, Executor Python worker로 원문을 다시 직렬화하지 않는다. 초기 구현 계획은 완료되어 이 실행 가이드로 통합했다.

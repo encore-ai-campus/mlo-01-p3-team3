@@ -91,3 +91,13 @@ NiFi 검증 그룹 ID는 `4e743959-01a1-1000-bc08-5f3d31a5c4bd`, processor ID는
 - [소량 실제 서비스 실행기](server_setup/pipeline_live_acceptance.py), [Silver/Gold 기술 시험](server_setup/pipeline_silver_gold_technical.py), [VM 전송 시험](server_setup/pipeline_transport_verify.py).
 - [Worker Scala](server_setup/worker_delta_verify.scala), [Worker 실행기](server_setup/pipeline_worker_delta_verify.py), [문서 MySQL 시험](server_setup/mysql_reference_verify.py).
 - [SSH 구성·검증 기록 코드](server_setup/pipeline_ssh_trigger_verify.py), [NiFi 원격 시험](server_setup/pipeline_nifi_remote_verify.py). 일부 검증 코드에는 이번 run의 경로가 고정돼 있다. 일반 운영 설치기가 아니며 재실행할 때 새 경로/정확한 인터페이스와 결과 판정을 확인한다.
+
+
+## 실행 환경 준비·복제 확인 근거
+
+최종 배포 전 준비 단계에서 MongoDB 9.0.4 rs-products의 Primary 1/Secondary 2, majority+journal ACK와 세 멤버 majority 읽기, 실제 MongoLease 획득/갱신/중복 writer 차단을 확인했다. 전용 시험 컬렉션과 소유 lease만 정리했다. 노드 중지·선거·디스크 장애 시험은 수행하지 않았다.
+
+- [Replica Set 조회](verification/runtime_20261018/mongo-replica.json), [계정 역할/인증](verification/runtime_20261018/mongo-accounts.json), [실제 복제·잠금 결과](verification/runtime_20261018/mongo-client-verification.json).
+- [NiFi 초기 배포](verification/runtime_20261018/nifi-deploy.json), [Master 초기 배포](verification/runtime_20261018/spark-deploy.json), [NiFi 접속](verification/runtime_20261018/nifi-connections.json), [Master 접속](verification/runtime_20261018/spark-connections.json), [운영 토픽 최초 조회](verification/runtime_20261018/kafka-topic-audit.json). 이 준비 단계 결과의 ce456c2f... release는 위 최종 128dbd37...보다 이전이다.
+
+현재 계정·보호 파일 위치는 [배포 가이드](deployment.md#현재-vm의-보호-설정), Garage 조건부 쓰기 실패와 프로필 보완의 성공/실패 근거는 [Garage 프로필](garage_v241_profile.md#인프라-가용성과-검증-근거)로 모았다. 검증 코드와 공개 JSON은 삭제하지 않았다.

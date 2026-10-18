@@ -90,4 +90,4 @@ python -m tests.smoke_gold_delta \
 
 원본 Silver를 변경하지 않는 새 경로를 지정한다. 생성한 cli-fixtures는 --rehearse용 FIXTURE 등록이며 운영에 사용할 수 없다. Windows PowerShell은 JSON 날짜를 DateTime으로 자동 변환할 수 있으므로 --as-of에는 정확한 ISO UTC 문자열을 전달한다.
 
-실제 서버 Mongo/lake/Spark, 다중 호스트 중복 실행, 대량 부하, 실제 등록/매핑/검수/임베딩 export 인수와 MySQL 게시를 로컬 시험 통과로 대체하지 않는다. 최종 결과와 누락 대조는 [요구사항 대조](requirements_gap_review.md)를 따른다.
+실제 서버 Mongo/lake/Spark, 다중 호스트 중복 실행, 대량 부하, 실제 등록/매핑/검수/임베딩 export 인수와 MySQL 게시를 로컬 시험 통과로 대체하지 않는다. 최종 결과와 누락 대조는 [요구사항 대조](issue13_acceptance.md)를 따른다.

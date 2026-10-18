@@ -1,6 +1,6 @@
 # 다나와 수집 데이터 파이프라인 통합 설계
 
-2026-10-16 기준 **전체 구현 기준안**이며 2026-10-18 MySQL 게시·운영 구현 및 최신 dev 병합 상태를 갱신했다. FULL_EXPORT 스냅샷·이미지 객체 저장·MongoDB 접수/불변 원천·Kafka 발행/복구, LIVE 인계와 상품 Bronze/Silver/Gold 코드를 작성하고 로컬 검증했다. 문서 계약 기반 MySQL 게시·내구성 파일 예약 재시도·NiFi REST 제어·상태 이관도 구현했다. 후속 FLOW로 전체 Spark 단계 자동 연결·고정 범위 종단 대조도 구현했다. 실제 서비스 DDL/등록/guard 계약, 실제 전체 worker/서버 종단 쓰기·장애·운영 인수는 남아 있다. [FLOW 실행](flow_execution.md)을 따른다. [현재 요구사항 대조](requirements_gap_review.md)와 [게시·운영 검증](validation_20261018.md)을 현재 완료 판단 기준으로 사용한다. 구현 범위·제약·검증 근거는 [첫 단계 실행 기록](execution.md), [Bronze 실행 기록](bronze_execution.md), [Silver 실행 기록](silver_execution.md), 관측 버전·운영 원장·서비스 키는 [데이터·복구 계약 v1](data_contract_v1.md)을 따른다.
+2026-10-16 기준 **전체 구현 기준안**이며 2026-10-18 MySQL 게시·운영 구현 및 최신 dev 병합 상태를 갱신했다. FULL_EXPORT 스냅샷·이미지 객체 저장·MongoDB 접수/불변 원천·Kafka 발행/복구, LIVE 인계와 상품 Bronze/Silver/Gold 코드를 작성하고 로컬 검증했다. 문서 계약 기반 MySQL 게시·내구성 파일 예약 재시도·NiFi REST 제어·상태 이관도 구현했다. 후속 FLOW로 전체 Spark 단계 자동 연결·고정 범위 종단 대조도 구현했다. 실제 서비스 DDL/등록/guard 계약, 실제 전체 worker/서버 종단 쓰기·장애·운영 인수는 남아 있다. [FLOW 실행](flow_execution.md)을 따른다. [현재 요구사항 대조](issue13_acceptance.md)와 [게시·운영 검증](validation_20261018.md)을 현재 완료 판단 기준으로 사용한다. 구현 범위·제약·검증 근거는 [첫 단계 실행 기록](execution.md), [Bronze 실행 기록](bronze_execution.md), [Silver 실행 기록](silver_execution.md), 관측 버전·운영 원장·서비스 키는 [데이터·복구 계약 v1](data_contract_v1.md)을 따른다.
 
 현재 인프라 기준의 접수·이벤트·재평가·최신성 보강은 [보강 계약 v1.1](design_amendment_v1_1.md)을 따른다. 이 문서는 전체 흐름을 요약하고 세부 새 필드/상태/게시 규칙을 중복 정의하지 않는다.
 
@@ -305,4 +305,4 @@ MongoDB 운영 계약은 3노드 Replica Set, writeConcern={w: majority, j: true
 
 기존 수집 요청·잠금·재개 로직은 유지하고 신규 단계를 분리한다. 이번 보완은 설계 계약을 구체화한 문서 작업이며 실제 개발·인프라 변경·DB 적재·발행은 진행하지 않았다. 개발 범위와 시점은 별도로 논의한다.
 
-2026-10-17 Gold 구현과 최종 대조: [Gold 실행/고정 export](gold_execution.md), [요구사항·누락 목록](requirements_gap_review.md). 이 설계의 목표 전체가 구현됐다는 의미가 아니며 MySQL/운영 후속 경계를 유지한다.
+2026-10-17 Gold 구현과 최종 대조: [Gold 실행/고정 export](gold_execution.md), [요구사항·누락 목록](issue13_acceptance.md). 이 설계의 목표 전체가 구현됐다는 의미가 아니며 MySQL/운영 후속 경계를 유지한다.
