@@ -1,5 +1,7 @@
 # 직접 추천 v3 데이터 변경안
 
+2026-10-18 SQLite 로컬 실행 원장은 `recommendations.{RecommendationJob,RecommendationAttempt,QueueControl,WorkerPresence,ProviderGate,ProviderPermit}`다. UUID/고유 요청 키·lease/token·available_at·시도/대기 시간은 [로컬 작업 속성](../../interior-recommender/execution.md#상태와-로컬-원장)을 따른다. 운영 MySQL 엔터티와 별도이며 기존 API receipt/상품 벡터를 이관·재생성하지 않는다.
+
 [통합 계약](../12-direct-recommendation.md) · [사전](index.md) · [데이터 모델](../03-data-model.md)
 
 2026-10-15 논리 설계다. 로컬 파일 구현과 신규 ORM/DDL·이벤트/서비스 배포 완료를 구분한다. 기존 UUID·UTC·입력/상품/벡터 checksum·소유권·불변 이력 계약을 유지한다.

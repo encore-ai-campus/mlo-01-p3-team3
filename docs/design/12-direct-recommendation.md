@@ -1,5 +1,7 @@
 # 이미지 생성 없는 공간 맞춤 상품 추천
 
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 2026-10-15 결정, 설계 버전 `direct-recommendation-v3`. 초기 라벨 없는 추천으로 변경했으며 로컬 웹 MVP 구현 범위와 서비스 설계를 구분한다. DB/메시지 마이그레이션·운영 배포 완료 기록이 아니다.
 
 [문서 안내](../README.md) · [BRD](../BRD_3차.md) · [PRD](../PRD_3차_초안.md) · [아키텍처](00-architecture.md)

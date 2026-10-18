@@ -1,5 +1,7 @@
 # 운영·평가·이전: 라벨 없는 직접 추천
 
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 [직접 추천 계약](12-direct-recommendation.md#운영보존검증)을 기준으로 DB 복제·로그·보존/이관 공통 규칙을 유지한다.
 
 ## 검증

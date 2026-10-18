@@ -1,5 +1,7 @@
 # 데이터 모델: 직접 추천 변경안과 기존 원장
 
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 2026-10-15 현행 변경안은 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)과 [논리 ERD](12-direct-recommendation.md#논리-데이터와-erd-변경안)다. 구현/DDL 반영 완료가 아니다.
 
 신규 입력 버전→추천 맥락→추천 run→항목→노출/행동으로 연결한다. run 접수 시 context_id는 비어 있을 수 있으나 검색 전에는 같은 입력의 확정 맥락을 요구한다. generation_run/scene_object/template FK는 신규 추천 선행 조건이 아니다. 프로젝트 최신 추천 FK는 입력 순번과 완료 상태를 대조해 갱신한다.

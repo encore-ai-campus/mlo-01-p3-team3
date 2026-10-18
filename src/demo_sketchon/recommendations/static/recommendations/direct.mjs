@@ -72,9 +72,11 @@ async function poll() {
   clearTimeout(timer);
   try {
     const state = await api(`api/runs/${encodeURIComponent(runId)}`);
-    const running = state.job?.status === "RUNNING";
-    $("status").textContent = state.job?.status === "FAILED" ? state.job.error : running ? "입력을 해석하고 상품을 찾고 있습니다." : statusNames[state.status] || state.status;
-    $("retry").hidden = state.job?.status !== "FAILED";
+    const jobStatus = state.job?.status;
+    const running = ["STAGING", "QUEUED", "RUNNING", "RETRY_WAIT"].includes(jobStatus);
+    const progress = jobStatus === "QUEUED" || jobStatus === "STAGING" ? "추천 순서를 기다리고 있습니다." : jobStatus === "RETRY_WAIT" ? "잠시 후 자동으로 다시 시도합니다." : "입력을 해석하고 상품을 찾고 있습니다.";
+    $("status").textContent = jobStatus === "FAILED" ? state.job.error : running ? progress : statusNames[state.status] || state.status;
+    $("retry").hidden = state.job?.status !== "FAILED" || state.retry_supported === false;
     if (state.room_image) { $("room").src=`${base}assets/${encodeURIComponent(runId)}/${state.room_image}`; $("room").hidden=false; }
     if (state.sketch_image) { $("sketch-overlay").src=`${base}assets/${encodeURIComponent(runId)}/${state.sketch_image}`; $("sketch-overlay").hidden=false; }
     $("requested-text").textContent=state.text || "별도 설명 없이 스케치로 요청했어요.";
@@ -105,7 +107,7 @@ async function poll() {
     if (onlyUnverified && !running && state.job?.status !== "FAILED") {
       $("status").textContent=`${r.unverified_items.length}개의 후보를 찾았어요. 아래 상품은 일부 조건의 확인이 필요해요.`;
     }
-    if (running) timer=setTimeout(poll, 1200);
+    if (running) timer=setTimeout(poll, jobStatus === "RETRY_WAIT" ? 3000 : 1200);
   } catch (error) {
     $("status").textContent=error.message;
     const denied = [403,404].includes(error.status);

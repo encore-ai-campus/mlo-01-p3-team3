@@ -1,5 +1,7 @@
 # 이미지 생성 없는 scikit-learn 콘텐츠 추천 MVP
 
+2026-10-18 SketchOn 통합 실행은 웹 접수/조회와 별도 SQLite 워커로 나뉜다. 기존 `DirectStudio.prepare`/domain 규칙과 stage/receipt를 재사용하고 Gemini는 native async 호출, 이미지/파일/계산은 제한된 공유 풀에서 실행한다. [SQLite 실행·복구·후속 파이프라인 연결](../../docs/interior-recommender/execution.md)을 따른다. 아래 독립 `python -m interior_recommender.web`은 기존 제한된 스레드풀 방식이다.
+
 [역할별 코드·문서 라우팅](../../docs/interior-recommender/README.md) · [호출 구조와 모듈 이전표](../../docs/interior-recommender/call-structure.md)
 
 2026-10-16 역할별 코드 계층: `web/`(HTTP·연동) → `application/`(직접 추천 실행) → `domain/`(조건·순위·링크 규칙), `catalog/`(사전 상품/벡터 준비), `adapters/`(외부 모델 연결). 공통 Pipeline·설정·파일·스키마와 기존 생성 기반은 유지한다. 이전 모듈 import·CLI 명령은 호환 진입점으로 유지한다.

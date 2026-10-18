@@ -20,7 +20,7 @@
 
 ## 온라인 직접 추천
 
-SketchOn 통합에서는 `demo_sketchon/config.urls → recommendations.urls/views → recommendations.services.studio → application.direct.DirectStudio`로 호출한다. `/interior-recommand/`의 화면·API·asset·링크를 한 Django 서버에서 제공하며 브리지·별도 `web.__main__.configure()`를 사용하지 않는다. 승인된 295개 로컬 상품을 읽고 기존 해석·임베딩·추천 로직을 유지한다. 회원/프로젝트 권한과 새 화면·정적 파일은 `demo_sketchon/recommendations/`가 담당한다. [실행과 경계](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md)를 참고한다.
+SketchOn 통합에서는 웹 `config.urls → recommendations.views → submissions/queue`가 SQLite 작업을 접수하고, 별도 `run_recommendation_worker → recommendations.worker → DirectStudio.validate_run/prepare`가 실행한다. `DeferredPipeline`은 외부 응답이 필요한 단계에서 워커에 실행을 양보하며 Gemini native async 응답을 기다린 뒤 성공 receipt/stage부터 재개한다. 상태·링크는 `DirectRunReader`로 읽는다. [책임·상태·복구·설정](execution.md)을 따른다. 아래 기존 Mermaid와 `Studio.launch()` 설명은 독립 추천 웹의 호출 구조다. `/interior-recommand/`의 화면·API·asset·링크를 하나의 Django 웹 서버에서 제공하며 백그라운드 추천은 별도 작업 프로세스가 담당한다. 브리지·별도 `web.__main__.configure()`를 사용하지 않는다. 승인된 295개 로컬 상품을 읽고 기존 해석·임베딩·추천 로직을 유지한다. 회원/프로젝트 권한과 새 화면·정적 파일은 `demo_sketchon/recommendations/`가 담당한다. [실행과 경계](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md)를 참고한다.
 
 ```mermaid
 flowchart TD
@@ -66,7 +66,7 @@ flowchart LR
 
 ## 공통 경계와 남은 결합
 
-- `DirectStudio`는 `web.workflow.Studio`의 풀·소유권·상태 기반을 상속한다. 파일 이동 후에도 이 의존은 남는다.
+- `DirectStudio`는 `web.workflow.Studio`의 소유권·상태 기반을 상속한다. SketchOn 워커는 `background_workers=0`으로 기존 풀 생성을 끄고 관리 워커의 공유 풀·async SDK를 사용한다. 파일 이동 후에도 이 의존은 남는다.
 - `Pipeline`은 직접 추천과 배치의 stage/receipt 기반이면서 기존 생성 실행도 포함한다. `services.py` 역시 공통 스키마 등록과 생성 프롬프트를 함께 가진다.
 - `domain.recommendation`은 공유 `schemas`·`assets`와 NumPy/scikit-learn을 사용하고 `ProductIndex`의 파일 로딩도 포함한다. 순수 도메인 모델과 저장소 포트 분리까지 완료한 구조는 아니다.
 - `catalog.danawa`를 상품 준비 계층으로 이동해 새 내부 호출에서 카탈로그가 웹 패키지의 로더를 직접 참조하던 경계를 정리했다.

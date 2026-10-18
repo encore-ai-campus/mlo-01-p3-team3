@@ -1,6 +1,7 @@
 import json
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from google.genai import types
@@ -67,3 +68,36 @@ def test_image_embedding_has_no_text_and_explicit_dimension():
     assert kwargs["contents"].parts[0].inline_data.mime_type == "image/png"
     with pytest.raises(ValueError, match="one image"):
         adapter.call("embed", "", [image_bytes(), image_bytes()])
+
+
+def test_native_async_direct_context_preserves_sync_wire_contract():
+    client = Mock()
+    raw = {"decision": "ACCEPTED", "category_code": "CHAIR", "placement_region":
+           {"x_min": 100, "y_min": 200, "x_max": 800, "y_max": 900}}
+    reply = SimpleNamespace(text=json.dumps(raw), usage_metadata=None, response_id="offline-response")
+    client.models.generate_content.return_value = reply
+    client.aio.models.generate_content = AsyncMock(return_value=reply)
+    adapter = GeminiAdapter(Settings(), client)
+    args = ("direct_context", "room request", [image_bytes()], RecommendationContext.model_json_schema())
+    synchronous = adapter.call(*args)
+    asynchronous = asyncio.run(adapter.acall(*args))
+    assert asynchronous == synchronous
+    sync_request = client.models.generate_content.call_args.kwargs
+    async_request = client.aio.models.generate_content.call_args.kwargs
+    assert async_request == sync_request
+
+
+def test_native_async_embedding_and_client_close_use_async_sdk():
+    client = Mock()
+    client.aio.models.embed_content = AsyncMock(return_value=types.EmbedContentResponse(
+        embeddings=[types.ContentEmbedding(values=[1.0] * 768)]))
+    client.aio.aclose = AsyncMock()
+    adapter = GeminiAdapter(Settings(), client)
+    result = asyncio.run(adapter.acall("embed_text", "query", []))
+    assert result["payload"]["values"] == [1.0] * 768
+    request = client.aio.models.embed_content.call_args.kwargs
+    assert request["model"] == "gemini-embedding-2"
+    assert request["config"].output_dimensionality == 768
+    client.models.embed_content.assert_not_called()
+    asyncio.run(adapter.aclose())
+    client.aio.aclose.assert_awaited_once()

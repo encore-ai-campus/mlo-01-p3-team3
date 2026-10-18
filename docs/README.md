@@ -4,6 +4,7 @@
 
 | 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| SketchOn SQLite 실행·복구·비동기/동기 경계 | [작업 실행](interior-recommender/execution.md) | [역할별 라우팅](interior-recommender/README.md), [호출 구조](interior-recommender/call-structure.md) |
 | interior_recommender 코드·호출·담당별 변경 | [역할별 코드·문서 라우팅](interior-recommender/README.md) | [현재 호출 구조](interior-recommender/call-structure.md), [설계 라우팅](design/index.md) |
 | 사업·사용자 범위 | [BRD](BRD_3차.md) | [PRD](PRD_3차_초안.md) |
 | 전체 흐름·담당·내재화 단계 | [직접 추천 계약·다이어그램](design/12-direct-recommendation.md) | [아키텍처](design/00-architecture.md) |

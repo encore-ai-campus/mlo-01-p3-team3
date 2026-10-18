@@ -1,10 +1,12 @@
 # 스케치·온 SketchOn — 상상한 공간을 켜다
 
+2026-10-18 직접 추천은 SQLite 작업 원장과 별도 `python manage.py run_recommendation_worker` 프로세스를 사용한다. 웹은 접수/조회만 하고 워커가 비동기 Gemini 호출·제한된 동기 풀·lease/재시도를 관리한다. 웹과 워커 두 터미널 실행은 [통합 안내](docs/ver2/직접추천_통합_실행.md), 책임·설정·추후 팀원 파이프라인 연결은 [실행 문서](../../docs/interior-recommender/execution.md)를 따른다. 아래 기존 모의 기능의 단일 runserver 명령과 구분한다.
+
 ## 직접 상품 추천 통합 MVP (2026-10-16)
 
 같은 Django 서버의 **`/interior-recommand/`**에서 회원·비회원 모두 사진+설명/스케치로 상품을 직접 추천받는다. Home→‘내 공간 꾸미기’의 기존 그림판에서 사진·스케치·요청사항을 입력하고 ‘상품 추천받기’를 누른다. 추천 화면은 전달된 입력과 결과만 표시하며 별도 입력 폼을 두지 않는다. run 없이 추천 경로를 열면 기존 편집기로 이동한다. 화면 표시명·로고·색상은 SketchOn을 사용한다. 기존 모의 공간 만들기는 펼침 메뉴에서, 회원·저장·찜·Raw 수집은 기존 경로에서 유지하며, 아래 기존 모의 생성 설명과 직접 추천을 구분한다.
 
-추천은 `interior_recommender/sample/crawl_test/full/catalog-with-links/products.json`의 기존 295개 로컬 상품과 완료 벡터를 재사용한다. 입력 해석·질의 임베딩은 기존 Gemini 설정을 사용한다. 별도 `interior_recommender.web` 서버·추천용 DB·MySQL·Kafka·FAISS는 필요하지 않다. 기존 로그인·세션·Canvas는 로컬 SQLite를 유지한다.
+추천은 `interior_recommender/sample/crawl_test/full/catalog-with-links/products.json`의 기존 295개 로컬 상품과 완료 벡터를 재사용한다. 입력 해석·질의 임베딩은 기존 Gemini 설정을 사용한다. 별도 `interior_recommender.web` 서버·추천용 DB·MySQL·Kafka·FAISS는 필요하지 않다. 기존 로그인·세션·Canvas와 신규 추천 작업 원장은 로컬 SQLite를 사용한다.
 
 **현재 저장소 경로의 설치·실행, 환경 변수, API·권한과 검증은 [직접 추천 통합 실행 안내](docs/ver2/직접추천_통합_실행.md)를 따른다.** 아래 `C:\mlo-01-p3-team3` 경로는 이전 데모 환경의 기록이다.
 

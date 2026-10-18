@@ -1,5 +1,7 @@
 # 공통 실행 기반과 검증
 
+2026-10-18 SketchOn은 [SQLite 작업 워커](../execution.md)를 사용한다. `queue.py`가 영속 상태·선점·만료/토큰·API 계정/모델 한도를, `worker.py`가 heartbeat·제한된 공유 풀·기한 재시도를 담당한다. OS run 잠금은 강제 종료 시 해제되고, DB 트랜잭션은 API/파일 대기 밖에서 끝난다. 웹/워커는 같은 SQLite·출력 root·설정을 사용한다. 기존 파일 실행의 `run_lock`/`time.sleep`은 독립 CLI/웹 경로에 남으며 새 SketchOn 워커에서 사용하지 않는다.
+
 [역할별 라우팅](../README.md) · [운영 설계](../../design/06-operations-migration.md) · [Kafka 설계](../../design/05-kafka-jobs.md)
 
 | 책임 | 구현 | 확인할 사항 |

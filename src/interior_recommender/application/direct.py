@@ -39,8 +39,8 @@ class DirectDemoAdapter(DemoAdapter):
 class DirectStudio(Studio):
     direct = True
 
-    def __init__(self, root, *, products=None, danawa_index=None, demo=False, adapter_factory=None, policy=None, index=None):
-        super().__init__(root, demo=demo, adapter_factory=adapter_factory or (DirectDemoAdapter if demo else None))
+    def __init__(self, root, *, products=None, danawa_index=None, demo=False, adapter_factory=None, policy=None, index=None, background_workers=2):
+        super().__init__(root, demo=demo, adapter_factory=adapter_factory or (DirectDemoAdapter if demo else None), background_workers=background_workers)
         self.policy = RankingPolicy.model_validate(policy or {})
         settings = Settings.from_env()
         if index is not None:
@@ -143,6 +143,9 @@ class DirectStudio(Studio):
     def launch(self, run_id, owner, action, retry=False):
         if action != "prepare":
             raise ValueError("직접 추천에서는 추천 준비/재시도만 지원합니다.")
+        manifest = read_json(self.directory(run_id, owner) / "manifest.json")
+        if manifest.get("execution_backend") == "sqlite-jobs-v1" or self.pool is None:
+            raise ValueError("이 실행은 SketchOn 작업 워커에서만 처리합니다.")
         return super().launch(run_id, owner, action, retry)
 
     def _work(self, directory, action, job, retry):
@@ -151,17 +154,8 @@ class DirectStudio(Studio):
             with run_lock(directory):
                 pipeline = Pipeline(directory, self.factory)
                 try:
-                    if contract_hash(pipeline.manifest) != pipeline.manifest["input_hash"]:
-                        raise ValueError("입력/정책 스냅샷이 변경되었습니다.")
-                    contract = pipeline.manifest.get("direct_contract", {})
-                    if pipeline.manifest.get("web_demo") != self.demo or contract.get("context_version") != CONTEXT_VERSION:
-                        raise ValueError("실행 모드/해석 버전이 다릅니다. 새 요청을 제출하세요.")
-                    if not self.index or contract.get("index_version") != self.index.version:
-                        pipeline.manifest["status"] = "INDEX_NOT_READY"
-                        pipeline.save()
-                        raise ValueError("요청에 고정된 상품 인덱스가 준비되지 않았습니다.")
-                    self.index.validate_settings(pipeline.settings)
-                    self._prepare(pipeline)
+                    self.validate_run(pipeline)
+                    self.prepare(pipeline)
                 finally:
                     if pipeline.adapter is not None:
                         pipeline.adapter.close()
@@ -171,6 +165,22 @@ class DirectStudio(Studio):
                        error=str(error)[:1000] if isinstance(error, ValueError) else "추천 처리 중 오류가 발생했습니다.")
         job.update(finished_at=now(), duration_ms=round((time.monotonic() - started) * 1000))
         write_json(directory / "job.json", job)
+
+    def validate_run(self, pipeline):
+        """Application contract shared by standalone and managed executors."""
+        if contract_hash(pipeline.manifest) != pipeline.manifest["input_hash"]:
+            raise ValueError("입력/정책 스냅샷이 변경되었습니다.")
+        contract = pipeline.manifest.get("direct_contract", {})
+        if pipeline.manifest.get("web_demo") != self.demo or contract.get("context_version") != CONTEXT_VERSION:
+            raise ValueError("실행 모드/해석 버전이 다릅니다. 새 요청을 제출하세요.")
+        if not self.index or contract.get("index_version") != self.index.version:
+            pipeline.manifest["status"] = "INDEX_NOT_READY"
+            pipeline.save()
+            raise ValueError("요청에 고정된 상품 인덱스가 준비되지 않았습니다.")
+        self.index.validate_settings(pipeline.settings)
+
+    def prepare(self, pipeline):
+        return self._prepare(pipeline)
 
     def _prepare(self, p):
         previous = p.manifest["stages"].get("ranking", {})

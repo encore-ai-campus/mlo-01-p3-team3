@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from .assets import checksum, crop_bytes, generation_reference, png_bytes, read_json, write_bytes, write_json
 from .config import Settings
 from .local_processing import search_query
-from .errors import provider_message
+from .errors import LeaseLost, ProviderCallRequired, RetryScheduled, provider_message
 from .schemas import (Box, InputRequest, Interpretation, ObjectAnalysis, ScenePlan, Template,
                       normalized_vector, validate_categories)
 from .services import (PROMPT_VERSION, SCHEMA_VERSION, SCHEMAS, analysis_prompt,
@@ -31,6 +31,8 @@ def contract_hash(manifest):
         frozen["web_prompt_version"] = manifest["web_prompt_version"]
     if "direct_contract" in manifest:
         frozen["direct_contract"] = manifest["direct_contract"]
+    if "execution_backend" in manifest:
+        frozen["execution_backend"] = manifest["execution_backend"]
     return checksum(json.dumps(frozen, sort_keys=True, ensure_ascii=False).encode("utf-8"))
 
 
@@ -229,6 +231,10 @@ class Pipeline:
                          output_checksum=checksum((self.directory / name).read_bytes()))
             self.save()
             return value
+        except (LeaseLost, ProviderCallRequired, RetryScheduled):
+            # The managed runner resumes this same stage after async I/O or a
+            # durable retry. This is not an output validation failure.
+            raise
         except Exception as error:
             state = self.manifest["stages"].get(key)
             if state and state.get("status") not in {"RETRY_WAIT", "BUDGET_WAIT"}:
