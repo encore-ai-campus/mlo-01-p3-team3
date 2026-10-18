@@ -18,7 +18,7 @@ const prefix = '/interior-recommand/';
       recommendations:{items:[],unverified_items:[]}, context:{reason:'테스트용 해석 노출 검증'}
     }}));
     await page.goto(base+prefix+'?run='+pendingRun);
-    await page.getByText('요청하신 조건을 확인하고 상품을 찾고 있어요. 결과가 준비되면 여기에 표시됩니다.',{exact:true}).waitFor();
+    await page.getByText('상품을 찾고 있어요. 잠시만 기다려 주세요.',{exact:true}).waitFor();
     assert.equal(await page.locator('#context').count(),0,'input interpretation has no customer-facing panel');
     assert.equal(await page.locator('#unverified-panel').count(),0,'unverified candidates have no customer-facing panel');
     assert.doesNotMatch(await page.locator('body').innerText(),/테스트용 해석 노출 검증|입력 해석|필수 정보 미확인 후보/);

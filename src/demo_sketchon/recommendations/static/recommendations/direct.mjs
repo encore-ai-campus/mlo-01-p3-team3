@@ -97,7 +97,7 @@ async function poll() {
     const softMaterial = r?.ranking_version === "weighted-content-v2";
     $("items-heading").textContent=softMaterial ? "추천 상품" : "조건을 확인한 상품";
     $("material-policy-notice").hidden=!softMaterial;
-    const emptyItemsMessage = running ? "요청하신 조건을 확인하고 상품을 찾고 있어요. 결과가 준비되면 여기에 표시됩니다." : "";
+    const emptyItemsMessage = running ? "상품을 찾고 있어요. 잠시만 기다려 주세요." : "";
     cards($("items"), r?.items || [], emptyItemsMessage);
     $("verified-panel").hidden = !r?.items?.length && !running;
     if (running) timer=setTimeout(poll, jobStatus === "RETRY_WAIT" ? 3000 : 1200);
