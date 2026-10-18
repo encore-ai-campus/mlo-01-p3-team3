@@ -10,6 +10,7 @@
 | 상품 검색·콘텐츠 추천·후속 평가 | [광고 서버](07-ad-server.md) | [파이프라인](02-data-pipeline.md), [평가 계약](12-direct-recommendation.md#이번-scikit-learn과-후속-내재화) |
 | 데이터·ORM/DDL 계획 | [직접 추천 속성](data-dictionary/09-direct-recommendation.md) | [데이터 모델](03-data-model.md), [전체 ERD](03-erd-full.md), [간략 ERD](03-erd-summary.md) |
 | Bronze·메시지·실패 복구 | [Kafka](05-kafka-jobs.md) | [운영](06-operations-migration.md) |
+| 실버·골드 필드·테이블·준비 상태 | [Delta 필드 계약](data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위) | [파이프라인](02-data-pipeline.md#실버골드-필드-적용), [원장 대응](03-data-model.md#실버골드와-서비스-원장-대응), [검수](06-operations-migration.md#실버골드-필드-검수) |
 | 상품 출처·규격·가격·URL | [상품 연결](09-product-links.md) | [속성 사전](data-dictionary/index.md) |
 | 인프라·DB 복제·이전 | [인프라](01-infrastructure.md) | [DB 복구](06-operations-migration.md#db-복제와-장애-복구) |
 | 생성 경로 폐기·기존 데이터 | [전환 경계](08-template-generation.md) | [이전 도매꾹 자료](10-domeggook-reuse.md), [운영](06-operations-migration.md) |

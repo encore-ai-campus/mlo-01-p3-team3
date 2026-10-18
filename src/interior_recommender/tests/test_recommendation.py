@@ -55,11 +55,31 @@ def test_hard_limits_unknowns_negative_conditions_and_estimated_size(tmp_path):
     c = context(required=[Condition(field="width_mm", operator="LE", value=600., source_quote="폭 60cm 이하"),
                           Condition(field="material", operator="NE", value="metal", source_quote="금속 제외")],
                 size_estimate={"basis": "TYPICAL_OBJECT_SIZE", "estimated_width_mm": 100, "explanation": "약한 추정"})
-    result = index(rows, [[1, 0]] * len(rows)).rank([1, 0], c)
+    result = index(rows, [[1, 0]] * len(rows)).rank([1, 0], c, RankingPolicy(version="weighted-content-v1"))
     assert [p["product_id"] for p in result["items"]] == ["match"]
     assert [p["product_id"] for p in result["unverified_items"]] == ["missing"]
     assert result["excluded_images"] == 3
     assert result["items"][0]["size_fit"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize("operator,value", [("EQ", "wood"), ("NE", "metal")])
+def test_material_is_query_preference_and_never_excludes_or_unverifies(tmp_path, operator, value):
+    rows = [product(tmp_path, "missing", price_krw=100),
+            product(tmp_path, "wood", material="wood", price_krw=100),
+            product(tmp_path, "metal", material="metal", price_krw=100),
+            product(tmp_path, "expensive", material="wood", price_krw=900),
+            product(tmp_path, "unknown-price", material="wood"),
+            product(tmp_path, "sofa", category_code="SOFA", price_krw=100)]
+    result = index(rows, [[1, 0]] * len(rows)).rank([1, 0], context(required=[
+        Condition(field="material", operator=operator, value=value, source_quote="재질 요청"),
+        Condition(field="price_krw", operator="LE", value=500., source_quote="500원 이하")]))
+    assert result["ranking_version"] == "weighted-content-v2"
+    assert {p["product_id"] for p in result["items"]} == {"missing", "wood", "metal"}
+    assert [p["product_id"] for p in result["unverified_items"]] == ["unknown-price"]
+    assert result["excluded_images"] == 2
+    missing = next(p for p in result["items"] if p["product_id"] == "missing")
+    assert missing["preference_checks"] == {"required:0:material": "UNKNOWN"}
+    assert "required:0:material" not in missing["checks"]
 
 
 def test_missing_preference_does_not_gain_weight_and_unsupported_is_unverified(tmp_path):
@@ -224,6 +244,68 @@ def test_direct_workflow_reuses_api_and_freezes_policy_without_catalog_copy(tmp_
             f.result(timeout=5)
         assert service.state(run, owner)["status"] == "INDEX_NOT_READY"
         assert CountingAdapter.calls == ["direct_context", "embed_text"]
+    finally:
+        service.pool.shutdown(wait=True)
+
+
+@pytest.mark.parametrize("style,expected,query", [
+    ("크림 패브릭", "ivory", "cream ivory color"),
+    ("오크 우드", "brown", "light brown beige color"),
+    ("세이지 그린", "green", "muted sage green color"),
+])
+@pytest.mark.parametrize("color_input", ["none", "preferred", "required"])
+def test_style_choices_use_color_query_and_bonus_preserving_text_color(tmp_path, style, expected, query, color_input):
+    seen = {}
+    explicit_color = "black" if color_input != "none" else None
+    interpreted_preference = "black" if color_input == "preferred" else None
+
+    class StyleAdapter(DirectDemoAdapter):
+        def call(self, kind, prompt, images, schema=None):
+            seen[kind] = prompt
+            if kind == "direct_context":
+                required = [Condition(field="color", operator="EQ", value="black", source_quote="검정")] if color_input == "required" else []
+                return {"payload": {"text": context(preferred_color=interpreted_preference, required=required).model_dump_json()}}
+            return super().call(kind, prompt, images, schema)
+
+    service = DirectStudio(tmp_path, demo=True, adapter_factory=StyleAdapter)
+    owner = str(uuid4())
+    try:
+        run = service.submit(image_bytes(), None, "검정 의자" if explicit_color else "의자", [], None, owner, str(uuid4()),
+                             project_metadata={"style_policy":"color-first-v2", "style_preferences":[style]})
+        service.launch(run, owner, "prepare")
+        result = wait(service, run, owner)
+        assert result["status"] == "COMPLETED"
+        assert query in seen["embed_text"] and style not in seen["embed_text"]
+        assert style not in seen["direct_context"]
+        assert result["context"]["preferred_color"] == interpreted_preference
+        effective = explicit_color or expected
+        assert result["recommendations"]["color_preference"] == {
+            "value":effective, "source":"context" if explicit_color else "style", "style_color":expected}
+        for item in result["recommendations"]["items"]:
+            assert item["score_components"]["preferred_color"] == pytest.approx(.15 if item["metadata"]["color"] == effective else 0)
+            assert item["condition_status"] == "MATCH"
+    finally:
+        service.pool.shutdown(wait=True)
+
+
+def test_old_style_policy_keeps_original_query_and_no_color_override(tmp_path):
+    seen = {}
+
+    class StyleAdapter(DirectDemoAdapter):
+        def call(self, kind, prompt, images, schema=None):
+            seen[kind] = prompt
+            return super().call(kind, prompt, images, schema)
+
+    service = DirectStudio(tmp_path, demo=True, adapter_factory=StyleAdapter)
+    owner = str(uuid4())
+    try:
+        run = service.submit(image_bytes(), None, "의자", [], None, owner, str(uuid4()),
+                             project_metadata={"style_policy":"search-only-v1", "style_preferences":["오크 우드"]})
+        service.launch(run, owner, "prepare")
+        result = wait(service, run, owner)
+        assert "오크 우드" in seen["embed_text"]
+        assert "color_preference" not in result["recommendations"]
+        assert all(p["preferred_color_status"] == "UNSPECIFIED" for p in result["recommendations"]["items"])
     finally:
         service.pool.shutdown(wait=True)
 

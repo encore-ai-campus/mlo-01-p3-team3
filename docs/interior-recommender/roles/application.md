@@ -4,6 +4,8 @@
 
 실제 구현은 `application/direct.py::DirectStudio`다. `submit()`이 UUID·입력 조합·이미지 크기를 확인하고 원본/사본·manifest·event 대응을 저장한다. 같은 owner/event_id의 같은 입력은 기존 run을 반환하고 입력이 다르면 거절한다. run 접수 시 해석 버전·전체 순위 정책·인덱스 버전을 고정한다.
 
+SketchOn의 선택적 스타일은 `external_project.style_policy=color-first-v2`와 `style_preferences`로 별도 고정한다. 크림 패브릭→아이보리, 오크 우드→밝은 갈색·베이지, 세이지 그린→차분한 초록으로 질의 검색어를 조립한다. 재질 단어 대신 색상·톤을 임베딩에 넣고 기존 `preferred_color` 가중치에 연결한다. 사용자 원문의 명시 색상 EQ 조건, 원문에서 해석한 색상 선호, 선택 스타일 순으로 우선한다. 원본 `context.json`/receipt를 바꾸지 않고 순위용 사본에만 반영하며 결과의 `color_preference`로 사용 색상과 출처를 표시한다. 색상 결측·불일치만으로 제외하지 않으며 미확정 옵션을 전체 상품 색상으로 확정하지 않는다. 과거 `search-only-v1` run은 기존 스타일 원문 검색 방식을 유지한다.
+
 `launch()`는 직접 추천에 `prepare`만 허용하고 상위 `Studio.launch()`가 제한된 스레드풀에 `_work()`를 제출한다. `_work()`는 run lock·입력 hash·모드·맥락 버전·인덱스 호환을 확인하고 `_prepare()`를 실행한다. 사용한 adapter는 finally에서 닫고 작업 결과는 `job.json`에 쓴다.
 
 | 단계 | 호출 | 보존 결과 |
@@ -12,6 +14,8 @@
 | 코드 검증·질의 | `parse_context`, `validate_context`, category/search_terms/room_context 조립 | 해석 결과와 원문 검증, 질의 prompt |
 | 질의 임베딩 | `Pipeline.stage(query, embed_text, ...)` | `receipts/query.json`, `query.json` |
 | 추천·보존 | `ProductIndex.rank`, 반환 이미지 checksum 검사/사본 | `recommendations.json`, `products/`, manifest의 ranking stage |
+
+기본 순위 정책 `weighted-content-v2`는 재질 조건의 원문 인용을 질의 임베딩에 추가한다. 재질 조건은 `preference_checks`로 대조만 기록하고 필수 필터에서 제외한다. 색상 가중치와 다른 필수 조건은 유지한다. 기존 v1 run은 새 질의나 새 정책으로 바꾸지 않는다.
 
 해석 결과가 ACCEPTED가 아니면 해당 decision 상태로 종료한다. 추천 결과는 충족 후보가 있으면 `COMPLETED`, 미확인 후보만 있으면 `UNVERIFIED_ONLY`, 둘 다 없으면 `NO_RESULTS`다. 인덱스가 없거나 고정 버전이 다르면 `INDEX_NOT_READY`, 순위/추천 저장 오류는 `RANKING_FAILED`다. API/로컬 변환 실패는 공통 Pipeline stage와 job을 함께 확인한다.
 

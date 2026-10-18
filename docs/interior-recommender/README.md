@@ -8,6 +8,7 @@
 
 | 담당·작업 | 먼저 읽을 문서 | 함께 확인할 문서 | 구현 위치 |
 |---|---|---|---|
+| SketchOn 단일 서버 MVP | [통합 설치·실행](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md) | [웹 담당](roles/web.md), [호출 구조](call-structure.md) | `src/demo_sketchon/recommendations/` → `application/direct.py` |
 | 전체 호출·영향 분석 | [호출 구조](call-structure.md) | [전체 아키텍처](../design/00-architecture.md) | 아래 전체 계층 |
 | 프런트엔드·HTTP·Canvas 연동 | [웹 진입과 연동](roles/web.md) | [Canvas 연결 계약](../../src/interior_recommender/web/INTEGRATION.md) | `web/` |
 | 추천 실행·상태·재시도 | [실행 조정](roles/application.md) | [Application 설계](../design/04-application-ai.md), [복구](roles/operations.md) | `application/`, 공통 `pipeline.py` |

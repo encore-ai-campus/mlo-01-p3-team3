@@ -16,16 +16,17 @@ test = ["pytest>=8,<10"]
 interior-recommender = "interior_recommender.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "."}
+package-dir = {"" = ".."}
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = [".."]
 include = ["interior_recommender*"]
+namespaces = false
 
 [tool.setuptools.package-data]
 "interior_recommender" = ["templates/*.json", "examples/*.json"]
 "interior_recommender.web" = ["ui/*.html", "ui/*.css", "ui/*.js", "ui/*.mjs", "*.mjs", "*.md"]
 
 [tool.pytest.ini_options]
-testpaths = ["interior_recommender/tests"]
-pythonpath = ["."]
+testpaths = ["tests"]
+pythonpath = [".."]

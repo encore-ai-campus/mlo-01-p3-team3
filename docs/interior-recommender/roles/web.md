@@ -1,5 +1,7 @@
 # 웹 진입과 Canvas 연동
 
+2026-10-16 SketchOn 통합: `src/demo_sketchon/recommendations/`가 같은 Django 프로세스의 `/interior-recommand/`를 담당한다. `application.direct.DirectStudio`를 직접 호출하며 프로젝트/계정 권한·CSRF·multipart 검증은 이 앱이 처리한다. 브리지와 독립 서버 설정은 사용하지 않는다. [설치·API·권한·검증](../../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md)을 따른다. 아래 표는 독립 서버의 기존 진입점이다.
+
 [역할별 라우팅](../README.md) · [호출 구조](../call-structure.md) · [전송·설치 계약](../../../src/interior_recommender/web/INTEGRATION.md)
 
 `web/__main__.py`는 Django 설정, `web/views.py::studio()`는 구현 선택을 담당한다. 기본 화면은 `direct.html`·`direct.js`, 기존 생성 화면은 `studio.html`·`studio.js`다. RoomPick 요청은 `roompick_bridge.bridge()`가 AI 서버로 중계한다.
