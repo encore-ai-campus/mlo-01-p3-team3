@@ -6,10 +6,11 @@ from ..contracts import canonical, digest, utc
 from ..errors import Conflict, PipelineError
 from ..files import atomic_json, parse, read_json
 from ..gold.contracts import TABLES, semantic_hash
-from .schema import CONTRACT_HASH
+from .schema import CONTRACT_HASH, validate_columns
 
 
 def validate_group(group,versions):
+    validate_columns(group)
     receipt=group['receipt'];tables=group['tables']
     if receipt.get('record_hash')!=semantic_hash(receipt) or receipt.get('status') not in {'OUTPUT_COMMITTED','QUALITY_WAIT'}:
         raise Conflict('PUBLISH_GOLD_RECEIPT_INVALID')
@@ -46,7 +47,7 @@ def make_plan(groups, versions, *, export_hash, as_of, guard_hashes, target, pri
         products.append(dict(product_key=key,guard_hash=guard_hashes[key],group=group))
     if not isinstance(target,str) or len(target)!=64 or not isinstance(export_hash,str) or len(export_hash)!=64:
         raise PipelineError('PUBLISH_TARGET_AND_EXPORT_HASH_REQUIRED')
-    body=dict(contract_version=1,stage='MYSQL_PUBLICATION_PLAN',schema_contract_hash=CONTRACT_HASH,target=target,price_history_mode=price_history_mode,
+    body=dict(contract_version=2,stage='MYSQL_PUBLICATION_PLAN',schema_contract_hash=CONTRACT_HASH,target=target,price_history_mode=price_history_mode,
               price_max_age_seconds=price_max_age_seconds,
               export_hash=export_hash,gold_versions=versions,as_of=utc(as_of),products=sorted(products,key=lambda r:r['product_key']))
     if len(canonical(body).encode())>32*1024*1024:raise PipelineError('PUBLISH_PLAN_TOO_LARGE')
