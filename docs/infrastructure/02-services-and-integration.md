@@ -36,7 +36,7 @@ Stage 3 시험은 NiFi → Kafka → Spark SQL → MySQL 시험 데이터 → Dj
 
 2026-10-18 팀 파이프라인 문서는 상품 3개·이미지 9개의 MongoDB → Garage → Kafka → Bronze 처리, 반복 실행 멱등성, Worker 3대의 Delta 작업을 보고한다. Silver·Gold 일부 결과는 QUALITY_WAIT이며 추천 준비 완료 상태가 아니다.
 
-동일 문서는 MongoDB majority·journal 쓰기, 3노드 majority 읽기와 lease 동작을 별도 시험 데이터로 검증했다고 보고한다. 이는 **팀 파이프라인 담당자의 인증 시험 기록**이다. 신성민의 기존 인프라 검증에서 보류된 인증 계정·권한·전체 운영 검증을 소급해 완료 처리하지 않는다.
+동일 문서는 MongoDB majority·journal 쓰기, 3노드 majority 읽기와 lease 동작을 별도 시험 데이터로 검증했다고 보고한다. 이는 **팀 파이프라인 담당자의 인증 시험 기록**이다. 기존 인프라 검증에서 보류된 인증 계정·권한·전체 운영 검증을 소급해 완료 처리하지 않는다.
 
 임시 MySQL 계약 시험과 NiFi의 제한된 실행 트리거 시험 역시 전체 업무 DB 게시·외부 입력부터 추천 화면까지의 E2E 완료와 구분한다. 후속 팀 문서·코드의 정확한 기준 commit은 [E13](07-evidence-and-handoff.md#e13)에 연결했다.
 

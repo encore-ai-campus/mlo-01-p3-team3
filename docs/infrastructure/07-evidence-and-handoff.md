@@ -79,7 +79,7 @@ AWS pilot: pj3-aws-pilot/FINAL.json·AWS-BOOTSTRAP.md·FOLLOWUP.md·user-confirm
 - [팀 담당자 서비스 검증 기록](https://github.com/encore-ai-campus/mlo-01-p3-team3/blob/c23a09fe5c6611f4894924747ccb9899868b1a74/src/data_pipeline/docs/service_validation_20261018.md)
 - [서버 Spark 의존성 기준](https://github.com/encore-ai-campus/mlo-01-p3-team3/blob/c23a09fe5c6611f4894924747ccb9899868b1a74/src/data_pipeline/requirements-spark-server.txt)
 
-이 파일들은 기존 팀원이 관리한 자료다. 내용을 수정하거나 구현·시험을 신성민의 단독 성과로 옮겨 적지 않는다. 본 문서는 해당 담당자가 기록한 제한된 시험 결과를 인용하며 그 환경을 이번에 다시 실행한 것은 아니다.
+이 파일들은 기존 팀원이 관리한 자료다. 내용을 수정하거나 구현·시험을 인프라 구축 담당자의 단독 성과로 옮겨 적지 않는다. 본 문서는 해당 담당자가 기록한 제한된 시험 결과를 인용하며 그 환경을 이번에 다시 실행한 것은 아니다.
 
 ## 남은 작업과 담당 경계
 
