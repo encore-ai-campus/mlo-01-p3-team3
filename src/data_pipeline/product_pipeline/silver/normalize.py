@@ -16,7 +16,7 @@ KEYS=dict(product_observations='evaluation_key',product_attributes='attribute_ke
           price_observations='price_observation_key',product_images='image_relation_key',
           link_observations='link_observation_key',quality_issues='issue_key',
           normalized_offers='normalized_offer_key',pipeline_evaluations='evaluation_key')
-VERSION='danawa-silver-1.0.2'
+VERSION='danawa-silver-1.0.3'
 POLICY='silver-quality-1'
 DIAGNOSTICS={'record_hash','processing_run_id','processed_at','completed_at','image_state_checked_at'}
 
@@ -291,7 +291,8 @@ def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None
             availability=availability,validation_status='LOCAL_BYTES_VERIFIED' if item['acquisition_state']=='VERIFIED' else 'UNCONFIRMED',
             image_state_revision=image['revision'],image_state_fingerprint=image['fingerprint'],image_state_checked_at=image['checked_at'],
             review_snapshot_hash=digest(related['reviews']),usage_scope_json=canonical(sorted({s for r in reviews for s in r.get('scopes',[])})),review_status=review),
-            detail.get('collected_at'),proof=dict(raw_image_ref=item,remote_state=current,review_rows=reviews,freshness='NOT_EVALUATED'))
+            detail.get('collected_at'),proof=dict(raw_image_ref=item,remote_state=current,review_rows=reviews,
+                raw_payload_hash=doc['payload_hash'],raw_collected_at=doc['collected_at'],freshness='NOT_EVALUATED'))
         if availability!='AVAILABLE':issue('IMAGE_'+availability,'product_images',key,'availability',current,scope='RECOMMENDATION')
         if review!='APPROVED':issue('REVIEW_'+review,'product_images',key,'review_status',reviews,scope='RECOMMENDATION')
     if not doc['image_refs']:issue('IMAGE_MISSING',field='images',scope='RECOMMENDATION')

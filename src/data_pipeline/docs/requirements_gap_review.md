@@ -1,5 +1,16 @@
 # Gold 구현 후 요구사항 대조와 남은 작업
 
+## 2026-10-18 후속 구현 갱신
+
+아래 2026-10-17의 미구현 목록은 당시 이력이다. 이번 후속으로 MySQL 게시기와 스키마 preflight/staging/원자 게시·UUID/시각/검수 보호, 내구성 있는 파일 예약 재시도, Raw 대조/ready 발견, NiFi REST 배포 제어, 바이트 보존 상태 pack/restore와 source release를 구현했다. [게시](mysql_publication.md)·[운영](operations_execution.md)·[이관](state_migration.md)을 현재 기준으로 본다.
+
+실제 서비스 DDL은 없어 문서 기반 계약·참조 DDL을 사용했다. 실제 서비스의 pipeline_runs 직접 등록 어댑터, 실제 NiFi/외부 저장소의 운영 인수, 전체 Bronze/서비스 원장 대조, 외부 DB/객체/Kafka/Delta 백업 실행·복원 전환, 다중 호스트 분산 queue, Windows 로컬 Spark checkpoint를 Linux로 자동 치환하는 기능을 구현 완료로 표시하지 않는다. 새 queue는 기존 Mongo 상품 원장을 복제하지 않는 단일 실행 서버 소유의 작업 일정 원장이다. 새 MySQL 운영 테이블은 담당 검토가 필요한 문서 계약 확장이다.
+
+Silver 1.0.3은 이미지 근거 JSON에 실제 payload hash/원천 수집 시각을 추가했다. 기존 Silver/Gold는 불변으로 남기고 새 평가로 진행한다. 원천 바이트나 당시 미수집 값을 사후 생성하지 않는다.
+
+## 2026-10-17 검토 이력
+
+
 2026-10-17. Issue #13의 사용자 요구, `docs/design/01-infrastructure.md`, `02-data-pipeline.md`, `03-data-model.md`, `05-kafka-jobs.md`, `12-direct-recommendation.md`, 파이프라인 통합/데이터/LIVE/보강 계약, Silver·Gold 필드 제안 대조표를 기준으로 검토했다. **로컬 구현, 외부 담당 입력, 미구현, 실제 환경 미검증을 구분한다.** 이 문서는 이슈 완료 체크나 팀 승인을 대신하지 않는다.
 
 작업 브랜치는 feature/#13, 전용 작업 폴더는 mlo-01-p3-team3-pipeline-13이다. 기존 LIVE/복구/Silver 작업을 `98ae0ae`으로 먼저 커밋했다. Gold와 이 대조 문서는 그 이후 작업이다. 원본 작업 폴더의 크롤러·다른 팀원 스테이징·상위 설계 문서는 변경하지 않았다. 푸시는 하지 않았다.

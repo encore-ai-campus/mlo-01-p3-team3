@@ -1,5 +1,22 @@
 # 파이프라인 제작 현황
 
+2026-10-18 갱신. 기존 feature/#13 전용 작업 폴더에서 문서 계약 기반 MySQL 게시·운영 기능을 추가했다. 실제 서버 설치/적재나 Git 커밋·푸시는 이번 작업에서 하지 않았다.
+
+## 2026-10-18 추가 구현
+
+| 영역 | 구현 | 실제 서버 인수 |
+|---|---|---|
+| MySQL 게시 | 고정 Gold 계획·문서 스키마 preflight·staging·UUID/FK·시각 역전 방지·트랜잭션·응답 유실 복구 | 실제 서비스 DDL·guard·권한/TLS·VM Primary 확인 필요 |
+| 예약 재시도 | 단일 소유 파일 queue, due 조회·Retry-After·한도/격리·token 복구·수동 한도 재개 | 지정 호스트/디스크/로그 운영 인수 필요 |
+| 자동 발견/대조 | 원격 ready 페이지·게시 ready→queue, 고정 snapshot과 Mongo Raw/접수/발행 대조 | 실제 S3/Mongo 연결·Bronze 전체 대조는 별도 |
+| NiFi | REST 버전/bundle 대조·계획/STOPPED 생성·명시 시작/정지 | 실제 버전 미제공. 대역 검증이며 실제 NiFi에 적용하지 않음 |
+| 상태 이관 | 정지/외부 백업 증거·파일 hash/ID 보존 pack/verify/restore·task 경로 별칭 | DB/객체/Kafka/Delta 실제 백업·복원과 목적지 preflight는 별도 |
+| 서버 전달 | 코드/문서/예시/고정 의존성만 포함한 source release와 hash 검증 | 대상 OS에서 새 venv·설정·권한 준비 필요 |
+
+실행 기준은 [MySQL 게시](mysql_publication.md), [운영 자동화](operations_execution.md), [상태 이관](state_migration.md)이다. 구현을 실제 DDL 승인/서비스 추천 승인/서버 종단 인수로 간주하지 않는다. 새 이미지 연결은 inactive로 게시하며 승인·활성화는 담당 원장을 따른다.
+
+## 2026-10-17 구현 당시 기록
+
 2026-10-17 갱신. Issue #13 / feature/#13. 분리 기준은 origin/dev의 e35b2a3이다. 기존 feature/#6의 커밋이나 스테이징은 포함하지 않았다.
 
 ## 구현·검증 상태

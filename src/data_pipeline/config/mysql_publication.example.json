@@ -1,0 +1,11 @@
+{
+  "contract_version": 1,
+  "target_id": "replace-with-service-logical-target",
+  "host": "replace-with-current-mysql-primary-hostname",
+  "port": 3306,
+  "database": "replace_with_service_database",
+  "user": "pipeline_publisher",
+  "password_env": "PIPELINE_MYSQL_PASSWORD",
+  "ca_env": "PIPELINE_MYSQL_CA",
+  "local_test_only": false
+}

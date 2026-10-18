@@ -1,0 +1,18 @@
+{
+  "contract_version": 1,
+  "logical_target": "replace-with-deployment-identity",
+  "mode": "live",
+  "single_owner_confirmed": true,
+  "queue_root": "/srv/pipeline/operations/queue",
+  "audit_root": "/srv/pipeline/operations/audit",
+  "pipeline_config": "/etc/product-pipeline/environment.local.json",
+  "mysql_config": "/etc/product-pipeline/mysql_publication.local.json",
+  "receive_root": "/srv/pipeline/received",
+  "ingest_state": "/srv/pipeline/ingest-state",
+  "max_receive_bytes": 21474836480,
+  "max_tasks_per_tick": 10,
+  "discover_remote": false,
+  "publication_ready_directories": [],
+  "reconciliation_snapshots": [],
+  "path_bindings": {}
+}

@@ -14,11 +14,14 @@ danawa-pipeline = "product_pipeline.cli:main"
 danawa-bronze = "product_pipeline.bronze.cli:main"
 danawa-silver = "product_pipeline.silver.cli:main"
 danawa-gold = "product_pipeline.gold.cli:main"
+danawa-publication = "product_pipeline.publication.cli:main"
+danawa-operations = "product_pipeline.operations.cli:main"
 
 [project.optional-dependencies]
 bronze = ["pyspark==4.0.1", "delta-spark==4.0.1"]
 silver = ["pyspark==4.0.1", "delta-spark==4.0.1"]
 gold = ["pyspark==4.0.1", "delta-spark==4.0.1"]
+publication = ["PyMySQL==1.1.2"]
 
 [tool.setuptools.packages.find]
 include = ["product_pipeline*"]

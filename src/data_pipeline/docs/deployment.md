@@ -11,8 +11,8 @@
 | Bronze | run_bronze.py | 코드·로컬 Delta 시험 있음. 실제 Kafka/Mongo/lake 인수 필요 |
 | Silver | 아직 없음 | 필드·스키마·품질·재평가 설계 단계. 실행 명령 미제공 |
 | Gold | Spark 실행 서버 | 고정 Silver → Gold Delta/export. 실제 서버 인수 대기 |
-| MySQL 게시 | 아직 없음 | 후속. DDL·업무 키·준비 상태·Delta version 인수 필요 |
-| NiFi 자동 실행 | 아직 없음 | 검증된 명령의 호출·일정·로그/알림 후속 구성 |
+| MySQL 게시 | 게시/Python 실행 서버 | 코드 구현. 실제 서비스 DDL/guard/TLS 대조 후 고정 계획 게시 |
+| NiFi 자동 실행 | NiFi/Python 단일 실행 호스트 | REST 생성/명시 기동 구현. 버전·권한·수동 복구 smoke 후 실제 적용 |
 
 현재 19대/20대 설계 차이와 논리 서버명은 [현황](status.md)에 명시했다. 실제 VM 배정은 담당자와 확인하고 역할명으로 연결한다.
 
@@ -113,3 +113,16 @@ Bronze는 `BRONZE_LEASE_MONGO_URI`의 별도 ops 계정을 추가한다. 인프�
 Gold 결과에는 원천/이미지 URL/객체 키/checksum/선택 근거와 확인 상태를 보존한다. 백업에는 Gold 데이터·_delta_log뿐 아니라 선택 페이지·입력/등록 export·완료 manifest와 공유 checkpoint를 포함한다. 새 스키마를 기존 root에 덮어쓰거나 Delta 로그를 삭제하지 않는다. 실제 인수 전 NiFi 일정이나 MySQL 게시에 자동 연결하지 않는다.
 
 MySQL 실제 DDL/staging/게시 guard/기존 UUID·검수 보존의 게시기는 아직 없다. 서비스 DB를 생성하거나 검수 원장을 수정하지 않는다. [요구사항 누락 대조](requirements_gap_review.md)에 서버 시험 외의 남은 구현을 기록했다. SSH hostname 조회 성공은 이 단계의 실제 클러스터 인수와 별개다.
+
+
+## 2026-10-18 게시·운영 확장 배포 순서
+
+1. 검토한 source release를 새 목적지에 복사하고 `python run_operations.py release-verify --bundle RELEASE_DIR`로 hash를 확인한다. 이 묶음은 src/data_pipeline 기준이며 상위 docs/design·인프라 설치·수집 데이터·비밀·가상환경을 포함하지 않는다. 상위 문서는 저장소의 검토한 버전을 함께 참고한다.
+2. Python 3.13/Java 21/Spark 4.0.1/Delta 4.0.1의 검증 조합을 우선 사용해 대상 OS에서 새 venv를 만든다. `requirements.lock.txt`, Spark용 `requirements-bronze.lock.txt`, 게시용 `requirements-publication.lock.txt`를 설치한다. Linux/VM에서 import/CLI 도움말·자동 테스트를 다시 확인한다.
+3. MySQL 담당이 문서 v1 계약과 실제 DDL을 대조한다. `sql/publication_reference_v1.sql`을 서비스 DB에 무조건 실행하지 않는다. 승인된 DDL, 최소 권한 계정·현재 Primary·TLS/CA·논리 target과 담당 guard를 준비한다.
+4. `run_publication.py preflight` → 고정 Gold 계획 prepare → 소량 `publish --apply` → 동일 계획 재실행·장애 복구를 검증한다. 새 image active/서비스 검수는 담당이 관리한다. 자세한 명령은 [MySQL 게시](mysql_publication.md)를 따른다.
+5. `operations.local.json`에 단일 queue 소유 서버·영속 디스크·감사 경로·전용 handoff bucket을 설정한다. 초기에는 remote discovery를 끄고 명시 등록한 작은 작업으로 tick·실패 재시도를 검증한다.
+6. 같은 설정의 수동 실패→재시도 성공 receipt를 확인한 뒤 [NiFi REST 절차](operations_execution.md)로 STOPPED 프로세서를 생성한다. 실제 버전/bundle/실행 권한을 확인하고 명시적으로 기동한다. 현재 로컬에서는 NiFi 대역만 시험했으므로 실제 서버 기동을 완료로 기록하지 않는다.
+7. VM→AWS 이전은 [이관 절차](state_migration.md)의 정지·외부 백업/복원·논리 ID/hash 대조·파일 state 복원을 먼저 수행한다. fingerprint를 임의로 바꾸거나 RUNNING/공용 lease/stream checkpoint를 지워서 재개하지 않는다.
+
+실제 서버 배포·상품 적재·NiFi 활성화·관리자 비밀 전송은 이번 로컬 구현에서 수행하지 않았다. 기존 수집 PC와 MongoDB 클러스터 구성은 유지한다.
