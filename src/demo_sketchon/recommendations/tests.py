@@ -14,6 +14,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TransactionTestCase, override_settings
 from PIL import Image
 from interior_recommender.application.direct import DirectDemoAdapter, DirectStudio
+from interior_recommender.assets import read_json
 from sketch.models import Project
 from . import services
 from .worker import Worker
@@ -144,6 +145,25 @@ class IntegrationTests(TransactionTestCase):
         response = client.post(BASE + "api/runs", {"photo": SimpleUploadedFile("room.png", picture()), "text":"의자", "request_id":str(uuid4())}, HTTP_X_CSRFTOKEN=token)
         self.assertEqual(response.status_code, 202, response.content)
         self.completed(client, response.json()["run_id"])
+
+    def test_photo_sticker_document_and_export_reach_recommendation(self):
+        item = {'id':str(uuid4()),'kind':'sticker','sticker_id':'office-chair',
+                'x':.4,'y':.3,'width':.2,'height':.4}
+        document = {'strokes':[], 'items':[item]}
+        response = self.submit(text='', document=json.dumps(document),
+                               sketch=SimpleUploadedFile('sketch.png', picture(), 'image/png'))
+        self.assertEqual(response.status_code, 202, response.content)
+        run = response.json()['run_id']
+        state = self.completed(self.client, run)
+        manifest = read_json(settings.INTERIOR_RECOMMENDER_OUTPUT_ROOT / 'runs' / run / 'manifest.json')
+        self.assertEqual(manifest['request']['canvas_document'], document)
+        self.assertEqual(manifest['request']['text'], '')
+        asset = self.client.get(BASE + f"assets/{run}/{state['sketch_image']}")
+        self.addCleanup(asset.close)
+        self.assertEqual(asset.status_code, 200)
+        asset.close()
+        item['sticker_id'] = 'https://evil.test/image.png'
+        self.assertEqual(self.submit(document=json.dumps(document)).status_code, 400)
 
     def test_invalid_inputs_and_hidden_legacy_routes(self):
         self.assertEqual(self.submit(text="").status_code, 400)

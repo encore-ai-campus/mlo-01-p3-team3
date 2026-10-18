@@ -3,6 +3,7 @@ import re
 from uuid import UUID
 
 from .catalog import CATEGORIES, PRODUCT_IDS
+from .stickers import STICKER_IDS
 
 EVENT_TYPES = {"stroke.completed", "stroke.cancelled", "history.undo", "history.redo", "sketch.cleared", "item.added", "item.moved", "item.resized", "item.removed", "category.selected", "button.clicked", "tool.changed", "photo.selected", "photo.dropped", "export.downloaded", "annotation.added", "annotation.moved", "annotation.resized", "annotation.removed", "annotation.edited", "search.clicked", "view.changed", "result.moved", "result.resized", "result.cancelled", "redraw.clicked", "fill.applied", "selection.copied", "selection.pasted", "crop.selected"}
 EVENT_TYPES |= {"selection.grouped", "selection.ungrouped", "photo.restored", "selection.boxed"}
@@ -92,6 +93,10 @@ def document(value):
         if kind is None:
             if set(item) != base | {"product_id"} or not isinstance(item["product_id"], str) or item["product_id"] not in PRODUCT_IDS:
                 raise ValueError("이전 가구 데이터가 올바르지 않습니다.")
+        elif kind == 'sticker':
+            if (set(item) - {'group_id', 'cuts'} != base | {'kind', 'sticker_id'}
+                    or not isinstance(item.get('sticker_id'), str) or item['sticker_id'] not in STICKER_IDS):
+                raise ValueError('등록된 사진 스티커만 사용할 수 있습니다.')
         else:
             if not isinstance(kind, str) or kind not in {"text", "rectangle", "ellipse", "line", "arrow", "fill"}:
                 raise ValueError("지원하지 않는 삽입 요소입니다.")

@@ -20,6 +20,18 @@ test('only shape outline is hit; empty interior can contain another shape', () =
     assert.equal(outlineHit({...item, kind: 'ellipse'}, {x: .4, y: .4}, rect), false);
 });
 
+test('photo sticker is selected by its interior and transforms with its registered image ID', () => {
+    const item = {id:'photo',kind:'sticker',sticker_id:'sofa-cream',x:.1,y:.2,width:.3,height:.2};
+    assert.equal(outlineHit(item,{x:.25,y:.3},{width:1000,height:700}),true);
+    assert.equal(outlineHit(item,{x:.8,y:.3},{width:1000,height:700}),false);
+    const before={items:[item],strokes:[]}, after=structuredClone(before);
+    transformGroup(after,before,selectedGroup(before,item),item,{x:.4,y:.1,width:.45,height:.3});
+    assert.equal(after.items[0].sticker_id,'sofa-cream');
+    assert.equal(after.items[0].kind,'sticker');
+    assert.equal(after.items[0].x,.4);
+    assert.ok(Math.abs(after.items[0].width-.45)<1e-9);
+});
+
 test('arrow head outline can be selected independently of its shaft', () => {
     const item = {kind: 'arrow', x: .1, y: .1, width: .6, height: .001, stroke_width: .002, flip_x: false, flip_y: false};
     const rect = {width: 1000, height: 700}, angle = Math.atan2(.7, 600), size = 35;
