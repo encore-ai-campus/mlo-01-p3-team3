@@ -1,5 +1,7 @@
 # Application과 외부 AI: 입력 맥락 기반 추천
 
+2026-10-18 로컬 구현: [방 특징 추천](../interior-recommender/interior-ranking.md)의 `direct-context-v3`는 palette/materials/shapes/styles와 관찰 근거·불확실성을 별도 수신한다. `interior-content-v3`는 이를 검색 질의와 소프트 가점에 반영한다. API 호출은 기존 해석/질의 임베딩 각 1회이며 사용자 필수조건·검증된 상품 사실·추정 공간 치수와 분리한다. 현재 MySQL 연결은 후속 범위다.
+
 2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
 
 2026-10-15 현행 설계. 상세 책임·응답 구획·코드 검증 예시는 [직접 추천 계약](12-direct-recommendation.md)을 따른다. 직접 추천 로컬 웹 경로를 구현했으며 서비스 DB/API v2 전환은 별도다.

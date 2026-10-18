@@ -63,6 +63,10 @@ function cards(target, items) {
       card.append(details);
     }
     const checks = Object.entries(item.checks).map(([key,value])=>`${fieldNames[key.split(":").at(-1)] || "요청 조건"}: ${checkNames[value] || "미확인"}`).join(" · ");
+    for (const reason of item.match_explanation || []) card.append(node("p", reason));
+    const roomLabels = {palette:"색조", materials:"재질", shapes:"형태", styles:"스타일"};
+    const unknownRoom = Object.entries(item.interior_match?.checks || {}).filter(([,v])=>v.state === "UNKNOWN").map(([key])=>roomLabels[key]);
+    if (unknownRoom.length) card.append(node("p", `상품 정보가 부족해 방과의 조화를 비교하지 못한 특징: ${unknownRoom.join(", ")}`));
     card.append(node("p", checks), node("p", "실제 공간의 크기 적합성: 미확인"));
     target.append(card);
   }

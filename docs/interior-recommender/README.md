@@ -12,6 +12,7 @@
 |---|---|---|---|
 | SketchOn 단일 서버 MVP | [SQLite 실행·복구](execution.md), [통합 설치·실행](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md) | [웹 담당](roles/web.md), [호출 구조](call-structure.md) | `recommendations/{views,submissions,queue,worker}.py` → `application/direct.py`, `application/deferred.py` |
 | 전체 호출·영향 분석 | [호출 구조](call-structure.md) | [전체 아키텍처](../design/00-architecture.md) | 아래 전체 계층 |
+| 방 인테리어 특징·v3 점수·구버전 호환 | [방 특징 추천](interior-ranking.md) | [추천 규칙](roles/domain.md), [카탈로그](roles/catalog.md) | `domain/interior.py`, `domain/recommendation.py`, `application/direct.py` |
 | 프런트엔드·HTTP·Canvas 연동 | [웹 진입과 연동](roles/web.md) | [Canvas 연결 계약](../../src/interior_recommender/web/INTEGRATION.md) | `web/` |
 | 추천 실행·상태·재시도 | [실행 조정](roles/application.md) | [Application 설계](../design/04-application-ai.md), [복구](roles/operations.md) | `application/`, 공통 `pipeline.py` |
 | AI 응답·조건·추천 순위·상품 링크 | [추천 규칙](roles/domain.md) | [직접 추천 계약](../design/12-direct-recommendation.md), [크기 정책](../design/11-scale-policy.md), [상품 연결](../design/09-product-links.md) | `domain/`, `adapters/` |

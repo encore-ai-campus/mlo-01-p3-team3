@@ -276,7 +276,7 @@ class IntegrationTests(TransactionTestCase):
         state = self.completed(self.client, response.json()["run_id"])
         self.assertIn("원목", seen["embed_text"])
         self.assertEqual(state["status"], "COMPLETED")
-        self.assertEqual(state["recommendations"]["ranking_version"], "weighted-content-v2")
+        self.assertEqual(state["recommendations"]["ranking_version"], "interior-content-v3")
         self.assertEqual(len(state["recommendations"]["items"]), 6)
         for item in state["recommendations"]["items"]:
             self.assertEqual(item["metadata"]["category_code"], "CHAIR")

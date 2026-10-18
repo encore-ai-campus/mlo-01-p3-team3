@@ -12,6 +12,7 @@ from ..pipeline import Pipeline, contract_hash, now, run_lock
 from ..domain.recommendation import (CONTEXT_VERSION, ProductIndex, RankingPolicy, RecommendationContext,
                               context_prompt, parse_context, validate_context)
 from ..schemas import InputRequest, normalized_vector
+from ..domain.interior import query_terms
 from ..services import PROMPT_VERSION, SCHEMA_VERSION
 from ..catalog.danawa import DanawaCatalog
 from ..web.workflow import DemoAdapter, Studio
@@ -171,7 +172,7 @@ class DirectStudio(Studio):
         if contract_hash(pipeline.manifest) != pipeline.manifest["input_hash"]:
             raise ValueError("입력/정책 스냅샷이 변경되었습니다.")
         contract = pipeline.manifest.get("direct_contract", {})
-        if pipeline.manifest.get("web_demo") != self.demo or contract.get("context_version") != CONTEXT_VERSION:
+        if pipeline.manifest.get("web_demo") != self.demo or contract.get("context_version") not in {"direct-context-v2", CONTEXT_VERSION}:
             raise ValueError("실행 모드/해석 버전이 다릅니다. 새 요청을 제출하세요.")
         if not self.index or contract.get("index_version") != self.index.version:
             pipeline.manifest["status"] = "INDEX_NOT_READY"
@@ -194,7 +195,8 @@ class DirectStudio(Studio):
         request = p.manifest["request"]
         model_request = {k: request.get(k) for k in ("text", "categories", "requested_region")}
         images = [png_bytes(p.asset(request[k]), resize=True)[0] for k in ("room_image", "sketch_image") if request.get(k)]
-        context = p.stage("context", "direct_context", context_prompt(model_request), images,
+        include_room = p.manifest["direct_contract"]["context_version"] == CONTEXT_VERSION
+        context = p.stage("context", "direct_context", context_prompt(model_request, include_room=include_room), images,
                           lambda value: parse_context(value, request["text"], request["categories"]).model_dump(mode="json"))
         context = validate_context(context, request["text"], request["categories"])
         if context.decision != "ACCEPTED":
@@ -203,9 +205,13 @@ class DirectStudio(Studio):
             return
         policy = RankingPolicy.model_validate(p.manifest["direct_contract"]["ranking_policy"])
         query_text = " | ".join([context.category_code, *context.search_terms, context.room_context])
-        if policy.version == "weighted-content-v2":
+        if policy.version in {"weighted-content-v2", "interior-content-v3"}:
             # Preserve the original wording (including negation) in semantic search.
             query_text = " | ".join([query_text, *(c.source_quote for c in context.required if c.field == "material")])
+        if policy.version == "interior-content-v3":
+            room_terms = query_terms(context.room_profile)
+            if room_terms:
+                query_text = " | ".join([query_text, room_terms])
         # SketchOn's optional style is query context, never evidence for required conditions.
         external = request.get("external_project")
         style_color = None

@@ -1,5 +1,7 @@
 # 이미지 생성 없는 scikit-learn 콘텐츠 추천 MVP
 
+2026-10-18 새 기본 추천은 `interior-content-v3`다. [방 특징 추천·점수·입력·호환](../../docs/interior-recommender/interior-ranking.md)을 따른다. 기존 파일 상품/벡터에 방 색조·재질·형태·스타일 맥락을 연결하며 결측은 UNKNOWN이다. API 호출 종류는 기존 해석/질의 임베딩이고 MySQL 연결은 후속 작업이다. 아래 v1/v2 정책 설명은 구버전 동작이다.
+
 2026-10-18 SketchOn 통합 실행은 웹 접수/조회와 별도 SQLite 워커로 나뉜다. 기존 `DirectStudio.prepare`/domain 규칙과 stage/receipt를 재사용하고 Gemini는 native async 호출, 이미지/파일/계산은 제한된 공유 풀에서 실행한다. [SQLite 실행·복구·후속 파이프라인 연결](../../docs/interior-recommender/execution.md)을 따른다. 아래 독립 `python -m interior_recommender.web`은 기존 제한된 스레드풀 방식이다.
 
 [역할별 코드·문서 라우팅](../../docs/interior-recommender/README.md) · [호출 구조와 모듈 이전표](../../docs/interior-recommender/call-structure.md)

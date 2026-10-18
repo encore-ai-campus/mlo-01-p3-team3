@@ -1,5 +1,7 @@
 # 추천 실행 조정
 
+2026-10-18: 신규 해석은 `room_profile`을 받고 새 v3 요청은 정규화된 방 특징을 질의에 추가한다. 기존 해석/질의 호출 수는 각 1회이며 사전 상품 임베딩을 재생성하지 않는다. 기본 v3와 구버전 재시도/점수는 [방 특징 추천](../interior-ranking.md)을 따른다. 현재 연결은 파일 카탈로그이며 MySQL 적재·조회 어댑터는 후속 작업이다.
+
 2026-10-18 SketchOn 실행: 웹은 `submissions → queue`로 원본·고정 계약과 영속 작업을 접수한다. 별도 `recommendations.worker`가 선점한 뒤 `DirectStudio.validate_run/prepare`를 재사용한다. `application.deferred.DeferredPipeline`이 API 단계에서 실행을 양보하고 워커가 native async 응답/receipt를 보존한다. 성공 단계는 재사용하고 재시도 시각은 SQLite에 보존해 슬롯을 반납한다. [실행 상세](../execution.md). 아래 `launch()` 설명은 독립 추천 웹의 기존 실행 방식이다.
 
 [역할별 라우팅](../README.md) · [호출 구조](../call-structure.md) · [Application 설계](../../design/04-application-ai.md)

@@ -1,5 +1,7 @@
 # 직접 추천 v3 데이터 변경안
 
+2026-10-18 방 특징 구현: [새 추천 계약](../../interior-recommender/interior-ranking.md)에 따라 로컬 `RecommendationContext.room_profile`은 palette/materials/shapes/styles·evidence·uncertainties를 보존한다. 새 기본 `interior-content-v3`는 정책의 `room_weight`와 항목의 `score_components.room_compatibility`, `interior_match`, `match_explanation`을 기록한다. 방 관찰은 requirements가 아니며 MySQL에서는 기존 `room_context_json`·`feature_snapshot_json`·`score_components_json`·`match_explanation_json`에 대응할 후속 어댑터가 필요하다. 아래 v1/v2 수치는 구버전 계약이다.
+
 2026-10-18 SQLite 로컬 실행 원장은 `recommendations.{RecommendationJob,RecommendationAttempt,QueueControl,WorkerPresence,ProviderGate,ProviderPermit}`다. UUID/고유 요청 키·lease/token·available_at·시도/대기 시간은 [로컬 작업 속성](../../interior-recommender/execution.md#상태와-로컬-원장)을 따른다. 운영 MySQL 엔터티와 별도이며 기존 API receipt/상품 벡터를 이관·재생성하지 않는다.
 
 [통합 계약](../12-direct-recommendation.md) · [사전](index.md) · [데이터 모델](../03-data-model.md)

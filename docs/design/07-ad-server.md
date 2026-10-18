@@ -1,5 +1,7 @@
 # 광고 서버: 라벨 없는 CPU 콘텐츠 기반 추천
 
+2026-10-18 추천 코드 기본은 [방 특징 추천](../interior-recommender/interior-ranking.md)의 `interior-content-v3`다. 기존 콘텐츠 점수에 방 특징 가점을 결합하고 특징별 결측·기여분·설명을 보존한다. 수동 정책이며 학습 모델/미적 품질 보장이 아니다. 현재 로컬 파일 카탈로그에서 구현했으며 광고 서버 HTTP·MySQL 어댑터·운영 배포 완료를 뜻하지 않는다. 아래 v1/v2 가중치 설명은 해당 구버전 정책이다.
+
 [직접 추천 계약](12-direct-recommendation.md) · [상품 연결](09-product-links.md) · [데이터 준비](02-data-pipeline.md)
 
 ## 이번 추천 방식
