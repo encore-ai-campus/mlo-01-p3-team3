@@ -1,13 +1,13 @@
 # MySQL·Garage·Delta 추천 연결
 
-2026-10-19. 연결 코드를 준비했다. 실제 서버 배포·업무 상품 게시·임베딩 이전·외부 API 호출·MySQL 등록/활성화는 이번 변경으로 실행하지 않는다. 기존 로컬 카탈로그와 SketchOn SQLite 작업 원장은 유지한다.
+2026-10-19. 연결 코드와 Garage 임베딩 실행기를 준비했다. 업무 상품 게시·MySQL 등록/활성화와 임베딩 실행기 배포는 별도 단계다. 기존 로컬 카탈로그와 SketchOn SQLite 작업 원장은 유지한다.
 
 ## 확인한 상태와 구현 범위
 
-- Spark 서비스 계정에서 Garage를 조회하고 `s3a://pj3-data/silver/product_image_vectors`의 빈 Delta 테이블(version 0, `product-image-vectors-v1`)을 생성했다. 기존 검증 Delta를 운영 입력으로 바꾸지 않았다.
+- Spark 서비스 계정에서 Garage를 조회하고 `s3a://pj3-data/silver/product_image_vectors`를 생성했다. 2026-10-19 03:00 KST 별도 Spark 재조회에서 신규 이미지 1개의 768차원 벡터와 Delta version 1을 검증했다. 실제 API 호출 1회, 신규 적재 1행이다. 기존 검증 Delta를 운영 입력으로 바꾸지 않았다.
 - 2026-10-19 02:27 KST, 새 MySQL 어댑터로 TLS 서버 인증과 읽기 전용 트랜잭션을 실제 검증했다. Primary `pj3_products`의 상품·게시·임베딩은 없었고 활성 인덱스는 `INDEX_NOT_READY`였다. 빈 DB에서 실제 추천 성공을 확인한 것은 아니다.
-- 기존 full 배치의 완료 벡터 290개를 신규 검사기로 읽기 전용 검증했다. 운영 이미지와의 일치 수량은 업무 게시 후 대조한다. smoke 10개는 기존 확인상 full에 포함된다. 재사용 승인 전 변환·이전·재생성하지 않는다.
-- 추천 서버에 새 서비스를 설치하거나 실행 중인 웹 서버를 교체하지 않았다. 공통 SSH/sudo 자격과 DB 계정은 별개다. 공유 DB 문서에서 확인한 게시 계정은 Spark Master 전용이며 추천 서버 전용 계정이 아니다.
+- 기존 full 배치의 완료 벡터 290개를 검증하고 사용자 승인 후 재사용 JSONL로 변환했다(API 0회). smoke 10개는 full에 포함된다. 서버 계획 조회에서 Garage 원본 checksum이 일치하는 재사용 후보는 14개였으며 실제 처리 시 전처리 checksum도 대조한다. Garage 업로드가 진행 중이므로 이미지 총수는 조회마다 달라진다.
+- 신규 1개 검증 후 Spark Master의 별도 `embedding-service`에 임베딩 실행기를 배포했다. 실행 중인 파이프라인·웹 서버를 교체하거나 대량 작업을 자동 시작하지 않았다. 공통 SSH/sudo 자격과 DB 계정은 별개다. 공유 DB 문서에서 확인한 게시 계정은 Spark Master 전용이며 추천 서버 전용 계정이 아니다.
 
 ## 데이터 경로
 
@@ -40,6 +40,7 @@ flowchart TD
 | `interior_recommender.catalog.server_embeddings` | 배치 manifest/input hash·완료 stage·출력 checksum·원본/전처리 checksum·모델/차원 검사, 승인 후 Delta 입력 변환 |
 | `product_pipeline.embedding_table`, `run_embedding_table.py` | 독립 임베딩 테이블 조회/생성, 명시적 import/export CLI |
 | `product_pipeline.embedding_vectors` | float32/L2·결정적 ID·내용 hash 검증, 100행 insert-only MERGE, 고정 version NPY export |
+| `product_pipeline.garage_embeddings`, `run_garage_embeddings.py` | Garage 원본 검사, 승인한 기존 결과 재사용, 단일 키 REST 임베딩, 성공 응답 보존, 짧은 Spark 배치 적재, 첫 429에서 중단 |
 | `ProductIndex.load/rank`, `LiveGuard` | 서버 카탈로그의 현재 상품/이미지/임베딩/활성 인덱스를 재조회. 실패를 추천 없음으로 숨기지 않음 |
 
 Delta 테이블은 기존 Silver 8개 테이블·Gold 고정 입력 집합과 분리한다. 기존 공통 Silver 스키마에 vector 컬럼을 추가하지 않는다. 쓰기는 같은 `pipeline_ops.pipeline_writer_leases`와 **정확히 같은 Silver root URI**를 잠그는 MongoLease를 사용한다. 다른 Driver와 잠금 namespace를 분리해 우회하지 않는다. Spark 종료를 확인하지 못하면 잠금을 자동 회수하지 않는다.
@@ -127,6 +128,36 @@ python -m interior_recommender.catalog.server export --config /srv/private/catal
 카탈로그 파일은 현재 추천 서버/워커에 이미지·NPY와 함께 같은 상대 경로로 배포한다. 기존 `INTERIOR_RECOMMENDER_PRODUCTS` 또는 독립 웹 `--products`에 새 `products.json` 경로를 지정하고 `INTERIOR_CATALOG_SERVER_CONFIG`도 설정한다. 서버 JSON에 이 설정이 없으면 로컬 파일처럼 상태 검사를 생략하지 않고 실패한다. 인덱스는 요청별 고정이고 교체는 웹/워커 설정을 함께 확인해 재시작한다.
 
 ## 검증과 남은 경계
+
+### 서버 임베딩 실행기
+
+실행기는 `images/sha256/`의 내용 주소 이미지와 원본 SHA256을 대조한다. MySQL 게시 이전의 벡터 준비에 사용하며 상품 추천·이용 승인·게시 상태를 새로 부여하지 않는다. 기존 JSONL은 모델·768차원·전처리 버전·벡터를 검사하고, 원본과 전처리 checksum이 모두 일치할 때만 재사용한다. 같은 Delta 벡터가 있으면 API 호출을 생략한다.
+
+서버 보호 설정은 `garage-embedding-worker-v1`, 모델 `gemini-embedding-2`, 전처리 `exif-rgb-fit1024-png-l2-v1`, 차원 768과 기존 S3/Mongo/JAR/CA 파일 경로를 지정한다. `api_key_file`은 서비스 계정 소유 0600 파일을 가리킨다. 실제 키·비밀번호는 명령행·Git·로그에 넣지 않는다. 실행 디렉터리는 0700이며 Linux CLI는 umask 077을 적용한다.
+
+성공한 API 응답은 Delta 작업 전에 `work/receipts/`에 원자적으로 저장한다. 적재 실패 후 같은 work 디렉터리로 재실행하면 응답을 재사용한다. 기존 full 290개와 새 성공 응답은 유료 호출을 줄이는 재현 입력이므로 삭제하지 않는다. 공급자가 처리한 뒤 응답 수신 전에 연결이 끊기는 경우까지 중복 과금 방지를 보장하지는 않는다.
+
+Spark는 시작 시 고정 버전 재고 검사와 기본 25개 단위 적재에만 사용하고 API 대기 동안 종료한다. 적재에는 기존 Silver root MongoLease를 사용한다. 실행기 work 잠금은 같은 작업의 중복 실행을 차단하며 분산 Delta 쓰기 잠금을 대신하지 않는다. 고정 JAR의 SHA256도 실행 전에 확인한다.
+
+`--max-api-calls 1`은 신규 호출 1회 검증용, 생략 또는 0은 시작 시 확인한 이미지 목록의 완료 또는 첫 429까지 처리한다. 기본 속도는 분당 10회이고 토큰량에 따른 TPM 충족을 보장하지 않는다. 첫 429에서 자동 재시도·키 교체를 하지 않고 앞선 성공분을 적재한 뒤 종료 코드 75를 반환한다. `Retry-After`가 있으면 다음 실행도 해당 시간을 존중한다. 429는 RPM·TPM·RPD 중 하나의 제한일 수 있어 하루 한도 소진으로 단정하지 않는다.
+
+`--plan`은 API 키를 읽거나 API를 호출하지 않고 현재 Delta 완료 수·Garage 원본 수·기존 결과와 원본 체크섬 일치 수를 보여준다. 계획의 일치 수는 전처리 대조 전 후보 수이며 실행 시 최종 확인한다. 업로드 중인 새 이미지는 다음 실행의 목록에서 처리한다. 실행 종료가 MySQL 등록·인덱스 활성화·웹 추천 배포 완료를 의미하지 않는다.
+
+2026-10-19 배포 위치는 Spark Master의 `/var/lib/pj3/product-pipeline/spark/embedding-service`다. 소스 72파일의 개별 SHA256 manifest를 만들고 release `5338adf8b4be9eacdbbe0690babdc73c5affda251ee891b276968b5b7e6a2d42f`에 고정했다. `current`는 해당 release를 가리키며 기존 Spark venv를 사용한다. 별도 패키지 설치·GPU·MySQL 변경은 없었다. 실제 접속 설정과 API 키는 Git에 포함하지 않는다.
+
+API 호출 없는 상태 확인:
+
+```powershell
+ssh -t pj3-spark-master 'sudo -u pj3-spark -- /var/lib/pj3/product-pipeline/spark/embedding-service/run --plan'
+```
+
+현재 이미지 목록 완료 또는 첫 429까지 실행한다. 성공분과 재사용 입력을 같은 work 디렉터리에서 이어가며, SSH 터미널을 유지한다. 일일 한도 소진까지 자동 재시도하는 명령은 아니다.
+
+```powershell
+ssh -t pj3-spark-master 'sudo -u pj3-spark -- /var/lib/pj3/product-pipeline/spark/embedding-service/run --requests-per-minute 10 --commit-every 25'
+```
+
+실제 신규 시험 원본 checksum은 `0001f8751b56ab8ec3b1153bd8c6b8a1ec45bb53d25f2b1d3581e202c4c0ea6c`이다. 별도 Spark 재조회에서 행의 ID/hash·차원·L2를 검사했다. 이 시험은 MySQL 상품 대응과 추천 준비 상태를 승인한 시험이 아니다.
 
 합성 데이터로 MySQL session read-only/rollback/TLS 설정, Delta ID/hash·유한값/L2, 이미지 원본 checksum·고정 벡터 참조, 초기 준비의 순환 의존 방지, 승인/만료/철회·인덱스 변경 차단, 기존 CPU 추천 실행과 현재 링크 연결을 검증한다. 실패 build의 mmap도 닫고 임시 디렉터리를 정리한다.
 

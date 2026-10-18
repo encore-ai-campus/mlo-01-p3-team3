@@ -6,6 +6,8 @@
 
 ## 결과 요약
 
+2026-10-19 추천 카탈로그 담당 후속 검증: 사용자 승인 후 Garage 신규 이미지 1개를 `gemini-embedding-2`/768차원으로 임베딩하고 별도 Silver `product_image_vectors`에 1행 적재했다(API 1회). 03:00 KST 별도 Spark 세션에서 version 1과 벡터 계약/ID/hash를 재검사했다. 기존 full 290개는 승인 후 API 없이 JSONL로 변환했으며 원본 checksum 일치 후보 14개는 실행 시 전처리도 대조한다. 신규 시험 후 Spark Master의 독립 `embedding-service` 실행기를 배포했고 기존 업무 파이프라인/웹 서버는 교체하지 않았다. 첫 429 중단·응답 보존·재사용 실행 경로와 명령은 [추천 카탈로그 연결](../../../docs/interior-recommender/server-catalog.md#서버-임베딩-실행기)을 따른다. MySQL 업무 상품·승인·활성 인덱스를 생성한 결과는 아니다.
+
 | 검증 | 결과와 실제 범위 |
 |---|---|
 | Mongo → Garage → Kafka → Bronze | 실제 수집 3상품·9이미지 관계. 원문/객체 바이트 재조회, raw 3/event 3/quarantine 0 |
