@@ -1,4 +1,6 @@
-# 기존 RoomPick Canvas → 직접 상품 추천 연결
+# SketchOn Canvas → 직접 상품 추천 연결
+
+2026-10-16 현재 저장소의 SketchOn 통합은 [단일 Django 서버 실행 안내](../../demo_sketchon/docs/ver2/직접추천_통합_실행.md)를 따른다. 경로는 `/interior-recommand/`이며 기존 로컬 상품과 `DirectStudio`를 같은 프로세스에서 사용한다. 아래 `/ai-mvp/`·upstream·공유 토큰은 독립 서버를 연결하는 이전 브리지 방식이며 SketchOn 통합 실행에는 필요하지 않다.
 
 ## 역할별 구현 안내
 

@@ -60,7 +60,8 @@ class QuotaTests(TestCase):
             self.assertEqual(self.client.get('/api/account/status/').json()['quota']['used'],0)
             self.generate()
         self.assertEqual(GuestGenerationUsage.objects.count(),2)
-        self.assertEqual(self.client.get('/api/account/status/', HTTP_X_FORWARDED_FOR='1.2.3.4').json()['quota']['used'],1)
+        with patch('sketch.quota.timezone.now', return_value=after):
+            self.assertEqual(self.client.get('/api/account/status/', HTTP_X_FORWARDED_FOR='1.2.3.4').json()['quota']['used'],1)
 
     def test_member_has_no_generation_limit(self):
         user=get_user_model().objects.create_user('member',password='Demo-member-2468!')

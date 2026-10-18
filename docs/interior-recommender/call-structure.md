@@ -20,6 +20,8 @@
 
 ## 온라인 직접 추천
 
+SketchOn 통합에서는 `demo_sketchon/config.urls → recommendations.urls/views → recommendations.services.studio → application.direct.DirectStudio`로 호출한다. `/interior-recommand/`의 화면·API·asset·링크를 한 Django 서버에서 제공하며 브리지·별도 `web.__main__.configure()`를 사용하지 않는다. 승인된 295개 로컬 상품을 읽고 기존 해석·임베딩·추천 로직을 유지한다. 회원/프로젝트 권한과 새 화면·정적 파일은 `demo_sketchon/recommendations/`가 담당한다. [실행과 경계](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md)를 참고한다.
+
 ```mermaid
 flowchart TD
     Boot["web.__main__.main / configure"] --> Factory["views.studio → DirectStudio"]
@@ -44,6 +46,10 @@ flowchart TD
 정상 신규 요청의 외부 작업은 `direct_context`와 `embed_text` 각 1회다. 성공 stage/receipt가 있으면 재사용하고, 제공처 재시도로 실제 요청 수는 늘 수 있다. 모든 상품 벡터는 요청 전에 준비한다. `ProductIndex.rank()`는 필수 불일치를 제외한 뒤 2,048행 청크로 유사도를 계산한다.
 
 ## 상품 준비와 링크 조회
+
+SketchOn 선택 스타일은 새 실행의 `color-first-v2`에서 재질 명칭 대신 색상·톤 질의로 변환하고 원문 색상 조건/선호가 없으면 기존 색상 가중치에 연결한다. 서버에 저장된 선택값만 사용하며 AI 원응답·이전 실행은 보존한다. [실행 담당](roles/application.md)의 매핑과 우선순위를 따른다.
+
+2026-10-16 기본 `weighted-content-v2`에서는 재질을 필수 필터에서 분리한다. `_prepare()`가 재질 원문을 질의 임베딩에 추가하고 `rank()`는 재질 대조를 `preference_checks`에 기록한다. 결측·불일치로 후보를 제외하지 않으며 다른 필수 조건은 유지한다. v1 저장 실행은 당시 고정 정책을 사용한다.
 
 ```mermaid
 flowchart LR

@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
+from interior_recommender.config import load_environment
+
+load_environment()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("ROOMPICK_SECRET_KEY", "roompick-local-development-only")
 DEBUG = os.environ.get("ROOMPICK_DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.environ.get("ROOMPICK_HOSTS", "localhost,127.0.0.1,[::1],192.168.0.44").split(",")
-INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "sketch", "operations.apps.OperationsConfig"]
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "sketch", "operations.apps.OperationsConfig", "recommendations"]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -31,7 +34,7 @@ DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": os.envi
 STATIC_URL = "/static/"
 MEDIA_ROOT = Path(os.environ.get("ROOMPICK_MEDIA_ROOT", BASE_DIR / "media"))
 SKETCH_RAW_ROOT = Path(os.environ.get("ROOMPICK_RAW_ROOT", BASE_DIR / "data" / "sketch_raw"))
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 35 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 LANGUAGE_CODE = "ko-kr"
 TIME_ZONE = "Asia/Seoul"
@@ -42,6 +45,18 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_NAME = "roompick_sessionid"
 CSRF_COOKIE_NAME = "roompick_csrftoken"
+
+# Local immutable product snapshot; recommendation requests never query a product DB.
+INTERIOR_RECOMMENDER_PRODUCTS = Path(os.environ.get(
+    "INTERIOR_RECOMMENDER_PRODUCTS",
+    BASE_DIR.parent / "interior_recommender/sample/crawl_test/full/catalog-with-links/products.json",
+)).resolve()
+INTERIOR_RECOMMENDER_DEMO = os.environ.get("INTERIOR_RECOMMENDER_DEMO", "0") == "1"
+INTERIOR_RECOMMENDER_OUTPUT_ROOT = Path(os.environ.get(
+    "INTERIOR_RECOMMENDER_OUTPUT_ROOT",
+    BASE_DIR.parent.parent / "outputs" / ("sketchon-direct-demo" if INTERIOR_RECOMMENDER_DEMO else "sketchon-direct"),
+)).resolve()
+INTERIOR_RECOMMENDER_RANKING_POLICY = os.environ.get("INTERIOR_RECOMMENDER_RANKING_POLICY")
 if not DEBUG:
     if SECRET_KEY == "roompick-local-development-only":
         raise ValueError("ROOMPICK_SECRET_KEY is required when DEBUG is off")

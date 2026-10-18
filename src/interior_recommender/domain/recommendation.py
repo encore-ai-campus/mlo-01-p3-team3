@@ -13,12 +13,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 from ..assets import checksum, read_json
 from ..schemas import Box, Contract
 
-RANKING_VERSION = "weighted-content-v1"
+RANKING_VERSION = "weighted-content-v2"
 CONTEXT_VERSION = "direct-context-v2"
 
 
 class RankingPolicy(Contract):
-    version: Literal["weighted-content-v1"] = RANKING_VERSION
+    version: Literal["weighted-content-v1", "weighted-content-v2"] = RANKING_VERSION
     similarity_weight: float = Field(default=.85, ge=0, le=1, allow_inf_nan=False)
     color_weight: float = Field(default=.15, ge=0, le=1, allow_inf_nan=False)
 
@@ -260,6 +260,7 @@ class ProductIndex:
         for start in range(0, len(self.products), 2048):
             eligible = []
             for offset, product in enumerate(self.products[start:start + 2048]):
+                preferences = {}
                 checks = {"category_code": "UNKNOWN" if product.category_code is None else
                           "MATCH" if product.category_code == context.category_code else "DIFFERENT"}
                 if context.unapplied_conditions:
@@ -277,17 +278,19 @@ class ProductIndex:
                         right = condition.value.strip().casefold() if isinstance(condition.value, str) else condition.value
                         match = left == right if condition.operator == "EQ" else left != right if condition.operator == "NE" else left <= right
                         state = "MATCH" if match else "DIFFERENT"
-                    checks[f"required:{n}:{condition.field}"] = state
+                    # Sparse material metadata is search context in v2, never an eligibility gate.
+                    target = preferences if condition.field == "material" and policy.version == "weighted-content-v2" else checks
+                    target[f"required:{n}:{condition.field}"] = state
                 if "DIFFERENT" in checks.values():
                     excluded += 1
                     continue
-                eligible.append((offset, product, checks))
+                eligible.append((offset, product, checks, preferences))
             if not eligible:
                 continue
             # Filter before similarity. Only [1, eligible chunk], never NxN.
-            rows = [offset for offset, _, _ in eligible]
+            rows = [row[0] for row in eligible]
             scores = cosine_similarity(query, self.vectors[start:start + 2048][rows])[0]
-            for (_, product, checks), similarity in zip(eligible, scores):
+            for (_, product, checks, preferences), similarity in zip(eligible, scores):
                 group = "UNKNOWN" if "UNKNOWN" in checks.values() else "MATCH"
                 color_state = "UNSPECIFIED" if not context.preferred_color else "UNKNOWN" if product.color is None else (
                     "MATCH" if product.color.casefold().strip() == context.preferred_color.casefold().strip() else "DIFFERENT")
@@ -299,12 +302,14 @@ class ProductIndex:
                         "score": sum(components.values()), "similarity": float(similarity), "score_components": components,
                         "condition_status": group, "checks": checks, "preferred_color_status": color_state,
                         "size_fit": "UNKNOWN", "metadata": product.model_dump(exclude={"image", "image_checksum"})}
+                if policy.version == "weighted-content-v2":
+                    item["preference_checks"] = preferences
                 previous = best[group].get(product.product_id)
                 key = lambda x: (-x["score"], -x["similarity"], x["product_id"], x["image_id"])
                 if previous is None or key(item) < key(previous):
                     best[group][product.product_id] = item
         order = lambda x: (-x["score"], -x["similarity"], x["product_id"], x["image_id"])
-        return {"ranking_version": RANKING_VERSION, "policy": policy.model_dump(), "weight_source": "MANUAL_INITIAL",
+        return {"ranking_version": policy.version, "policy": policy.model_dump(), "weight_source": "MANUAL_INITIAL",
                 "sklearn_version": sklearn.__version__, "index_version": self.version, "score_is_probability": False,
                 "searched_images": len(self.products), "excluded_images": excluded,
                 "items": heapq.nsmallest(limit, best["MATCH"].values(), key=order),

@@ -10,6 +10,7 @@
 | 역할별 기술 작업 | [설계 라우팅](design/index.md) | 담당 상세 문서 |
 | AI와 코드 검증 | [Application](design/04-application-ai.md) | [크기 정책](design/11-scale-policy.md) |
 | 검색·콘텐츠 추천·후속 평가 | [추천 서버](design/07-ad-server.md) | [파이프라인](design/02-data-pipeline.md), [운영](design/06-operations-migration.md) |
+| 실버·골드 정제 필드·준비 상태 | [Delta 필드 계약](design/data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위) | [파이프라인](design/02-data-pipeline.md#실버골드-필드-적용), [원장 대응](design/03-data-model.md#실버골드와-서비스-원장-대응) |
 | 데이터 변경 | [직접 추천 속성](design/data-dictionary/09-direct-recommendation.md) | [모델](design/03-data-model.md), [ERD](design/03-erd-full.md) |
 | 상품·링크 | [상품 연결](design/09-product-links.md) | [광고 서버](design/07-ad-server.md) |
 | 인프라·보존·복구 | [인프라](design/01-infrastructure.md) | [Kafka](design/05-kafka-jobs.md), [운영](design/06-operations-migration.md) |
