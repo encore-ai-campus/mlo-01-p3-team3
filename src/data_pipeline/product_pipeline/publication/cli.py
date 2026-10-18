@@ -51,14 +51,26 @@ def main(argv=None):
     p=argparse.ArgumentParser(description='문서 계약 기반 Gold→MySQL 게시')
     sub=p.add_subparsers(dest='action',required=True)
     ddl=sub.add_parser('reference-ddl');ddl.add_argument('--output',type=Path,required=True)
+    migration=sub.add_parser('migration-check',help='적용/롤백 SQL과 코드 계약의 일치 검사. DB 연결·DDL 없음')
+    migration.add_argument('--directory',type=Path,default=Path(__file__).resolve().parents[2]/'sql/migrations')
     prep=sub.add_parser('prepare')
     for name in ('gold-export','gold-root','archive-root','guard-hashes','mysql-config','output'):prep.add_argument('--'+name,required=True)
     prep.add_argument('--batch-size',type=int,default=100)
     for name in ('preflight','publish'):
         q=sub.add_parser(name);q.add_argument('--config',required=True,type=Path);q.add_argument('--local-test',action='store_true')
-        if name=='publish':q.add_argument('--plan',required=True,type=Path);q.add_argument('--apply',action='store_true')
+        if name=='publish':
+            q.add_argument('--plan',required=True,type=Path);q.add_argument('--apply',action='store_true')
+    inspect=sub.add_parser('schema-diff')
+    inspect.add_argument('--config',type=Path,required=True);inspect.add_argument('--output',type=Path,required=True)
+    inspect.add_argument('--local-test',action='store_true')
+    audit=sub.add_parser('audit')
+    audit.add_argument('--config',type=Path,required=True);audit.add_argument('--plan',type=Path,required=True)
+    audit.add_argument('--local-test',action='store_true')
     args=p.parse_args(argv);db=None;spark=None;began=time.monotonic()
     try:
+        if args.action=='migration-check':
+            from .migration import verify_bundle
+            emit({**verify_bundle(args.directory),'duration_ms':round((time.monotonic()-began)*1000)});return 0
         if args.action=='reference-ddl':
             args.output.parent.mkdir(parents=True,exist_ok=True)
             with args.output.open('x',encoding='utf-8',newline='\n') as f:f.write(reference_ddl())
@@ -81,11 +93,20 @@ def main(argv=None):
             target=digest(dict(target_id=config['target_id'],database=config['database']))
             result=prepare_from_source(GoldSource(spark,args.gold_export,args.gold_root,args.archive_root),
                 read_json(args.guard_hashes),target,args.output,batch_size=args.batch_size)
+        elif args.action=='schema-diff':
+            from .mysql import schema_difference
+            db=MySQL(read_json(args.config),local_test=args.local_test)
+            if args.output.exists():raise PipelineError('SCHEMA_DIFF_OUTPUT_EXISTS')
+            result=schema_difference(db);atomic_json(args.output,result)
         else:
             if args.action=='publish' and not args.apply:raise PipelineError('PUBLICATION_EXPLICIT_APPLY_REQUIRED')
-            plan=load_plan(args.plan) if args.action=='publish' else None
+            plan=load_plan(args.plan) if args.action in {'publish','audit'} else None
             db=MySQL(read_json(args.config),local_test=args.local_test)
-            result=publish(plan,db) if plan else db.preflight()
+            if args.action=='audit':
+                from .runner import audit_publication
+                db.preflight()
+                with db.read_snapshot():result=audit_publication(plan,db)
+            else:result=publish(plan,db) if plan else db.preflight()
         emit({**result,'duration_ms':round((time.monotonic()-began)*1000)});return 0
     except Exception as exc:
         emit(dict(status='FAILED',error_code=exc.code if isinstance(exc,PipelineError) else type(exc).__name__,

@@ -2,6 +2,8 @@
 
 2026-10-18. 대상은 상품 수집 파이프라인이다. 사용자 입력·해석·추천·임베딩·UI·서비스 작업 원장 연동은 다른 담당자의 범위로 유지했다. 전체 운영 인수와 아래 기술 시험을 구분한다.
 
+후속 v2 반영: 사용자가 승인한 `pj3_products`와 별도 `pj3_products_validation`에 기본 10개+추가 3개 테이블을 구성했다. 실제 TLS/스키마/최소 권한 검사와 검증 DB의 합성 상품 게시·재게시·audit를 통과했다. 업무 DB의 상품·승인은 0건이다. 아래 초기 시험 기록 중 MySQL 업무 DB/접속 설정 부재는 이 후속 구성으로 보완했으며 실제 업무 승인·외부 서비스 ORM 인수는 남는다. [누락 테이블 대조·계정·보호 경로·공개 결과](mysql_schema_rollout.md#신규-vm-스키마와-tls-반영-결과)를 기준으로 한다.
+
 ## 결과 요약
 
 | 검증 | 결과와 실제 범위 |
@@ -13,11 +15,12 @@
 | Silver | 실제 Bronze version 1의 한 상품. 실제 Mongo 이미지 상태·MongoLease·Garage Delta 사용, 8개 테이블 저장 및 반복 재사용 |
 | Gold | 고정 Silver 8개 버전으로 한 상품·이미지 4관계 처리·반복 재사용. recommendation_ready 0 |
 | 서버 간 인계 | Master → Garage ready-last → NiFi 수신. 3상품/9이미지 관계와 snapshot/file/chunk hash 일치, 재전송 객체 추가 0 |
-| MySQL 문서 계약 | 실제 MySQL01 8.4.11의 별도 시험 스키마. 9개 게시·복구 시나리오 통과, 시험 스키마·계정 삭제 |
+| MySQL 초기 문서 계약 | 이전 v1 별도 시험 스키마에서 9개 게시·복구 시나리오 통과 후 자체 정리. 후속 v2 검증과 구분 |
+| MySQL v2·TLS | 13테이블·160컬럼과 preflight 검증, Master→MySQL01 인증서/호스트명 검증. 합성 상품 1건·이미지 연결 2건 게시, 반복 REUSED·audit VERIFIED. 3개 노드 구조/계정/복제 반영 확인 |
 | 실제 프로세스 중단·큐 복구 | 별도 프로세스 exit 130 뒤 RUNNING을 명시 복구. 실제 INGEST handler 재실행 성공·성공 receipt 보존 |
 | 제한 SSH | NiFi → Master의 고정 tick 성공. id 및 tick;id 차단. 별도 키·호스트 키 고정·포워딩 제한 |
 | 실제 NiFi | 2.12.0 인증·bundle 대조·별도 프로세서 생성·잠시 timer 실행·정지. Master 감사 기록 2→14, 최종 active thread 0/STOPPED |
-| 자동 시험 | 전체 252개/116.362초 통과. Linux VM의 운영/LIVE/전송 파일·대역 시험 43개/1.056초 통과 |
+| 자동 시험 | 최신 로컬 회귀 266개/107.125초 통과. 실제 로컬 MySQL v2 migration 16·게시 12건 통과. 이전 Linux VM 운영/LIVE/전송 대역 시험 43개/1.056초와 구분 |
 
 실제 서비스별 결과는 [1차 근거](verification/services_20261018/public-results.json), [최종 MySQL·SSH·NiFi·배포 근거](verification/services_20261018/final-public-results.json)에 있다. 원천 ID·event ID·snapshot ID·고정 버전은 결과에 보존했다. 비밀번호·개인키·토큰·보호 설정 내용은 포함하지 않는다.
 
@@ -77,7 +80,7 @@ NiFi 검증 그룹 ID는 `4e743959-01a1-1000-bc08-5f3d31a5c4bd`, processor ID는
 
 현재 가능한 위 소량 기술 검증은 수행했다. 다음 입력 없이 운영 전체 완료로 체크하지 않는다.
 
-1. 실제 서비스 ORM/DDL, 게시 DB명·TLS CA·게시용 보호 접속 설정, 기존 UUID/관측 baseline, 담당 publication guard.
+1. 외부 서비스 ORM과 새 문서 계약 DDL의 최종 인수, 실제 상품의 담당 publication guard. 새 업무 DB명·TLS CA·게시용 보호 접속 설정·문서 DDL은 후속 v2 구성으로 준비했다. 업무 DB는 비어 있어 기존 UUID backfill 대상이 없으며 다른 서비스 DB와 통합 시 실제 baseline을 별도로 확인한다.
 2. 카테고리 매핑·이용/이미지 검수·링크 판정의 확정 버전과 NORMALIZATION/GOLD_BUILD 등록 export. 현재 없는 승인을 대신 생성하지 않는다.
 3. 위 입력을 사용한 운영 전체 FLOW·NiFi 예약 인수. 현재 운영 Kafka product.raw.collected는 만들지 않았고 격리 RF3/minISR2 토픽만 시험했다. 운영 토픽/ACL/보관 정책과 논리 환경을 확정해야 한다.
 4. 실제 환경 이전을 시험할 목적지·외부 DB/객체/Delta 백업·복원 증거, 공유 노드 장애 시험을 위한 담당 인수. 이번에는 다른 팀 서비스를 중지하거나 AWS 자원을 만들지 않았다. 파일 이관 43개 시험과 스냅샷 VM 간 전달을 외부 DB·Kafka·Delta 전체 복원으로 확대하지 않는다.

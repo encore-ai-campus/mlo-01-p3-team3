@@ -8,7 +8,7 @@ from uuid import uuid4
 from ..contracts import canonical, digest, utc
 from ..errors import Conflict, PipelineError
 from ..files import parse
-from .schema import TABLES, validate_schema
+from .schema import TABLES, PRIMARY, UNIQUE, FKS, CONTRACT_HASH, validate_schema
 
 
 def sql_time(value):
@@ -57,14 +57,14 @@ class MySQL:
         if len(rows)>1:raise Conflict('MYSQL_EXPECTED_SINGLE_ROW')
         return rows[0] if rows else None
 
-    def preflight(self):
+    def inspect_schema(self):
         server=self.one('SELECT @@version AS version, @@global.read_only AS ro, @@global.super_read_only AS sro')
         if server['ro'] or server['sro']:raise PipelineError('MYSQL_WRITABLE_PRIMARY_REQUIRED')
         if not re.match(r'^(8|9)\.',server['version']):raise PipelineError('MYSQL_VERSION_UNSUPPORTED')
         database=self.settings['database']; actual={}
         for table in TABLES:
             metadata=self.one('SELECT ENGINE AS engine FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',(database,table))
-            if not metadata:raise PipelineError('MYSQL_CONTRACT_TABLE_MISSING',table)
+            if not metadata:continue
             columns=self.all('SELECT COLUMN_NAME AS name,COLUMN_TYPE AS kind,IS_NULLABLE AS nullable,COLUMN_DEFAULT AS def,EXTRA AS extra FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',(database,table))
             indexes=self.all('SELECT INDEX_NAME AS idx,COLUMN_NAME AS col,SEQ_IN_INDEX AS seq,NON_UNIQUE AS non_unique,SUB_PART AS prefix FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s ORDER BY INDEX_NAME,SEQ_IN_INDEX',(database,table))
             unique={};invalid=set()
@@ -74,13 +74,27 @@ class MySQL:
                     if i['prefix'] is not None:invalid.add(i['idx'])
             unique={k:v for k,v in unique.items() if k not in invalid}
             fks=self.all('SELECT COLUMN_NAME AS col,REFERENCED_TABLE_NAME AS parent,REFERENCED_COLUMN_NAME AS pk,REFERENCED_TABLE_SCHEMA AS parent_schema FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s AND REFERENCED_TABLE_NAME IS NOT NULL',(database,table))
+            rules=self.all('SELECT k.COLUMN_NAME AS col,r.DELETE_RULE AS rule FROM information_schema.REFERENTIAL_CONSTRAINTS r JOIN information_schema.KEY_COLUMN_USAGE k ON k.CONSTRAINT_SCHEMA=r.CONSTRAINT_SCHEMA AND k.TABLE_NAME=r.TABLE_NAME AND k.CONSTRAINT_NAME=r.CONSTRAINT_NAME WHERE r.CONSTRAINT_SCHEMA=%s AND r.TABLE_NAME=%s',(database,table))
             if any(r['parent_schema']!=database for r in fks):raise PipelineError('MYSQL_CROSS_SCHEMA_FK_UNSUPPORTED',table)
             actual[table]=dict(engine=metadata['engine'],columns={c['name']:(c['kind'].lower(),c['nullable']=='YES') for c in columns},
                 primary=unique.get('PRIMARY',[]),unique=list(unique.values()),fks=[(r['col'],r['parent'],r['pk']) for r in fks],
-                defaulted=[c['name'] for c in columns if c['def'] is not None or 'GENERATED' in c['extra'] or 'auto_increment' in c['extra']])
+                defaulted=[c['name'] for c in columns if c['def'] is not None or 'GENERATED' in c['extra'] or 'auto_increment' in c['extra']],
+                fk_delete_rules=[r['rule'] for r in rules if r['col'] in {key[0] for key in FKS.get(table,[])}])
+        return server,actual
+
+    def preflight(self):
+        server,actual=self.inspect_schema()
         checksum=validate_schema(actual)
         self.connection.rollback()
         return dict(status='MYSQL_SCHEMA_VERIFIED',contract_hash=checksum,target=self.target,server_version=server['version'])
+
+    @contextmanager
+    def read_snapshot(self):
+        self.connection.rollback()
+        self.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+        self.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
+        try:yield self
+        finally:self.connection.rollback()
 
     @contextmanager
     def transaction(self):
@@ -90,7 +104,10 @@ class MySQL:
 
     def get(self,table,key,*,locking=True):
         if table not in TABLES or not key or any(k not in TABLES[table] for k in key):raise PipelineError('MYSQL_IDENTIFIER_NOT_ALLOWED')
-        return self.one('SELECT * FROM `'+table+'` WHERE '+' AND '.join('`'+k+'`=%s' for k in key)+(' FOR UPDATE' if locking else ''),tuple(key.values()))
+        # Owner inputs are read-only to the publisher. A shared row lock blocks
+        # owner changes until commit without granting publisher UPDATE rights.
+        lock=(' FOR SHARE' if table in {'categories','pipeline_publication_guards'} else ' FOR UPDATE') if locking else ''
+        return self.one('SELECT * FROM `'+table+'` WHERE '+' AND '.join('`'+k+'`=%s' for k in key)+lock,tuple(key.values()))
 
     def insert(self,table,values):
         if table not in TABLES or not values or any(k not in TABLES[table] for k in values):raise PipelineError('MYSQL_IDENTIFIER_NOT_ALLOWED')
@@ -120,3 +137,32 @@ class MySQL:
         raise Conflict('MYSQL_UUID_INSERT_CONFLICT')
 
     def close(self):self.connection.close()
+
+
+def schema_difference(db):
+    server,actual=db.inspect_schema()
+    missing=[];columns=[];constraints=[];engines=[];unmapped=[]
+    for table,expected in TABLES.items():
+        row=actual.get(table)
+        if row is None:
+            missing.append(table);continue
+        if row['engine'].lower()!='innodb':engines.append(dict(table=table,expected='InnoDB',actual=row['engine']))
+        for name,wanted in expected.items():
+            found=row['columns'].get(name)
+            if found!=wanted:
+                columns.append(dict(table=table,column=name,expected=wanted,actual=found))
+        for name,(kind,nullable) in row['columns'].items():
+            if name not in expected and not nullable and name not in row.get('defaulted',[]):
+                unmapped.append(dict(table=table,column=name,type=kind))
+        if row['primary']!=PRIMARY[table]:constraints.append(dict(table=table,kind='PRIMARY',expected=PRIMARY[table]))
+        for key in UNIQUE.get(table,[]):
+            if key not in row['unique']:constraints.append(dict(table=table,kind='UNIQUE',expected=key))
+        for key in FKS.get(table,[]):
+            if tuple(key) not in row['fks']:constraints.append(dict(table=table,kind='FOREIGN_KEY',expected=key))
+        if any(rule not in {'RESTRICT','NO ACTION'} for rule in row.get('fk_delete_rules',[])):
+            constraints.append(dict(table=table,kind='FOREIGN_KEY_DELETE_RULE',expected='RESTRICT'))
+    db.connection.rollback()
+    return dict(status='SCHEMA_DIFFERENCES_NOT_APPLIED',target=db.target,server_version=server['version'],
+        schema_contract_hash=CONTRACT_HASH,missing_tables=missing,column_differences=columns,
+        constraint_differences=constraints,engine_differences=engines,unmapped_required_columns=unmapped,
+        ddl_applied=False,service_rows_changed=False)

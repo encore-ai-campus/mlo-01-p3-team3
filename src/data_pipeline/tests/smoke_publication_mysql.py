@@ -20,6 +20,7 @@ from product_pipeline.files import atomic_json
 from product_pipeline.publication.mysql import MySQL
 from product_pipeline.publication.schema import reference_ddl
 from product_pipeline.publication.runner import publish
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from publication_fixture import fixture
 
 
@@ -71,6 +72,26 @@ def main():
         assert len(original_id)==32
         image=db.one('SELECT * FROM product_images LIMIT 1');db.connection.rollback()
         assert image and not image['active']
+        from product_pipeline.publication.runner import audit_publication
+        from product_pipeline.publication.mysql import schema_difference
+        from product_pipeline.files import parse
+        with db.read_snapshot():
+            projection=audit_publication(plan,db)
+        assert projection['current_products']==1 and projection['link_observations']>0
+        assert parse(product['attributes_json'])==parse(catalog['attributes_json'])
+        assert parse(product['field_status_json'])==parse(catalog['field_status_json'])
+        assert product['representative_image_id'] in {r['id'] for r in db.all('SELECT id FROM product_images')}
+        difference=schema_difference(db)
+        assert not difference['missing_tables'] and not difference['column_differences'] and not difference['constraint_differences']
+        assert not difference['ddl_applied'] and not difference['service_rows_changed']
+        report['checks'].append('v2_projection_and_read_only_snapshot_audit_match_pinned_gold')
+        try:
+            with db.transaction():
+                db.update('products',dict(id=product['id']),dict(attributes_json='[]'))
+                audit_publication(plan,db)
+            raise AssertionError('missing projected attributes accepted')
+        except Conflict as exc:assert exc.code=='PUBLICATION_SERVICE_ATTRIBUTE_CHANGED'
+        report['checks'].append('missing_service_attributes_detected_without_committing_tamper')
         report['checks'].append('same_plan_keeps_product_image_asset_publication_uuids')
         report['checks'].append('new_image_links_inactive_until_owner_activation')
         from product_pipeline.operations.flow_audit import sql_plan_audit
@@ -116,6 +137,7 @@ def main():
         publish(newer,db)
         latest=db.get('products',dict(product_key=key),locking=False);offer=db.one('SELECT * FROM offers');db.connection.rollback()
         assert latest['name']=='new verified name' and latest['id']==original_id and offer['price_amount']==2000
+        assert latest['price_krw']==2000
         offer_id=offer['id']
         older,old_guard=fixture(args.output/'older',db.target,name='older verified name',stamp='2026-10-16T00:00:00.000Z',
                                 as_of='2026-10-17T00:00:00.000Z',price_amount='1000')
@@ -137,6 +159,10 @@ def main():
             raise AssertionError('changed immutable pricing terms accepted')
         except Conflict as exc:assert exc.code=='FLOW_SQL_PRICE_HISTORY_CHANGED'
         report['checks'].append('reconciliation_checks_offer_parent_and_immutable_history_terms_without_overwriting_newer_values')
+        with db.read_snapshot():
+            assert audit_publication(newer,db)['current_products']==1
+            assert audit_publication(older,db)['superseded_products']==1
+        report['checks'].append('v2_price_and_lineage_audit_support_current_and_superseded_publications')
         counts={t:db.one('SELECT COUNT(*) AS n FROM `'+t+'`')['n'] for t in
                 ('products','assets','product_images','offers','offer_snapshots','pipeline_publications','pipeline_publication_staging')}
         db.connection.rollback();report.update(passed=True,counts=counts,product_id=original_id,port=port)

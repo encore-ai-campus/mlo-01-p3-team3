@@ -122,14 +122,14 @@ Bronze는 `BRONZE_LEASE_MONGO_URI`의 별도 ops 계정을 추가한다. 인프�
 
 Gold 결과에는 원천/이미지 URL/객체 키/checksum/선택 근거와 확인 상태를 보존한다. 백업에는 Gold 데이터·_delta_log뿐 아니라 선택 페이지·입력/등록 export·완료 manifest와 공유 checkpoint를 포함한다. 새 스키마를 기존 root에 덮어쓰거나 Delta 로그를 삭제하지 않는다. 실제 인수 전 NiFi 일정이나 MySQL 게시에 자동 연결하지 않는다.
 
-MySQL 문서 계약 기반 DDL preflight/staging/게시 guard/기존 UUID·검수 보존의 게시기는 구현했고 실제 격리 MySQL로 검증했다. 실제 서비스 DDL·기존 baseline·guard 공급·권한/TLS/Primary 인수는 필요하다. 운영 게시 명령은 서비스 DDL을 생성하거나 검수 원장을 수정하지 않는다. [게시 실행](mysql_publication.md)을 따른다. [요구사항 누락 대조](issue13_acceptance.md)에 서버 시험 외의 남은 구현을 기록했다. SSH hostname 조회 성공은 이 단계의 실제 클러스터 인수와 별개다.
+MySQL 문서 계약 v2의 DDL preflight/staging/게시 guard/기존 UUID·검수 보존 게시기는 구현했고 실제 격리 MySQL로 검증했다. 이후 사용자가 승인한 새 `pj3_products`의 13테이블·160컬럼과 Master 전용 TLS 게시 계정을 구성하고 별도 검증 DB에서 실제 게시·재게시·audit를 확인했다. [스키마/보호 설정/검증 결과](mysql_schema_rollout.md#신규-vm-스키마와-tls-반영-결과)를 따른다. 실제 상품 guard 공급과 외부 서비스 ORM/baseline 인수는 남는다. 운영 게시 명령은 서비스 DDL을 생성하거나 검수 원장을 수정하지 않는다. [게시 실행](mysql_publication.md) 및 [요구사항 대조](issue13_acceptance.md)를 따른다.
 
 
 ## 게시·운영 배포 순서
 
 1. 검토한 source release를 새 목적지에 복사하고 `python run_operations.py release-verify --bundle RELEASE_DIR`로 hash를 확인한다. 이 묶음은 src/data_pipeline 기준이며 상위 docs/design·인프라 설치·수집 데이터·비밀·가상환경을 포함하지 않는다. 상위 문서는 저장소의 검토한 버전을 함께 참고한다.
 2. 대상 OS에서 새 venv를 만든다. 현재 VM은 위 3절의 서버 조합과 `requirements-spark-server.txt`를 사용한다. 원천 역할은 `requirements.lock.txt`, 게시 역할은 `requirements-publication.lock.txt`를 설치한다. Linux/VM에서 import/CLI 도움말·자동 테스트를 다시 확인한다.
-3. MySQL 담당이 문서 v1 계약과 실제 DDL을 대조한다. `sql/publication_reference_v1.sql`을 서비스 DB에 무조건 실행하지 않는다. 승인된 DDL, 최소 권한 계정·현재 Primary·TLS/CA·논리 target과 담당 guard를 준비한다.
+3. MySQL 담당이 문서 v2 계약과 실제 DDL을 대조하고 [스키마 반영 가이드](mysql_schema_rollout.md)를 따른다. `sql/publication_reference_v2.sql`을 서비스 DB에 무조건 실행하지 않는다. 승인된 DDL, 최소 권한 계정·현재 Primary·TLS/CA·논리 target과 담당 guard를 준비한다.
 4. `run_publication.py preflight` → 고정 Gold 계획 prepare → 소량 `publish --apply` → 동일 계획 재실행·장애 복구를 검증한다. 새 image active/서비스 검수는 담당이 관리한다. 자세한 명령은 [MySQL 게시](mysql_publication.md)를 따른다.
 5. `operations.local.json`에 단일 queue 소유 서버·영속 디스크·감사 경로·전용 handoff bucket을 설정한다. 초기에는 remote discovery를 끄고 명시 등록한 작은 작업으로 tick·실패 재시도를 검증한다.
 6. 같은 설정의 수동 실패→재시도 성공 receipt를 확인한 뒤 [NiFi REST 절차](operations_execution.md)로 STOPPED 프로세서를 생성한다. 실제 버전/bundle/실행 권한을 확인하고 명시적으로 기동한다. 현재 검증용 NiFi의 timer/정지는 실제 확인했다. 승인 입력의 전체 FLOW 및 운영 일정 활성화는 별도 인수다.

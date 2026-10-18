@@ -25,9 +25,25 @@ CREATE TABLE `products` (
   `dedup_status` varchar(32) NOT NULL,
   `created_at` datetime(3) NOT NULL,
   `updated_at` datetime(3) NOT NULL,
+  `manufacturer` varchar(255) NULL,
+  `attributes_json` json NOT NULL,
+  `field_status_json` json NOT NULL,
+  `field_lineage_json` json NOT NULL,
+  `source_refs_json` json NOT NULL,
+  `price_krw` bigint NULL,
+  `first_collected_at` datetime(3) NULL,
+  `catalog_ready` tinyint(1) NOT NULL,
+  `recommendation_ready` tinyint(1) NOT NULL,
+  `comparison_link_ready` tinyint(1) NOT NULL,
+  `purchase_link_ready` tinyint(1) NOT NULL,
+  `quality_reason_codes` json NOT NULL,
+  `publication_status` varchar(32) NOT NULL,
+  `publication_reason_codes` json NOT NULL,
+  `representative_image_id` char(32) NULL,
+  `embedding_json` json NOT NULL,
+  `gold_snapshot_ref_json` json NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY (`product_key`),
-  FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`)
+  UNIQUE KEY (`product_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `offers` (
@@ -52,9 +68,9 @@ CREATE TABLE `offers` (
   `option_attributes_json` json NOT NULL,
   `created_at` datetime(3) NOT NULL,
   `updated_at` datetime(3) NOT NULL,
+  `gold_snapshot_ref_json` json NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY (`offer_key`),
-  FOREIGN KEY (`product_id`) REFERENCES `products` (`id`)
+  UNIQUE KEY (`offer_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `offer_snapshots` (
@@ -69,9 +85,9 @@ CREATE TABLE `offer_snapshots` (
   `collected_at` datetime(3) NOT NULL,
   `pricing_terms_json` json NOT NULL,
   `created_at` datetime(3) NOT NULL,
+  `gold_snapshot_ref_json` json NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY (`snapshot_key`),
-  FOREIGN KEY (`offer_id`) REFERENCES `offers` (`id`)
+  UNIQUE KEY (`snapshot_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `assets` (
@@ -111,10 +127,14 @@ CREATE TABLE `product_images` (
   `usage_review_json` json NOT NULL,
   `created_at` datetime(3) NOT NULL,
   `updated_at` datetime(3) NOT NULL,
+  `image_relation_key` varchar(191) NOT NULL,
+  `gold_recommendation_approved` tinyint(1) NOT NULL,
+  `gold_review_snapshot_hash` char(64) NULL,
+  `source_evidence_json` json NOT NULL,
+  `gold_snapshot_ref_json` json NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY (`product_id`,`source_code`,`source_product_id`,`image_variant`,`raw_document_id`,`source_version`),
-  FOREIGN KEY (`product_id`) REFERENCES `products` (`id`),
-  FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`)
+  UNIQUE KEY (`product_id`,`image_relation_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `pipeline_publication_guards` (
@@ -156,6 +176,66 @@ CREATE TABLE `pipeline_publication_staging` (
   `body_hash` char(64) NOT NULL,
   `body_json` json NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY (`plan_id`,`product_key`),
-  FOREIGN KEY (`plan_id`) REFERENCES `pipeline_publications` (`plan_id`)
+  UNIQUE KEY (`plan_id`,`product_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE `product_link_observations` (
+  `id` char(32) NOT NULL,
+  `product_id` char(32) NOT NULL,
+  `link_observation_key` varchar(191) NOT NULL,
+  `gold_evaluation_key` varchar(191) NOT NULL,
+  `link_kind` varchar(32) NOT NULL,
+  `source_url` text NOT NULL,
+  `offer_key` varchar(191) NULL,
+  `usable` tinyint(1) NOT NULL,
+  `raw_document_id` char(24) NULL,
+  `evidence_json` json NOT NULL,
+  `gold_snapshot_ref_json` json NOT NULL,
+  `created_at` datetime(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`product_id`,`link_observation_key`,`gold_evaluation_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE `product_embeddings` (
+  `id` char(32) NOT NULL,
+  `asset_id` char(32) NOT NULL,
+  `image_checksum` char(64) NOT NULL,
+  `model_version` varchar(191) NOT NULL,
+  `preprocessing_version` varchar(191) NOT NULL,
+  `dimension` int NOT NULL,
+  `vector_ref_json` json NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `created_at` datetime(3) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE `search_index_versions` (
+  `id` char(32) NOT NULL,
+  `scope` varchar(191) NOT NULL,
+  `model_version` varchar(191) NOT NULL,
+  `preprocessing_version` varchar(191) NOT NULL,
+  `dimension` int NOT NULL,
+  `manifest_json` json NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `activated_at` datetime(3) NULL,
+  `created_at` datetime(3) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+ALTER TABLE `products` ADD CONSTRAINT `fk_products_category_id` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE RESTRICT;
+
+ALTER TABLE `products` ADD CONSTRAINT `fk_products_representative_image_id` FOREIGN KEY (`representative_image_id`) REFERENCES `product_images` (`id`) ON DELETE RESTRICT;
+
+ALTER TABLE `offers` ADD CONSTRAINT `fk_offers_product_id` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE RESTRICT;
+
+ALTER TABLE `offer_snapshots` ADD CONSTRAINT `fk_offer_snapshots_offer_id` FOREIGN KEY (`offer_id`) REFERENCES `offers` (`id`) ON DELETE RESTRICT;
+
+ALTER TABLE `product_images` ADD CONSTRAINT `fk_product_images_product_id` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE RESTRICT;
+
+ALTER TABLE `product_images` ADD CONSTRAINT `fk_product_images_asset_id` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE RESTRICT;
+
+ALTER TABLE `pipeline_publication_staging` ADD CONSTRAINT `fk_pipeline_publication_staging_plan_id` FOREIGN KEY (`plan_id`) REFERENCES `pipeline_publications` (`plan_id`) ON DELETE RESTRICT;
+
+ALTER TABLE `product_link_observations` ADD CONSTRAINT `fk_product_link_observations_product_id` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE RESTRICT;
+
+ALTER TABLE `product_embeddings` ADD CONSTRAINT `fk_product_embeddings_asset_id` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE RESTRICT;
