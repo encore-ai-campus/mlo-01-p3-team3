@@ -10,6 +10,7 @@ def empty_document():
 class Project(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.CharField(max_length=32, db_index=True)
+    flow_id = models.UUIDField(null=True, blank=True, db_index=True)
     account = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT)
     saved_project = models.ForeignKey('SavedProject', null=True, blank=True, on_delete=models.PROTECT)
     title = models.CharField(max_length=100)
@@ -31,6 +32,11 @@ class SketchEvent(models.Model):
     event_type = models.CharField(max_length=40)
     event_time = models.DateTimeField(auto_now_add=True)
     payload = models.JSONField(default=dict)
+    actor_kind = models.CharField(max_length=12, default='unknown')
+    actor_account = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    visitor_id = models.CharField(max_length=32, blank=True)
+    flow_id = models.UUIDField(null=True, blank=True, db_index=True)
+    reported_actor_kind = models.CharField(max_length=12, default='unknown')
     published_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

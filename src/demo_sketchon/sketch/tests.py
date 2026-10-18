@@ -274,7 +274,7 @@ class SketchTests(TestCase):
 
     def test_home_editor_and_result_are_separate_pages(self):
         home = self.client.get("/").content.decode()
-        self.assertIn('href="/editor/"', home)
+        self.assertIn('href="/editor/?flow_id=', home)
         self.assertNotIn('id="surface"', home)
         editor = self.client.get("/editor/").content.decode()
         self.assertIn('id="toolbar"', editor)
