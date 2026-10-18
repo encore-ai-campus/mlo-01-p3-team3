@@ -1,5 +1,21 @@
 # 전체 ERD: 직접 추천
 
+## Gold 게시 확장 관계
+
+2026-10-18: 아래 기존 ERD/그림만으로 DDL을 만들지 않는다. [게시 필수 컬럼·타입·NULL·제약](13-gold-mysql-publication.md#2-ddl-작성-시-반드시-포함할-필드)과 [속성 사전](data-dictionary/02-products.md#gold-게시-필수-확장-컬럼)을 합쳐야 모든 필수 필드가 포함된다. 실제 migration은 미적용이다.
+
+```mermaid
+erDiagram
+    products ||--o{ product_images : images
+    assets ||--o{ product_images : file
+    products |o--o| product_images : representative_image_id
+    products ||--o{ product_link_observations : link_evaluations
+    assets ||--o{ product_embeddings : embeddings
+    pipeline_publications ||--o{ pipeline_publication_staging : pinned_gold
+```
+
+대표 이미지는 선택 사항이며 한 이미지 관계는 소속 상품의 대표로만 선택한다. 순환 FK의 삽입 순서·동일 상품 검증·RESTRICT 삭제는 상세 계약을 따른다. `gold_snapshot_ref_json`과 `offer_key`, Mongo 원천 ID는 논리 참조로서 이 그림의 물리 FK와 구분한다. 기존 운영자 검수·활성 원장은 Gold 평가 필드와 분리한다.
+
 2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
 
 2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 그림/필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.

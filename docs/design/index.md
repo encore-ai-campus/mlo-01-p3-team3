@@ -10,6 +10,7 @@
 | AI 입력 해석·코드 검증 | [Application](04-application-ai.md) | [크기 근거](11-scale-policy.md), [작업](05-kafka-jobs.md) |
 | 상품 검색·콘텐츠 추천·후속 평가 | [광고 서버](07-ad-server.md) | [파이프라인](02-data-pipeline.md), [평가 계약](12-direct-recommendation.md#이번-scikit-learn과-후속-내재화) |
 | 데이터·ORM/DDL 계획 | [직접 추천 속성](data-dictionary/09-direct-recommendation.md) | [데이터 모델](03-data-model.md), [전체 ERD](03-erd-full.md), [간략 ERD](03-erd-summary.md) |
+| Gold→MySQL 필수 컬럼·게시·추천 입력 연결 | [게시 필드 계약](13-gold-mysql-publication.md) | [상품 속성 사전](data-dictionary/02-products.md#gold-게시-필수-확장-컬럼), [데이터 모델](03-data-model.md), [게시 실행](../../src/data_pipeline/docs/mysql_publication.md) |
 | Bronze·메시지·실패 복구 | [Kafka](05-kafka-jobs.md) | [운영](06-operations-migration.md) |
 | 실버·골드 필드·테이블·준비 상태 | [Delta 필드 계약](data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위) | [파이프라인](02-data-pipeline.md#실버골드-필드-적용), [원장 대응](03-data-model.md#실버골드와-서비스-원장-대응), [검수](06-operations-migration.md#실버골드-필드-검수) |
 | 상품 출처·규격·가격·URL | [상품 연결](09-product-links.md) | [속성 사전](data-dictionary/index.md) |
