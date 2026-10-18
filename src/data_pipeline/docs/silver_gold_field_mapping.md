@@ -1,6 +1,6 @@
 # Silver·Gold 제안서 반영 대조표
 
-2026-10-16 설계 작성, 2026-10-17 Silver/Gold 런타임 구현 상태 갱신. 이 문서는 사용자 요청에 따라 `실버_골드_필드_제안.md`의 전체 항목을 구현 기준으로 구체화한다. 제안서의 권고를 팀 승인·실제 DDL·검증 성공으로 간주하지 않는다. Silver/Gold 필드 처리 위치를 추적하며 MySQL 게시와 업무 입력 인수를 구분한다.
+2026-10-16 설계 작성, 2026-10-18 Silver/Gold 및 MySQL 게시 연결 상태 갱신. 이 문서는 사용자 요청에 따라 `실버_골드_필드_제안.md`의 전체 항목을 구현 기준으로 구체화한다. 제안서의 권고를 팀 승인·실제 DDL·검증 성공으로 간주하지 않는다. Silver/Gold 필드 처리 위치를 추적하며 MySQL 게시와 업무 입력 인수를 구분한다.
 
 원문: 작성일 2026-10-16, SHA-256 `2f2ba911d6b90496b9546f01fd06990aa281c5233c6fcc7f02ab02a0eb193dd9`. 공유 문서는 읽기만 했으며 수정하거나 저장소에 복제하지 않았다. 기준 구현: Bronze commit a20cc5b, dev e35b2a3. 근거는 [Silver 설계](silver_design_v1.md), [기존 데이터 계약](data_contract_v1.md), [보강 계약](design_amendment_v1_1.md)이며 최신 dev와의 차이는 [현황](status.md)에 따른다.
 
@@ -95,6 +95,6 @@ Gold 구현은 gold/build·source·storage·runner·export·cli에 있다. 아�
 
 총 46개 추적 항목(S/P/A/I 각 5개, T 6개, G 11개, R 5개, C 4개)을 정의했다. 이는 전체 코드 구현률 100%가 아니라 **제안서의 설계 반영 위치를 모두 식별했다는 의미**다.
 
-2026-10-17 구현 근거: S/P/A/I/T의 Silver 처리는 `silver/normalize.py`, exact 값 처리는 `values.py`, 담당 입력·유효성·vector는 `inputs.py`, 저장/receipt/재평가는 `delta.py`·`runner.py`·`checkpoint.py`에 구현했다. `test_silver*`와 `tests.smoke_silver_delta`가 근거다. 코드를 추가한 것이 값 확보율 100%나 실제 서버 인수 완료를 뜻하지 않는다. G/R의 Gold 후보 구성·준비 판정은 구현했다. C04의 실제 MySQL 게시와 담당 입력 인수는 후속이다. Silver는 미확인 근거를 추정하지 않고 상태로 전달한다.
+2026-10-17 구현 근거: S/P/A/I/T의 Silver 처리는 `silver/normalize.py`, exact 값 처리는 `values.py`, 담당 입력·유효성·vector는 `inputs.py`, 저장/receipt/재평가는 `delta.py`·`runner.py`·`checkpoint.py`에 구현했다. `test_silver*`와 `tests.smoke_silver_delta`가 근거다. 코드를 추가한 것이 값 확보율 100%나 실제 서버 인수 완료를 뜻하지 않는다. G/R의 Gold 후보 구성·준비 판정은 구현했다. C04의 고정 export→MySQL 게시는 문서 계약 기반 [게시기](mysql_publication.md)로 구현하고 격리 MySQL로 검증했다. 실제 서비스 DDL/guard와 담당 입력 인수는 남아 있다. Silver는 미확인 근거를 추정하지 않고 상태로 전달한다.
 
 Gold의 실제 지원 한계·운영 명령은 [실행 문서](gold_execution.md), 전체 요구와 남은 개발은 [누락 대조](requirements_gap_review.md)를 따른다. 이 표의 설계 반영을 서비스 적재/승인 완료로 해석하지 않는다.

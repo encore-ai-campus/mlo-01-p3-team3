@@ -92,7 +92,7 @@ python -m tests.smoke_silver_delta \
   --output .runtime/silver-delta-new
 ```
 
-테스트는 저장된 3상품·9이미지 관계를 사용한다. 원천 확인·가격/치수/옵션/등록월·검수/링크 만료·입력 변경·충돌·출력 후 receipt 전 중단·반복 평가를 검증한다. 매핑/검수 미제공의 실제 표본은 QUALITY_WAIT가 정상이다. 실제 Mongo/lake/Spark VM, NORMALIZATION 등록 export 인수, Linux/AWS 이전, 대규모 부하는 미검증이다. Gold는 [별도 실행](gold_execution.md)으로 구현했으며 MySQL 게시기는 미구현이다.
+테스트는 저장된 3상품·9이미지 관계를 사용한다. 원천 확인·가격/치수/옵션/등록월·검수/링크 만료·입력 변경·충돌·출력 후 receipt 전 중단·반복 평가를 검증한다. 매핑/검수 미제공의 실제 표본은 QUALITY_WAIT가 정상이다. 실제 Mongo/lake/Spark VM, NORMALIZATION 등록 export 인수, Linux/AWS 이전, 대규모 부하는 미검증이다. Gold는 [별도 실행](gold_execution.md), 문서 계약 MySQL 게시기는 [게시 실행](mysql_publication.md)으로 구현했다. 실제 서비스 DDL/guard와 종단 인수는 남아 있다. Silver 1.0.3부터 이미지 evidence의 실제 payload hash·원천 수집 시각을 보존하며, 근거 없는 이전 Gold는 게시 보류 후 새 평가가 필요하다.
 
 2026-10-17 실제 로컬 Spark 4.0.1/Delta 4.0.1 결과: `.runtime/silver-delta-v3/report.json`, passed=true, 상품 관측 3·속성 14·가격 42·이미지 관계 9·링크 27·품질 문제 94·확인된 Offer 0·평가 receipt 3. 모두 QUALITY_WAIT이며 같은 입력의 3개 평가를 재사용했다. 외부 데이터 서비스 연결은 0, 운영 lease는 대역이다. 별도 `run_silver.py` 실행도 `.runtime/silver-cli-v2.log` 및 같은 출력의 `cli-logs/runs`에 COMPLETED/processed=3/reused=3/source_drained=true를 남겼다. Windows JVM 종료 시 잠긴 임시 JAR 삭제 경고는 로그에 남지만 종료 코드와 데이터/receipt 검증은 통과했다.
 

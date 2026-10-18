@@ -1,6 +1,6 @@
 # 데이터 파이프라인
 
-분리 브랜치: `feature/#13`, 기준 `dev`의 `e35b2a3`(2026-10-16). [현재 제작 상태·기준 문서 차이](docs/status.md)를 먼저 확인한다. 크롤러 코드는 이 브랜치에 포함하지 않으며 완료된 export 파일로 인계받는다.
+분리 브랜치: `feature/#13`, 최초 기준 `dev`의 `e35b2a3`(2026-10-16). 2026-10-18 최신 `origin/dev`의 `22168b8`을 병합해 `f85e59e`까지 푸시했다. [현재 제작 상태·기준 문서 차이](docs/status.md)를 먼저 확인한다. 크롤러 코드는 이 브랜치에 포함하지 않으며 완료된 export 파일로 인계받는다.
 
 다나와 수집 결과를 인계받는 독립 Python 파이프라인이다. **FULL_EXPORT/LIVE_DELTA → 이미지·MongoDB → Kafka → Bronze/Silver/Gold → 고정 계획의 MySQL 게시** 실행 코드를 제공한다. 실제 서버에 대한 쓰기/장애 인수는 아직 수행하지 않았다.
 
@@ -27,6 +27,8 @@
 - [Gold 실행·복구·배포](docs/gold_execution.md): 고정 Silver, 담당 입력·준비 상태·현재 Offer/이력, Delta 및 고정 export·일별 집계.
 - [Gold 이후 요구사항·누락 대조](docs/requirements_gap_review.md): 구현/외부 입력/미구현/서버 미검증을 구분한 후속 목록.
 - [서버 배포·인계 가이드](docs/deployment.md): 기능 추가와 함께 갱신하는 실행 위치·권한·초기 적재·재개·백업 절차.
+
+전체 자동화는 아직 인수 전이다. 현재 queue는 RECEIVE/INGEST/PUBLISH/RECONCILE만 지원하며 Bronze/Silver/Gold 실행과 게시 계획 생성까지의 자동 의존성 연결·종단 대조는 남아 있다. 전체 회귀 192개와 로컬 MySQL/Delta 통과를 실제 서버 운영 완료로 해석하지 않는다.
 
 ## 2026-10-18 게시·운영·서버 인계 추가
 

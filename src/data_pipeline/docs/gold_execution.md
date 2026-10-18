@@ -75,7 +75,7 @@ CLI는 페이지별 상품→Gold 평가 선택을 checkpoint에 내용 주소�
 
 일별 집계는 Spark가 고정 Gold 선택을 기준으로 품목별/GLOBAL을 각각 계산한다. 이미지 관계 수와 checksum의 distinct 파일 수를 분리한다. 여러 상품이 공유한 파일의 수를 상품별 고유 파일 수 합계로 부풀리지 않는다. 품목별 적용 속성 규칙이 없으면 분모 미제공·부분 제공 상태를 표시한다. 이 집계는 해당 고정 범위/as-of의 스냅샷이며 하루 동안 모든 독립 실행의 결과를 무조건 누적한 통계가 아니다.
 
-정상 0, 실패 2, 중단 130. QUALITY_WAIT는 결과 보존과 품질 대기이며 서비스 게시 완료가 아니다. export의 mysql_published=false/publication_status=BLOCKED_DDL_GUARD_REQUIRED는 의도적이다. 가격 이력 정책이 UNRESOLVED면 서비스 가격 게시도 보류한다. 실제 DDL·UUID·publishing guard·검수 재확인·staging·MySQL 트랜잭션 게시 어댑터는 아직 없다.
+정상 0, 실패 2, 중단 130. QUALITY_WAIT는 결과 보존과 품질 대기이며 서비스 게시 완료가 아니다. export의 mysql_published=false/publication_status=BLOCKED_DDL_GUARD_REQUIRED는 의도적이다. 가격 이력 정책이 UNRESOLVED면 서비스 가격 게시도 보류한다. 2026-10-18 별도 [MySQL 게시기](mysql_publication.md)를 구현했다. 게시기는 이 export의 고정 버전과 문서 스키마·UUID·현재 guard·staging을 검증하고 트랜잭션 게시한다. Gold 자체는 DB 게시를 하지 않으며 export의 위 필드는 Gold 생성 당시 상태다. 게시 성공 여부는 별도 SQL publication receipt로 확인하고 기존 불변 export를 수정하지 않는다. 실제 서비스 DDL/guard 인수는 남아 있다.
 
 ## 검증
 

@@ -33,7 +33,7 @@
 
 중단 뒤 같은 snapshot/state/config로 `ingest`를 다시 실행한다. 성공 이미지도 원격 실제 바이트로 대조하므로 외부 읽기는 발생할 수 있지만 같은 바이트를 다시 쓰지 않는다. 기존 Raw는 insert-only로 대조하고 확인된 이벤트는 기본적으로 건너뛴다. Kafka 전달 결과가 불명확하면 같은 ID·본문으로 재전달한다. 소비자도 event ID 멱등 처리가 필요하며 exactly-once 전달을 주장하지 않는다.
 
-전달 확인된 이벤트까지 다시 보내려면 `--replay-events`를 붙인다. 새 이벤트 ID를 만들지 않는다. 이미지 업로드 복구가 이미 확인된 source 이벤트를 새 관측 이벤트로 만들지는 않는다. 향후 Spark 상태 대조 재평가는 후속 단계다.
+전달 확인된 이벤트까지 다시 보내려면 `--replay-events`를 붙인다. 새 이벤트 ID를 만들지 않는다. 이미지 업로드 복구가 이미 확인된 source 이벤트를 새 관측 이벤트로 만들지는 않는다. Silver의 고정 입력 상태 대조·재평가는 별도 CLI로 구현했으며 [Silver 실행](silver_execution.md)을 따른다. 전체 종단 대조와 자동 단계 연결은 남아 있다.
 
 외부 요청은 설정의 최대 2~3회(기본 3회)를 시도한다. Kafka는 SDK 내부 재시도와 애플리케이션 재시도를 중첩하지 않는다. 지속 실패는 다음 수동/예약 실행에서 재처리한다. DB 기록 실패 시 로컬 감사 증거를 남긴다. failures는 재시도 대상, quarantine은 불변 계약 충돌/BSON 한도 등 검토 대상이다. 과거 실패 파일은 감사 이력으로 남을 수 있으므로 현재 Mongo 상태와 최신 보고서를 함께 확인한다.
 
@@ -71,7 +71,7 @@ smoke 출력 경로는 새 폴더여야 한다. 선택 상품과 이미지 사�
 - 실제 3노드 MongoDB majority+journal·장애 전환, S3 조건부 쓰기·동시 업로드·인증, Kafka 전달/복구는 시험 환경에서 인수해야 한다. 읽기 전용 preflight는 Mongo topology, 버킷 접근, 토픽 복제 수/ISR까지 확인하며 브로커 minISR 설정은 별도 확인한다.
 - 이번 버전은 단일 프로세스의 순차 상품 처리다. Mongo fencing은 있지만 실제 다중 실행 경쟁·전체 처리량/용량 시험은 남아 있다. SDK timeout은 설정했으나 여러 청크로 읽는 객체 전체 작업 시간의 고정 상한을 보장하지 않는다.
 - 입력 오류는 준비 단계 전체를 fail-fast한다. 잘못된 행을 제외한 부분 스냅샷은 미구현이다. JSONL 한 행 32MiB, 이미지 하나 20MiB, Mongo BSON 문서 16MiB 한도다. 큰 원문 외부 참조 fallback은 미구현으로 한도 초과는 격리한다.
-- LIVE cursor/마이크로배치·이미지 후속·S3 chunk/ready 전송은 이후 구현·로컬 검증했으며 [실행 가이드](live_execution.md)를 따른다. 원격 ready 자동 발견·NiFi 일정 활성화, Spark Silver/Gold·상태 재평가, MySQL 게시는 남아 있다. 상품 Bronze는 구현·로컬 검증했다. CLI를 예약 실행기에서 호출할 수 있지만 실제 예약 작업을 구성한 것은 아니다.
+- LIVE cursor/마이크로배치·이미지 후속·S3 chunk/ready 전송은 이후 구현·로컬 검증했으며 [실행 가이드](live_execution.md)를 따른다. 이후 원격 ready 발견·파일 queue·예약 재시도·NiFi REST 제어·Silver/Gold 재평가·문서 기반 MySQL 게시까지 구현했다. [현재 현황](status.md)과 [운영 가이드](operations_execution.md)를 따른다. 실제 NiFi 일정 활성화와 전체 Spark 단계 자동 연결·종단 인수는 남아 있다.
 - 파일 원자적 교체·파일 fsync 및 POSIX 디렉터리 fsync를 사용한다. Windows/NAS 전원 장애 내구성은 대상 파일시스템 검증이 필요하다. 동결은 writer 잠금과 전후 해시에 의존하므로 입력 작업 종료를 운영 절차로 보장한다.
 - VM/Linux/EC2에 이식하도록 환경 설정을 분리했지만 실제 배포·권한·TLS 시험은 남아 있다. 이미지 버킷 역할과 승인된 endpoint를 확정해야 한다.
 
