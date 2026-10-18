@@ -1,5 +1,7 @@
 # Application과 외부 AI: 입력 맥락 기반 추천
 
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 2026-10-15 현행 설계. 상세 책임·응답 구획·코드 검증 예시는 [직접 추천 계약](12-direct-recommendation.md)을 따른다. 직접 추천 로컬 웹 경로를 구현했으며 서비스 DB/API v2 전환은 별도다.
 
 ## AI와 해석 이후 코드의 책임

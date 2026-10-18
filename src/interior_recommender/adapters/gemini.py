@@ -72,6 +72,35 @@ class GeminiAdapter:
     def close(self):
         self.client.close()
 
+    async def aclose(self):
+        await self.client.aio.aclose()
+
+    async def acall(self, kind, prompt, images, schema=None):
+        """Native async operations used by the direct recommendation worker."""
+        if kind == "embed_text":
+            response = await self.client.aio.models.embed_content(
+                model=self.settings.embedding_model, contents=prompt,
+                config=types.EmbedContentConfig(output_dimensionality=self.settings.dimension))
+            if not response.embeddings or len(response.embeddings) != 1:
+                raise ValueError("Expected exactly one embedding")
+            payload = {"values": response.embeddings[0].values}
+        elif kind == "direct_context":
+            prompt += (" PROVIDER COORDINATE CONTRACT: placement_region uses integer coordinates "
+                       "from 0 to 1000 relative to the ORIGINAL ROOM, not pixel coordinates. "
+                       "Top-left is (0,0), bottom-right is (1000,1000). "
+                       "Use null when the placement region is uncertain.")
+            response = await self.client.aio.models.generate_content(
+                model=self.settings.analysis_model,
+                contents=[prompt] + [types.Part.from_bytes(data=data, mime_type="image/png") for data in images],
+                config=types.GenerateContentConfig(response_mime_type="application/json",
+                    response_json_schema=direct_context_wire_schema(schema), system_instruction=SYSTEM))
+            payload = {"text": response.text, "coordinate_space": "normalized_1000_xyxy"}
+        else:
+            raise ValueError("Async direct adapter supports context and text embedding only")
+        usage = getattr(response, "usage_metadata", None)
+        return {"payload": payload, "usage_json": usage.model_dump(mode="json") if usage else None,
+                "provider_request_id": getattr(response, "response_id", None)}
+
     def call(self, kind, prompt, images, schema=None):
         if kind not in {"direct_context", "interpret", "generate", "analyze", "embed", "plan", "compare", "embed_text", "reference", "scale"}:
             raise ValueError("Unsupported model operation")

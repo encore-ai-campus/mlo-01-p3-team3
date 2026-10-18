@@ -1,5 +1,7 @@
 # 추천 실행 조정
 
+2026-10-18 SketchOn 실행: 웹은 `submissions → queue`로 원본·고정 계약과 영속 작업을 접수한다. 별도 `recommendations.worker`가 선점한 뒤 `DirectStudio.validate_run/prepare`를 재사용한다. `application.deferred.DeferredPipeline`이 API 단계에서 실행을 양보하고 워커가 native async 응답/receipt를 보존한다. 성공 단계는 재사용하고 재시도 시각은 SQLite에 보존해 슬롯을 반납한다. [실행 상세](../execution.md). 아래 `launch()` 설명은 독립 추천 웹의 기존 실행 방식이다.
+
 [역할별 라우팅](../README.md) · [호출 구조](../call-structure.md) · [Application 설계](../../design/04-application-ai.md)
 
 실제 구현은 `application/direct.py::DirectStudio`다. `submit()`이 UUID·입력 조합·이미지 크기를 확인하고 원본/사본·manifest·event 대응을 저장한다. 같은 owner/event_id의 같은 입력은 기존 run을 반환하고 입력이 다르면 거절한다. run 접수 시 해석 버전·전체 순위 정책·인덱스 버전을 고정한다.

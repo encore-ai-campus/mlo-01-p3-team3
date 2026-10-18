@@ -1,5 +1,7 @@
 # interior_recommender 역할별 라우팅
 
+2026-10-18 SketchOn은 웹과 별도 SQLite 작업 워커로 실행한다. 상태·lease·재시도는 작업 원장, 추천 조정/규칙은 기존 application/domain, Gemini native async 통신은 adapters가 맡는다. [실행 책임·설정·후속 파이프라인 연결](execution.md)을 확인한다. 아래 독립 웹의 로컬 스레드풀과 구분한다.
+
 2026-10-16 코드 기준. 패키지 이름은 `interior_recommender`다. 이 문서는 실제 로컬 호출과 담당 코드를 찾는 진입점이며, 서비스 설계 기준은 [직접 추천 계약](../design/12-direct-recommendation.md)이다.
 
 ## 문서 계층과 읽는 순서
@@ -8,7 +10,7 @@
 
 | 담당·작업 | 먼저 읽을 문서 | 함께 확인할 문서 | 구현 위치 |
 |---|---|---|---|
-| SketchOn 단일 서버 MVP | [통합 설치·실행](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md) | [웹 담당](roles/web.md), [호출 구조](call-structure.md) | `src/demo_sketchon/recommendations/` → `application/direct.py` |
+| SketchOn 단일 서버 MVP | [SQLite 실행·복구](execution.md), [통합 설치·실행](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md) | [웹 담당](roles/web.md), [호출 구조](call-structure.md) | `recommendations/{views,submissions,queue,worker}.py` → `application/direct.py`, `application/deferred.py` |
 | 전체 호출·영향 분석 | [호출 구조](call-structure.md) | [전체 아키텍처](../design/00-architecture.md) | 아래 전체 계층 |
 | 프런트엔드·HTTP·Canvas 연동 | [웹 진입과 연동](roles/web.md) | [Canvas 연결 계약](../../src/interior_recommender/web/INTEGRATION.md) | `web/` |
 | 추천 실행·상태·재시도 | [실행 조정](roles/application.md) | [Application 설계](../design/04-application-ai.md), [복구](roles/operations.md) | `application/`, 공통 `pipeline.py` |

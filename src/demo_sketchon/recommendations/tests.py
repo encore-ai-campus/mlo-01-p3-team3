@@ -1,5 +1,6 @@
 """Exercise the mounted Django API with the approved local catalog, without paid calls."""
 import io
+import asyncio
 import json
 import tempfile
 import time
@@ -10,11 +11,13 @@ from uuid import uuid4
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TransactionTestCase, override_settings
 from PIL import Image
 from interior_recommender.application.direct import DirectDemoAdapter, DirectStudio
+from interior_recommender.assets import read_json
 from sketch.models import Project
 from . import services
+from .worker import Worker
 
 BASE = "/interior-recommand/"
 
@@ -25,7 +28,7 @@ def picture(size=(64, 48)):
     return output.getvalue()
 
 
-class IntegrationTests(TestCase):
+class IntegrationTests(TransactionTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix=".recommendation-test-", dir=settings.BASE_DIR)
         self.addCleanup(self.temp.cleanup)
@@ -52,6 +55,14 @@ class IntegrationTests(TestCase):
         self.patch = patch.object(services, "_studio", self.engine)
         self.patch.start()
         self.addCleanup(self.patch.stop)
+        self.runner = asyncio.Runner()
+        self.worker = Worker(self.engine)
+        self.runner.run(self.worker.start())
+        self.addCleanup(self.close_worker)
+
+    def close_worker(self):
+        self.runner.run(self.worker.close())
+        self.runner.close()
 
     def submit(self, client=None, request_id=None, **extra):
         data = {"photo": SimpleUploadedFile("room.png", picture(), "image/png"),
@@ -60,11 +71,12 @@ class IntegrationTests(TestCase):
         return (client or self.client).post(BASE + "api/runs", data)
 
     def completed(self, client, run_id):
+        self.runner.run(self.worker.drain_due())
         for _ in range(150):
             response = client.get(BASE + "api/runs/" + run_id)
             self.assertEqual(response.status_code, 200, response.content)
             state = response.json()
-            if state.get("job", {}).get("status") != "RUNNING":
+            if state.get("job", {}).get("status") not in {"QUEUED", "RUNNING", "RETRY_WAIT"}:
                 self.assertEqual(state["job"]["status"], "SUCCEEDED", state)
                 return state
             time.sleep(.02)
@@ -103,7 +115,7 @@ class IntegrationTests(TestCase):
         image = self.client.get(BASE + f"assets/{run}/{items[0]['image']}")
         self.assertEqual(image.status_code, 200)
         self.assertEqual(image["Content-Type"], "image/png")
-        image.close()
+        b"".join(image.streaming_content)
         link = self.client.get(BASE + f"api/runs/{run}/product-link", {"image_id": items[0]["image_id"]})
         self.assertEqual(link.status_code, 302)
         self.assertTrue(link["Location"].startswith("https://prod.danawa.com/info/"))
@@ -133,6 +145,25 @@ class IntegrationTests(TestCase):
         response = client.post(BASE + "api/runs", {"photo": SimpleUploadedFile("room.png", picture()), "text":"의자", "request_id":str(uuid4())}, HTTP_X_CSRFTOKEN=token)
         self.assertEqual(response.status_code, 202, response.content)
         self.completed(client, response.json()["run_id"])
+
+    def test_photo_sticker_document_and_export_reach_recommendation(self):
+        item = {'id':str(uuid4()),'kind':'sticker','sticker_id':'office-chair',
+                'x':.4,'y':.3,'width':.2,'height':.4}
+        document = {'strokes':[], 'items':[item]}
+        response = self.submit(text='', document=json.dumps(document),
+                               sketch=SimpleUploadedFile('sketch.png', picture(), 'image/png'))
+        self.assertEqual(response.status_code, 202, response.content)
+        run = response.json()['run_id']
+        state = self.completed(self.client, run)
+        manifest = read_json(settings.INTERIOR_RECOMMENDER_OUTPUT_ROOT / 'runs' / run / 'manifest.json')
+        self.assertEqual(manifest['request']['canvas_document'], document)
+        self.assertEqual(manifest['request']['text'], '')
+        asset = self.client.get(BASE + f"assets/{run}/{state['sketch_image']}")
+        self.addCleanup(asset.close)
+        self.assertEqual(asset.status_code, 200)
+        asset.close()
+        item['sticker_id'] = 'https://evil.test/image.png'
+        self.assertEqual(self.submit(document=json.dumps(document)).status_code, 400)
 
     def test_invalid_inputs_and_hidden_legacy_routes(self):
         self.assertEqual(self.submit(text="").status_code, 400)

@@ -37,6 +37,7 @@ def version_dto(version):
 def save_result(request, result_id):
     owned = owned_result(request, result_id)
     version = None
+    committed = False
     try:
         data = body(request)
         identifier = UUID(data.get('request_id'))
@@ -44,15 +45,33 @@ def save_result(request, result_id):
         title = data.get('title','나의 공간')
         if type(expected) is not int or expected < 0 or not isinstance(title,str) or not 1 <= len(title.strip()) <= 100:
             raise ValueError('프로젝트 이름과 결과 버전을 확인해 주세요.')
+        replay = SavedProjectVersion.objects.filter(request_id=identifier).first()
+        if replay:
+            if replay.composition_id != owned.id or replay.source_result_version != expected:
+                return JsonResponse({'error':'저장 요청 내용이 변경됐습니다.'},status=409)
+            return JsonResponse(version_dto(replay))
+        if owned.version != expected:
+            return JsonResponse({'error':'가구 배치가 변경됐습니다. 현재 결과를 확인하고 다시 저장해 주세요.'},status=409)
+        same = SavedProjectVersion.objects.filter(composition=owned, source_result_version=expected).first()
+        if same:
+            return JsonResponse(version_dto(same))
+        # Copy an immutable candidate before opening the write transaction.
+        # Version/ownership/replay checks below run again after taking the lock.
+        source_image = owned.image.name
+        version = SavedProjectVersion()
+        with owned.image.open('rb') as source:
+            version.image.save(f'{version.id}.png',ContentFile(source.read()),save=False)
         with transaction.atomic():
             project = Project.objects.select_for_update().get(pk=owned.project_id)
             result = Composition.objects.select_for_update().get(pk=owned.pk)
+            if project.account_id != request.user.pk:
+                raise ValueError('프로젝트 소유자를 확인해 주세요.')
             replay = SavedProjectVersion.objects.filter(request_id=identifier).first()
             if replay:
                 if replay.composition_id != result.id or replay.source_result_version != expected:
                     return JsonResponse({'error':'저장 요청 내용이 변경됐습니다.'},status=409)
                 return JsonResponse(version_dto(replay))
-            if result.version != expected:
+            if result.version != expected or result.image.name != source_image:
                 return JsonResponse({'error':'가구 배치가 변경됐습니다. 현재 결과를 확인하고 다시 저장해 주세요.'},status=409)
             same = SavedProjectVersion.objects.filter(composition=result, source_result_version=expected).first()
             if same:
@@ -72,21 +91,21 @@ def save_result(request, result_id):
                 'photo':project.photo.name, 'original_photo':project.original_photo.name,
                 'original_checksum':project.original_checksum, 'width':project.width, 'height':project.height,
                 'writer_id':project.owner, 'result_version':result.version}
-            version = SavedProjectVersion(saved_project=library,version_number=number,composition=result,
-                source_result_version=result.version,request_id=identifier,snapshot=snapshot)
-            with result.image.open('rb') as source:
-                version.image.save(f'{version.id}.png',ContentFile(source.read()),save=False)
+            version.saved_project, version.version_number, version.composition = library, number, result
+            version.source_result_version, version.request_id, version.snapshot = result.version, identifier, snapshot
             version.save()
             library.updated_at = timezone.now()
             library.save(update_fields=['updated_at'])
             SketchEvent.objects.create(project=project,event_type='project.saved',payload={'saved_project_id':str(library.id),'version_number':number})
+        committed = True
         return JsonResponse(version_dto(version),status=201)
     except (ValueError,TypeError,AttributeError) as error:
-        if version and version.image: version.image.delete(save=False)
         return JsonResponse({'error':str(error)},status=400)
-    except Exception:
-        if version and version.image: version.image.delete(save=False)
-        raise
+    finally:
+        # Includes replay/version-conflict returns and DB rollback. A winning
+        # concurrent request owns a different candidate file.
+        if not committed and version and version.image:
+            version.image.delete(save=False)
 
 
 def own_version(request, version_id):

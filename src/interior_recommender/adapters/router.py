@@ -18,3 +18,18 @@ class ModelAdapter:
     def close(self):
         for adapter in self.providers.values():
             adapter.close()
+
+    def prepare_async(self):
+        # Called in the shared synchronous pool before entering the event loop.
+        if "gemini" not in self.providers:
+            self.providers["gemini"] = GeminiAdapter(self.settings)
+
+    async def acall(self, kind, prompt, images, schema=None):
+        if kind not in {"direct_context", "embed_text"}:
+            raise ValueError("Unsupported asynchronous recommendation operation")
+        return await self.providers["gemini"].acall(kind, prompt, images, schema)
+
+    async def aclose(self):
+        for adapter in self.providers.values():
+            if hasattr(adapter, "aclose"):
+                await adapter.aclose()

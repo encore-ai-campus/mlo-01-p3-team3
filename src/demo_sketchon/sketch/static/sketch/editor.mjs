@@ -1,5 +1,4 @@
 import {initAccountState, initialAccount} from './account-state.mjs';
-import {createPlatformAPI} from './platform-api.mjs';
 import {createTracker, identifier} from './events.mjs';
 import {createCollector} from './collector.mjs';
 import {clamp, normalizePoint, moveItem, resizeItem, strokeBounds, transformStroke} from './geometry.mjs';
@@ -12,10 +11,23 @@ const context = ink.getContext('2d'), objects = surface.getContext('2d');
 let project = JSON.parse($('initial-data').textContent), drawing = structuredClone(project.document);
 let mode = 'pen', selected = null, gesture = null, busy = false, changed = false;
 let resizeMode = false;
-let past = [], future = [], requestId = null, textEdit = null;
+let past = [], future = [], textEdit = null;
 let directRequestId = null;
 let cropSelection = null, clipboard = null, pasteCount = 0;
 let marquee = null, boxed = null, thicknessBefore = null;
+const stickerCatalog = new Map(JSON.parse($('stickers-data').textContent).map(row => [row.id, row]));
+const stickerImages = new Map(), stickerLoads = new Map();
+async function loadSticker(id) {
+    const row = stickerCatalog.get(id);
+    if (!row) throw new Error('등록되지 않은 사진 스티커입니다.');
+    if (!stickerLoads.has(id)) {
+        stickerLoads.set(id, loadImage(row.url).then(image => { stickerImages.set(id, image); return image; }).catch(error => { stickerLoads.delete(id); throw error; }));
+    }
+    return stickerLoads.get(id);
+}
+async function loadDocumentStickers(document) {
+    await Promise.all([...new Set(document.items.filter(item => item.kind === 'sticker').map(item => item.sticker_id))].map(loadSticker));
+}
 let savedHistory = null;
 try {
     const saved = JSON.parse(sessionStorage.getItem('roompick.history.' + historyActor) || 'null');
@@ -26,7 +38,6 @@ const fillCanvases = new Map();
 const brushSizes = {pen: 8, eraser: 35, shape: 8};
 const tracker = createTracker(project.id, visitor);
 const {api, record: recordEvent, flushEvents} = tracker;
-const platform = createPlatformAPI(api, JSON.parse($('platform-config').textContent || '{}'));
 let editingRequirements = false;
 function restoreRequirements() {
     const input = project.request_context || {};
@@ -76,7 +87,7 @@ function selectedBox() {
 }
 function hit(pos, box) { return pos.x >= box.x && pos.x <= box.x + box.width && pos.y >= box.y && pos.y <= box.y + box.height; }
 function invalidateResult() {
-    requestId = null;
+    directRequestId = null;
 }
 function snapshot(before = structuredClone(drawing), source = project) {
     const {document: ignored, ...metadata} = source;
@@ -163,7 +174,10 @@ function drawObject(item, target = objects, size = surface) {
     const w = item.width * surface.width, h = item.height * surface.height;
     objects.save(); objects.strokeStyle = objects.fillStyle = item.color || '#245847';
     objects.lineWidth = (item.stroke_width || .008) * surface.width; objects.lineCap = 'round';
-    if (item.kind === 'fill') {
+    if (item.kind === 'sticker') {
+        const image = stickerImages.get(item.sticker_id);
+        if (image) objects.drawImage(image, x, y, w, h);
+    } else if (item.kind === 'fill') {
         const key = item.id + item.color;
         if (!fillCanvases.has(key)) {
             const bitmap = document.createElement('canvas'); bitmap.width = item.mask_width + 2; bitmap.height = item.mask_height + 2;
@@ -233,8 +247,9 @@ function updateControls() {
     $('ungroup-selection').disabled = busy || !selectedValue()?.group_id;
     $('resize-selection').setAttribute('aria-pressed', String(resizeMode));
     const text = selected?.type === 'item' && selectedValue()?.kind === 'text';
-    $('color-controls').hidden = !text && ['eraser', 'marquee', 'crop'].includes(mode);
-    $('width-controls').hidden = ['fill', 'text', 'marquee', 'crop'].includes(mode) || text;
+    const sticker = selectedValue()?.kind === 'sticker';
+    $('color-controls').hidden = sticker || (!text && ['eraser', 'marquee', 'crop'].includes(mode));
+    $('width-controls').hidden = sticker || ['fill', 'text', 'marquee', 'crop'].includes(mode) || text;
     if (!gesture) $('text-controls').hidden = !textEdit && (mode !== 'text' || !!text);
     $('tool-settings').hidden = $('color-controls').hidden && $('width-controls').hidden && $('text-controls').hidden;
     $('counts').textContent = drawing.strokes.length + '획 · 표시 ' + drawing.items.length + '개';
@@ -613,6 +628,7 @@ function history(backward) {
     const source = backward ? past : future, destination = backward ? future : past; if (!source.length) return;
     void operation(async () => {
         const next = source.at(-1), current = snapshot();
+        await loadDocumentStickers(next.drawing);
         const photoChanged = next.project.id !== project.id;
         if (photoChanged) {
             const latest = await api('/api/projects/' + next.project.id + '/');
@@ -679,6 +695,7 @@ async function loadImage(url) {
 }
 async function showProject(next) {
     if (next.photo_url) await loadImage(next.photo_url);
+    await loadDocumentStickers(next.document);
     collector.projectChanging(next.id);
     project = next; drawing = structuredClone(next.document); selected = null; changed = false;
     restoreRequirements(); document.body.classList.toggle('has-photo', !!next.photo_url);
@@ -694,7 +711,7 @@ async function showProject(next) {
     mode = 'pen';
     for (const button of document.querySelectorAll('[data-tool]')) button.setAttribute('aria-pressed', String(button.dataset.tool === mode));
     surface.style.cursor = 'none';
-    resizeCanvases(); message('사진 위에 원하는 내용을 그리거나 텍스트·도형으로 표시하세요.');
+    resizeCanvases(); message('사진 스티커를 붙이거나 텍스트·그림으로 원하는 배치를 표시하세요.');
     collector.projectReady();
 }
 async function changePhoto(next) {
@@ -749,26 +766,26 @@ dropZone.addEventListener('drop', event => {
 function searchProducts() {
     return recommendDirectly();
 }
-function previewMockSpace() {
-    commitText(); finishRequirements();
-    if (busy || gesture) return;
-    if (!project.photo_url) { showEditorTab('sketch'); message('공간 사진을 먼저 업로드하거나 예시 공간을 선택해 주세요.', true); $('upload-empty').focus(); return; }
-    if (!drawing.items.length && !drawing.strokes.length && !$('text-requirements').value.trim()) {
-        showEditorTab('description'); message('스케치하거나, 원하는 변화를 글로 설명해 주세요.', true); $('text-requirements').focus(); return;
-    }
-    return operation(async () => {
-        record('search.clicked', {mode: 'mock'}); message('사진과 아이디어로 공간을 만들고 있어요.'); requestId ||= identifier();
-        const dialog = $('generation-progress'); dialog.showModal();
-        try {
-            const next = await platform.generate(project.id, {document: drawing, revision: project.revision, request_id: requestId,
-                text_requirements: $('text-requirements').value.trim(), style_preferences: project.request_context?.style_preferences || []}, {
-                onStatus: status => { $('generation-status').textContent = status === 'QUEUED' ? '공간 생성 순서를 기다리고 있어요.' : '입력한 아이디어를 공간에 반영하고 있어요.'; },
-            });
-            project.revision = next.revision; project.locked = true;
-            collector.submit(next.result_id); void flushEvents(); window.location.assign(next.page_url);
-        } finally { dialog.close(); }
+for (const button of document.querySelectorAll('[data-sticker]')) button.addEventListener('click', () => {
+    if (busy || gesture || project.locked) return;
+    if (!project.photo_url) { message('공간 사진을 먼저 선택하거나 예시 공간을 열어 주세요.', true); return; }
+    if (drawing.items.length >= 100) { message('사진·텍스트·도형은 100개까지 배치할 수 있습니다.', true); return; }
+    void operation(async () => {
+        commitText(); finishRequirements();
+        const row = stickerCatalog.get(button.dataset.sticker), image = await loadSticker(row.id);
+        let width = .32, height = width * project.width / project.height * image.naturalHeight / image.naturalWidth;
+        if (height > .5) { width *= .5 / height; height = .5; }
+        const offset = (drawing.items.filter(item => item.kind === 'sticker').length % 5) * .025;
+        const item = {id:identifier(), kind:'sticker', sticker_id:row.id,
+            x:clamp(.5 - width / 2 + offset, 0, 1 - width), y:clamp(.6 - height / 2 + offset, 0, 1 - height), width, height};
+        checkpoint(); drawing.items.push(item); selected = {type:'item', id:item.id};
+        record('item.added', {item}); mode = 'marquee'; resizeMode = false; boxed = null; marquee = null;
+        for (const tool of document.querySelectorAll('[data-tool]')) tool.setAttribute('aria-pressed', String(tool.dataset.tool === mode));
+        surface.style.cursor = 'grab'; redraw();
+        message(`${row.name} 사진을 붙였어요. 사진을 끌어 이동하고 오른쪽 아래 손잡이로 크기를 조절하세요.`);
+        void flushEvents();
     });
-}
+});
 async function recommendDirectly() {
     commitText(); finishRequirements();
     if (busy || gesture) return;
@@ -780,6 +797,7 @@ async function recommendDirectly() {
     const beforeActor = initialAccount().actor_key;
     return operation(async () => {
         message('사진과 요청을 상품 추천으로 보내고 있어요.');
+        await loadDocumentStickers(drawing);
         const preferences = project.request_context?.style_preferences || [];
         const signature = () => JSON.stringify([project.id, project.revision, drawing, text, preferences]);
         if (directRequestId?.signature !== signature()) {
@@ -816,8 +834,6 @@ async function recommendDirectly() {
         window.location.assign(next.page_url);
     });
 }
-$('preview-mock').addEventListener('click', previewMockSpace);
-$('generation-progress').addEventListener('cancel', event => event.preventDefault());
 $('search').addEventListener('click', searchProducts);
 $('search-top').addEventListener('click', searchProducts);
 $('search-mobile').addEventListener('click', searchProducts);

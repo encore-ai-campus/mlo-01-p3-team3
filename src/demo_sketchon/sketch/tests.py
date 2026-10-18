@@ -123,7 +123,6 @@ class SketchTests(TestCase):
             red, green, blue = image.getpixel((32, 24))
             self.assertGreater(blue, 240)
             self.assertLess(red, 15)
-        response.close()
         self.assertEqual(Client().get(project["photo_url"]).status_code, 404)
 
     def test_resolution_limit_is_distinct_from_file_size_and_format_errors(self):
@@ -144,7 +143,7 @@ class SketchTests(TestCase):
         response = self.client.get(project["photo_url"])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "image/jpeg")
-        response.close()
+        b"".join(response.streaming_content)
         self.assertEqual(Client().get(project["photo_url"]).status_code, 404)
 
     def test_save_events_are_atomic_and_deduplicated(self):
@@ -235,7 +234,6 @@ class SketchTests(TestCase):
         image = Image.open(io.BytesIO(b"".join(image_response.streaming_content)))
         self.assertEqual(image.size, (320, 240))
         self.assertGreater(len(image.getcolors(maxcolors=100000)), 1)
-        image_response.close()
         data = self.client.get(result["data_url"]).json()
         self.assertEqual(data["input_document"], document)
         self.assertEqual(data["result_id"], result["result_id"])
@@ -302,7 +300,7 @@ class SketchTests(TestCase):
         self.assertIsNotNone(new["photo_url"])
         photo = self.client.get(new["photo_url"])
         self.assertEqual(photo.status_code, 200)
-        photo.close()
+        b"".join(photo.streaming_content)
         self.assertEqual(self.client.get(new["editor_url"]).status_code, 200)
         self.assertEqual(Client().post(f"/api/results/{result['result_id']}/redraw/").status_code, 404)
 
@@ -334,7 +332,7 @@ class SketchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         image = self.client.get(response.json()["image_url"])
         self.assertEqual(image.status_code, 200)
-        image.close()
+        b"".join(image.streaming_content)
 
     def test_whole_sketch_is_one_product_not_one_per_element(self):
         project = self.photo_project()

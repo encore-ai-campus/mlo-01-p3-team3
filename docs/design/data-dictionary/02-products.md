@@ -1,5 +1,20 @@
 # 상품과 판매 속성 사전
 
+## Gold 게시 필수 확장 컬럼
+
+2026-10-18: [Gold→MySQL 필수 컬럼표](../13-gold-mysql-publication.md#2-ddl-작성-시-반드시-포함할-필드)의 타입·NULL·FK·고유 제약을 기존 아래 사전과 함께 적용한다. 후보 컬럼 목록이 아니라 이번 서비스 DDL 작성 시 포함해야 하는 설계 계약이다. 실제 DB/ORM에 존재한다는 뜻은 아니다.
+
+| 테이블 | 기존 사전에 더해 반드시 포함할 컬럼 |
+|---|---|
+| `products` | `manufacturer`, `attributes_json`, `field_status_json`, `field_lineage_json`, `source_refs_json`, `price_krw`, `first_collected_at`, `catalog_ready`, `recommendation_ready`, `comparison_link_ready`, `purchase_link_ready`, `quality_reason_codes`, `publication_status`, `publication_reason_codes`, `representative_image_id`, `embedding_json`, `gold_snapshot_ref_json` |
+| `product_images` | `image_relation_key`, `gold_recommendation_approved`, `gold_review_snapshot_hash`, `source_evidence_json`, `gold_snapshot_ref_json` |
+| `offers`, `offer_snapshots` | 각각 `gold_snapshot_ref_json` |
+| `product_link_observations` | `id`, `product_id`, `link_observation_key`, `gold_evaluation_key`, `link_kind`, `source_url`, `offer_key`, `usable`, `raw_document_id`, `evidence_json`, `gold_snapshot_ref_json`, `created_at` |
+
+`attributes_json`은 원천 속성 배열과 상태·옵션·적용 부위·근거를 보존한다. 단일 `color`는 호환용 표시값이며 전체 속성 원문을 대체하지 않는다. 규격 숫자와 상태/출처를 함께 해석한다. `price_krw`는 대표가격으로 판매처 가격과 별개다. 준비 boolean은 Gold의 평가 결과이며 서비스 검수·활성의 자동 승인이 아니다.
+
+필수 JSON에는 미제공을 나타내는 빈 배열/객체 또는 계약상 JSON null과 상태를 기록하고 SQL NULL/임의 확정값으로 대체하지 않는다. `embedding_json` 미제공은 JSON null이다. `gold_snapshot_ref_json`의 필수 키·원문 보존·필드별 유지값 출처는 상세 계약을 따른다. 실제 migration 전 기존 행의 검증된 baseline과 보강 방식을 정하며 허위 기본값으로 NOT NULL을 통과시키지 않는다.
+
 2026-10-15: 원천·상품·링크의 공통 필드는 유지한다. 신규 추천 연결·크기 추정·오프라인 특징은 [직접 추천 속성](09-direct-recommendation.md)을 따른다. 생성/템플릿을 전제로 한 예시는 이전 이력이며 AI 추정으로 상품 실측·가격·링크를 덮어쓰지 않는다.
 
 현재 논리 설계의 각 속성에 무엇을 저장하는지 설명한다. 형식·값·상태 코드는 후보이며, 예시는 테스트 설명용으로 실제 계정이나 상품을 뜻하지 않는다.

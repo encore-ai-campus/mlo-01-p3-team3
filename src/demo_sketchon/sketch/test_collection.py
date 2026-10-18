@@ -54,6 +54,19 @@ class CollectionTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertIn("capture_limit", response.json()["warnings"])
 
+    def test_photo_sticker_is_replayed_as_item_without_fabricated_pen_strokes(self):
+        sample = self.sample()
+        item = {'id':str(uuid4()),'kind':'sticker','sticker_id':'sofa-cream',
+                'x':.2,'y':.3,'width':.4,'height':.2}
+        sample.update(strokes=[], final_active_stroke_ids=[], final_document={'strokes':[], 'items':[item]})
+        sample['operations'] = [{'op_id':str(uuid4()),'type':'item.added','t':20,
+            'client_time':'2026-10-13T00:00:00.020Z','target_stroke_ids':[], 'target_item_ids':[item['id']],
+            'document_patch':{'items':{'upsert':[item], 'remove':[], 'order':[item['id']]}}}]
+        response = self.submit(sample)
+        self.assertEqual(response.status_code, 201, response.content)
+        saved = json.loads((self.raw_root / f"{sample['sample_id']}.json").read_text(encoding='utf-8'))
+        self.assertEqual(saved, sample)
+
     def submit(self, sample=None, client=None):
         return (client or self.client).post(f"/api/projects/{self.project.id}/samples/", sample or self.sample(), content_type="application/json")
 

@@ -1,6 +1,6 @@
 # 웹 진입과 Canvas 연동
 
-2026-10-16 SketchOn 통합: `src/demo_sketchon/recommendations/`가 같은 Django 프로세스의 `/interior-recommand/`를 담당한다. `application.direct.DirectStudio`를 직접 호출하며 프로젝트/계정 권한·CSRF·multipart 검증은 이 앱이 처리한다. 브리지와 독립 서버 설정은 사용하지 않는다. [설치·API·권한·검증](../../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md)을 따른다. 아래 표는 독립 서버의 기존 진입점이다.
+2026-10-16 SketchOn 통합: `src/demo_sketchon/recommendations/`가 같은 Django 프로세스의 `/interior-recommand/`를 담당한다. `submissions → queue`로 접수하고 별도 SQLite 작업 워커가 `application.direct.DirectStudio.prepare`를 호출한다. 프로젝트/계정 권한·CSRF·multipart 검증은 웹 앱이 처리한다. 상태/링크는 카탈로그 없는 `DirectRunReader`로 읽는다. QUEUED/RETRY_WAIT도 폴링하며 준비 불가·포화는 503/Retry-After다. [책임·실행·복구](../execution.md)를 따른다. 브리지와 독립 서버 설정은 사용하지 않는다. [설치·API·권한·검증](../../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md)을 따른다. 아래 표는 독립 서버의 기존 진입점이다.
 
 [역할별 라우팅](../README.md) · [호출 구조](../call-structure.md) · [전송·설치 계약](../../../src/interior_recommender/web/INTEGRATION.md)
 

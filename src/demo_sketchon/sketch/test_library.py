@@ -3,6 +3,8 @@ from uuid import uuid4
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.db import connection
+from django.core.files.storage import FileSystemStorage
 from . import test_quota as fixtures
 from .models import Composition, Project, SavedProjectVersion, WishlistEntry
 
@@ -92,6 +94,44 @@ class LibraryTests(TestCase):
             with self.assertRaises(OSError):
                 self.client.post(f"/api/results/{result['result_id']}/save/",{'request_id':str(uuid4()),'result_version':0,'title':'실패'},content_type='application/json')
         self.assertEqual(SavedProjectVersion.objects.count(),0)
+        self.assertIsNone(Project.objects.get(pk=result['project_id']).saved_project_id)
+
+    def test_snapshot_file_copy_precedes_the_write_transaction(self):
+        self.member()
+        result = self.generate()[0].json()
+        before = len(connection.atomic_blocks)
+        observed = []
+        original = FileSystemStorage._save
+
+        def record(storage, *args, **kwargs):
+            observed.append(len(connection.atomic_blocks))
+            return original(storage, *args, **kwargs)
+
+        with patch.object(FileSystemStorage, '_save', record):
+            response = self.client.post(f"/api/results/{result['result_id']}/save/",
+                {'request_id':str(uuid4()), 'result_version':result['version'], 'title':'복사'}, content_type='application/json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(observed, [before])
+
+    def test_version_change_during_copy_discards_candidate_and_leaves_no_lineage(self):
+        self.member()
+        result = self.generate()[0].json()
+        original = FileSystemStorage._save
+        candidates = []
+
+        def changed(storage, *args, **kwargs):
+            filename = original(storage, *args, **kwargs)
+            candidates.append(storage.path(filename))
+            Composition.objects.filter(pk=result['result_id']).update(version=result['version'] + 1)
+            return filename
+
+        with patch.object(FileSystemStorage, '_save', changed):
+            response = self.client.post(f"/api/results/{result['result_id']}/save/",
+                {'request_id':str(uuid4()), 'result_version':result['version'], 'title':'충돌'}, content_type='application/json')
+        from pathlib import Path
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(all(not Path(path).exists() for path in candidates))
+        self.assertEqual(SavedProjectVersion.objects.count(), 0)
         self.assertIsNone(Project.objects.get(pk=result['project_id']).saved_project_id)
 
     def test_replacing_photo_keeps_saved_project_lineage(self):

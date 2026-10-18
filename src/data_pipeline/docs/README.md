@@ -38,6 +38,7 @@
 | [Silver 설계](silver_design_v1.md) | 테이블·품질 상태·정규화·재평가 |
 | [Silver/Gold 필드 대조](silver_gold_field_mapping.md) | 필드 제안 46항목과 입력·산출물 대응 |
 | [상위 아키텍처 대조](architecture_alignment.md) | 프로젝트 01/02/03/05/12 설계와 책임 경계 |
+| [Gold→MySQL 게시 필드 계약](../../../docs/design/13-gold-mysql-publication.md) | 서비스 DDL 필수 컬럼·타입·관계·전체 Gold 필드 대응·추천 어댑터 인수. 현재 v1 참조 DDL/게시 코드와 차이 명시 |
 
 `verification/`의 공개 결과는 성공과 실패를 함께 보존한다. `server_setup/`은 배포 도구와 검증 재현 코드이며, 일부는 특정 시험 경로에 고정돼 있다. 디렉터리 전체를 일괄 실행하거나 일반 설치기로 사용하지 않는다. 비밀 설정·키·로컬 원천 데이터는 포함하지 않는다.
 
