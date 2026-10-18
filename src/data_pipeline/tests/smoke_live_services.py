@@ -30,6 +30,8 @@ def main(argv=None):
     parser.add_argument('--output', type=Path)
     parser.add_argument('--allow-live-writes', action='store_true')
     parser.add_argument('--query-timeout', type=int, default=300)
+    parser.add_argument('--resume-registered', action='store_true',
+                        help='Resume only matching registrations with no raw/event/image completion')
     args = parser.parse_args(argv)
     started = time.monotonic()
     report = {'status': 'NOT_RUN', 'stages': [], 'scope': 'real Mongo+S3+Kafka+Spark+Delta'}
@@ -112,9 +114,25 @@ def main(argv=None):
             stage('s3_preflight', objects.preflight)
             stage('kafka_durability_preflight', publisher.preflight)
             keys = [row['observation_key'] for row in inputs]
-            require(ledger.observations.count_documents({'observation_key': {'$in': keys}}) == 0
-                    and ledger.raw.count_documents({'observation_key': {'$in': keys}}) == 0,
-                    'ACCEPTANCE_FRESH_OBSERVATIONS_REQUIRED')
+            require(ledger.raw.count_documents({'observation_key': {'$in': keys}}) == 0,
+                    'ACCEPTANCE_FRESH_RAW_REQUIRED')
+            registered_ids = set()
+            if args.resume_registered:
+                from product_pipeline.runner import check_registration
+                for row in inputs:
+                    saved = ledger.get(row['observation_key'])
+                    check_registration(row, saved, settings)
+                    require(saved.get('stage') == 'OBSERVATION_REGISTERED'
+                            and not saved.get('raw_confirmed') and not saved.get('event_confirmed')
+                            and not saved.get('image_state_vector') and not saved.get('lease_owner'),
+                            'ACCEPTANCE_REGISTRATION_NOT_PRISTINE')
+                    require(saved['document']['input_snapshot_id'] == manifest['snapshot_id'],
+                            'ACCEPTANCE_REGISTRATION_SNAPSHOT_MISMATCH')
+                    registered_ids.add(saved['document']['_id'])
+                report['resumed_registration_ids'] = sorted(registered_ids)
+            else:
+                require(ledger.observations.count_documents({'observation_key': {'$in': keys}}) == 0,
+                        'ACCEPTANCE_FRESH_OBSERVATIONS_REQUIRED')
             shutdown = {'spark_stopped': True}
             lease = MongoLease(bronze, os.environ[bronze.lease_uri_env])
             stack.callback(lambda: lease.close(release=shutdown['spark_stopped']))
@@ -157,6 +175,7 @@ def main(argv=None):
                     'ACCEPTANCE_FIRST_INGEST_FAILED')
             registrations = [ledger.get(key) for key in keys]
             ids = {r['document']['_id'] for r in registrations}
+            require(not registered_ids or ids == registered_ids, 'ACCEPTANCE_RESUMED_IDS_CHANGED')
             events = {r['event']['event_id'] for r in registrations}
             require(len(ids) == len(events) == len(inputs), 'ACCEPTANCE_ID_COLLISION')
 

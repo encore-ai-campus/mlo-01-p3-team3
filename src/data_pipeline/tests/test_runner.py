@@ -45,6 +45,34 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(len(list((self.root / "ledger/raw_products").glob("*.json"))), 1)
         self.assertEqual(len(list((self.root / "events").glob("*.json"))), 1)
 
+    def test_registration_archive_excludes_native_mongo_lease_dates_and_restores_ids(self):
+        from datetime import datetime
+
+        class NativeLeaseDates:
+            def __init__(self, ledger):
+                self.ledger = ledger
+
+            def __getattr__(self, name):
+                return getattr(self.ledger, name)
+
+            def get(self, key):
+                saved = self.ledger.get(key)
+                if saved.get('lease_until'):
+                    saved['lease_until'] = datetime.fromisoformat(saved['lease_until'])
+                return saved
+
+        self.ledger = NativeLeaseDates(self.ledger)
+        first = self.run_ingest()
+        self.assertEqual(first['result'], 'completed')
+        archive = read_json(self.root/'audit/registrations'/(self.row['observation_key']+'.json'))
+        self.assertEqual(set(archive), {'observation_key', 'target_fingerprint', 'identity', 'document', 'event'})
+        restored = FileLedger(self.root/'restored-ledger', self.settings)
+        saved = restored.register(self.row, read_json(self.sealed/'snapshot.json'), archive)
+        self.assertEqual(saved['document'], archive['document'])
+        self.assertEqual(saved['event'], archive['event'])
+        repeated = self.run_ingest()
+        self.assertEqual((repeated['result'], repeated['raw_created'], repeated['events_sent']), ('completed', 0, 0))
+
     def test_completed_resume_does_not_contact_successful_backends(self):
         self.run_ingest()
         def forbidden(*args):

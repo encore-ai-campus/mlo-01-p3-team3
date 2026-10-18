@@ -114,7 +114,10 @@ def ingest(snapshot_dir, settings, ledger, objects, publisher, audit_dir, replay
                     ledger.renew(key, token)
                     check_registration(row, saved, settings)
                     if archived is None:
-                        atomic_json(archive_path, saved)
+                        # Freeze recovery identity only. Mongo's operational lease
+                        # contains native BSON datetimes and is not portable JSON.
+                        atomic_json(archive_path, {name: saved[name] for name in (
+                            'observation_key', 'target_fingerprint', 'identity', 'document', 'event')})
                     elif archived["document"] != saved["document"] or archived["event"] != saved["event"]:
                         raise Conflict("REGISTRATION_ARCHIVE_CONFLICT")
                     point("REGISTERED")
