@@ -44,6 +44,9 @@ class DirectRunReader:
         # process's instance ID as a failure. New jobs are overlaid by the API.
         if (directory / "job.json").exists():
             output["job"] = read_json(directory / "job.json")
+        if output.get('recommendations', {}).get('catalog_source'):
+            output['local_sample'] = False
+            output['catalog_source'] = output['recommendations']['catalog_source']
         return output
 
     def product_link(self, run_id, owner, image_id):
@@ -52,6 +55,9 @@ class DirectRunReader:
                      if item["image_id"] == image_id), None)
         if item is None:
             raise FileNotFoundError
+        if 'server_binding' in item:
+            from ..catalog.server import LiveGuard
+            return LiveGuard().validate([item['server_binding']], link=True)
         metadata = item.get("metadata", {})
         url = comparison_url(metadata.get("comparison_url"), item["product_id"])
         if not url or not metadata.get("metadata_source"):

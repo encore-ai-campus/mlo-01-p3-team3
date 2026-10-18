@@ -35,6 +35,9 @@ def selected_source(directory, owner, image_id):
     item = next((item for item in result["items"] + result["unverified_items"] if item["image_id"] == image_id), None)
     if item is None:
         raise FileNotFoundError
+    if 'server_binding' in item:
+        from ..catalog.server import LiveGuard
+        LiveGuard().validate([item['server_binding']], scope='GENERATION_REFERENCE')
     context = saved_output(directory, manifest, "context")
     assets = {}
     for role, source in (("room", request["room_image"]), ("product", item["image"]),
@@ -95,6 +98,9 @@ def validate(pipeline, demo):
 def prepare(pipeline):
     p = pipeline
     request = p.manifest["request"]
+    if 'server_binding' in request['selected_product']:
+        from ..catalog.server import LiveGuard
+        LiveGuard().validate([request['selected_product']['server_binding']], scope='GENERATION_REFERENCE')
     images, transforms = [], {}
     for role in ("room", "product", "sketch"):
         if request.get(role + "_image"):

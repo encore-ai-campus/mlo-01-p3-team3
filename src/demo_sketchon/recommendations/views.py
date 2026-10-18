@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils.http import http_date
 from django.views.decorators.http import require_GET, require_POST
 from interior_recommender.assets import read_json
+from interior_recommender.catalog.server import ServerCatalogError
 from interior_recommender.errors import LeaseLost
 from sketch.access import owned_project, visitor_id
 from sketch.validation import document as validate_document
@@ -59,6 +60,8 @@ def api(view):
             return JsonResponse({"error": "요청 크기가 너무 큽니다."}, status=413)
         except ImproperlyConfigured:
             return unavailable(request, "추천 카탈로그·모델·차원 설정을 확인해 주세요.")
+        except ServerCatalogError:
+            return unavailable(request, '상품 DB·인덱스·이용 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.')
         except (OSError, LeaseLost):
             return unavailable(request, "추천 파일을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.")
         except (ValueError, TypeError, KeyError):

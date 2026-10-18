@@ -48,7 +48,7 @@ SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_NAME = "roompick_sessionid"
 CSRF_COOKIE_NAME = "roompick_csrftoken"
 
-# Local immutable product snapshot; recommendation requests never query a product DB.
+# Immutable product snapshot; server snapshots additionally recheck current MySQL state.
 INTERIOR_RECOMMENDER_PRODUCTS = Path(os.environ.get(
     "INTERIOR_RECOMMENDER_PRODUCTS",
     BASE_DIR.parent / "interior_recommender/sample/crawl_test/full/catalog-with-links/products.json",

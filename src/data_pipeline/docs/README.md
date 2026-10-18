@@ -17,6 +17,7 @@
 
 | 단계 | 가이드 |
 |---|---|
+| 이미지 임베딩 전용 Delta 테이블·고정 벡터 export | [추천 카탈로그 연결](../../../docs/interior-recommender/server-catalog.md): `run_embedding_table.py`, 기존 정규화 Silver 8개 테이블과 독립 |
 | 입력 검증·snapshot·Mongo/이미지·Kafka | [입력·적재 실행](execution.md) |
 | 수집 중 확정 데이터 인계 | [LIVE 실행](live_execution.md) |
 | Kafka → Bronze | [Bronze 실행](bronze_execution.md) |

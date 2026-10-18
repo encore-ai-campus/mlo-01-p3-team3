@@ -8,6 +8,7 @@
 
 | 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| 추천 카탈로그의 MySQL·Garage·Delta 연결 | [서버 카탈로그 연결](interior-recommender/server-catalog.md) | [카탈로그 담당](interior-recommender/roles/catalog.md), [게시 계약](design/13-gold-mysql-publication.md) |
 | 추천 이후 상품 배치 이미지 생성 | [상품 배치 미리보기](interior-recommender/product-preview.md) | [실행·복구](interior-recommender/execution.md), [직접 추천](design/12-direct-recommendation.md) |
 | SketchOn SQLite 실행·복구·비동기/동기 경계 | [작업 실행](interior-recommender/execution.md) | [역할별 라우팅](interior-recommender/README.md), [호출 구조](interior-recommender/call-structure.md) |
 | interior_recommender 코드·호출·담당별 변경 | [역할별 코드·문서 라우팅](interior-recommender/README.md) | [현재 호출 구조](interior-recommender/call-structure.md), [설계 라우팅](design/index.md) |

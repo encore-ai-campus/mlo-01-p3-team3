@@ -10,6 +10,7 @@
 
 | 담당·작업 | 먼저 읽을 문서 | 함께 확인할 문서 | 구현 위치 |
 |---|---|---|---|
+| MySQL·Garage·Delta 상품 연결 | [서버 카탈로그](server-catalog.md) | [카탈로그](roles/catalog.md), [게시 계약](../design/13-gold-mysql-publication.md) | `catalog/server.py`, `catalog/server_embeddings.py`, `product_pipeline/embedding_{table,vectors}.py` |
 | 추천 이후 선택 상품 이미지 생성 | [상품 배치 미리보기](product-preview.md) | [웹](roles/web.md), [실행·복구](execution.md) | `application/preview.py`, `recommendations/preview_submissions.py`, worker/adapters |
 | SketchOn 단일 서버 MVP | [SQLite 실행·복구](execution.md), [통합 설치·실행](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md) | [웹 담당](roles/web.md), [호출 구조](call-structure.md) | `recommendations/{views,submissions,queue,worker}.py` → `application/direct.py`, `application/deferred.py` |
 | 전체 호출·영향 분석 | [호출 구조](call-structure.md) | [전체 아키텍처](../design/00-architecture.md) | 아래 전체 계층 |

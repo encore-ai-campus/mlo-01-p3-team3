@@ -229,9 +229,11 @@ class ProductIndex:
         self.vectors.flags.writeable = False
         self.model, self.preprocessing, self.version = model, preprocessing, version
         self.dimension = self.vectors.shape[1]
+        self.server_catalog = None
+        self.live_guard = None
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, server_config=None):
         path = Path(path).resolve()
         data = read_json(path)
         def inside(name):
@@ -265,6 +267,16 @@ class ProductIndex:
                      version=checksum(path.read_bytes() + vector_version.encode()))
         if result.dimension != data["dimension"]:
             raise ValueError("Catalog dimension mismatch")
+        if 'server_catalog' in data:
+            from ..catalog.server import CONTRACT, LiveGuard
+            server = data['server_catalog']
+            if (server.get('contract') != CONTRACT or set(server.get('bindings', {})) != set(result.by_image)
+                    or any(v.get('image_uuid') != k or v.get('index_id') != server.get('index_id')
+                           or not isinstance(v.get('index_manifest_checksum'), str) or len(v['index_manifest_checksum']) != 64
+                           for k, v in server['bindings'].items())):
+                raise ValueError('Server catalog bindings mismatch')
+            result.server_catalog = server
+            result.live_guard = LiveGuard(server_config)
         return result
 
     def validate_settings(self, settings):
@@ -346,9 +358,22 @@ class ProductIndex:
                 if previous is None or key(item) < key(previous):
                     best[group][product.product_id] = item
         order = lambda x: (-x["score"], -x["similarity"], x["product_id"], x["image_id"])
-        return {"ranking_version": policy.version, "policy": policy.model_dump(), "weight_source": "MANUAL_INITIAL",
+        result = {"ranking_version": policy.version, "policy": policy.model_dump(), "weight_source": "MANUAL_INITIAL",
                 "sklearn_version": sklearn.__version__, "index_version": self.version, "score_is_probability": False,
                 "searched_images": len(self.products), "excluded_images": excluded,
                 "items": heapq.nsmallest(limit, best["MATCH"].values(), key=order),
                 "unverified_items": heapq.nsmallest(limit, best["UNKNOWN"].values(), key=order),
                 "unapplied_conditions": context.unapplied_conditions}
+        if self.server_catalog is not None:
+            selected = result['items'] + result['unverified_items']
+            bindings = [self.server_catalog['bindings'][item['image_id']] for item in selected]
+            if bindings:
+                self.live_guard.validate(bindings)
+            else:
+                expected = next(iter(self.server_catalog['bindings'].values()))
+                self.live_guard.validate_index(expected['index_id'], expected['index_manifest_checksum'])
+            for item, bound in zip(selected, bindings):
+                item['server_binding'] = bound
+            result['catalog_source'] = {k: self.server_catalog[k] for k in
+                ('contract', 'index_id', 'publication_plan_ids', 'delta_path', 'delta_version')}
+        return result
