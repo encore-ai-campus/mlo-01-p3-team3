@@ -3,7 +3,7 @@ import copy
 import hashlib
 import re
 from functools import wraps
-from uuid import UUID
+from uuid import UUID, uuid4
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -129,7 +129,7 @@ def edit_saved_version(request, version_id):
     version = own_version(request,version_id)
     snapshot = version.snapshot
     with transaction.atomic():
-        project = Project.objects.create(owner=version.composition.project.owner, account=request.user, saved_project=version.saved_project,
+        project = Project.objects.create(flow_id=uuid4(), owner=version.composition.project.owner, account=request.user, saved_project=version.saved_project,
             title=version.saved_project.title, photo=snapshot['photo'], original_photo=snapshot.get('original_photo',''),
             original_checksum=snapshot.get('original_checksum',''), width=snapshot['width'], height=snapshot['height'],
             document=copy.deepcopy(snapshot['document']), request_context=copy.deepcopy(snapshot['request_context']))

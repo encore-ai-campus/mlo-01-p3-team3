@@ -9,6 +9,7 @@ export function initAccountState({projectId, onChange, beforeLogin} = {}) {
         window.__sketchAccountState = next;
         nav?.querySelectorAll('.account-login').forEach(node => node.hidden = next.authenticated);
         nav?.querySelectorAll('.account-member').forEach(node => node.hidden = !next.authenticated);
+        nav?.querySelectorAll('[data-ops-link]').forEach(node => { node.hidden = !next.can_access_ops; node.href = next.ops_url || '/ops/'; });
         nav?.querySelectorAll('.account-nickname').forEach(node => node.textContent = next.nickname);
         document.querySelectorAll('[data-member-only]').forEach(node => { node.hidden = !next.authenticated; });
         for (const token of document.querySelectorAll('[name=csrfmiddlewaretoken]')) if (next.csrf_token) token.value = next.csrf_token;
@@ -20,13 +21,17 @@ export function initAccountState({projectId, onChange, beforeLogin} = {}) {
         if (conceal) { document.body.classList.add('account-revalidating'); nav?.querySelectorAll('.account-member').forEach(node => node.hidden = true); }
         try {
             const id = typeof projectId === 'function' ? projectId() : projectId;
-            const response = await fetch('/api/account/status/' + (id ? '?project_id=' + encodeURIComponent(id) : ''), {credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+            const params=new URLSearchParams();
+            if(id)params.set('project_id',id);
+            if(document.body.dataset.opsPermission)params.set('ops_permission',document.body.dataset.opsPermission);
+            const query=params.toString();
+            const response = await fetch('/api/account/status/' + (query ? '?' + query : ''), {credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
             if (!response.ok) throw new Error('로그인 상태를 확인하지 못했어요. 새로고침 후 다시 시도해 주세요.');
             const next = await response.json();
             if (destroyed || current !== serial) return state;
             const changed = next.actor_key !== state.actor_key;
             if (changed) window.__sketchAccountEpoch = (window.__sketchAccountEpoch || 0) + 1;
-            if (next.project_access === false || (changed && document.body.classList.contains('member-page'))) {
+            if ((document.body.classList.contains('ops-page') && (!next.can_access_ops || next.ops_page_access === false)) || next.project_access === false || (changed && document.body.classList.contains('member-page'))) {
                 // Remove protected content before it can be exposed from the BFCache.
                 const main = document.querySelector('main');
                 if (main) { main.replaceChildren(); const text = document.createElement('p'); text.textContent = '계정이 변경되었어요. 현재 계정으로 다시 시작해 주세요.'; const link = document.createElement('a'); link.href = '/'; link.textContent = '홈으로 돌아가기'; main.append(text,link); }
