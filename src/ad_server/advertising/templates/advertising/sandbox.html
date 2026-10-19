@@ -1,0 +1,36 @@
+{% extends "advertising/base.html" %}{% load static %}
+{% block title %}광고 비딩 시연 · SketchOn{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'advertising/sandbox.css' %}">{% endblock %}
+{% block content %}
+<section id="sandbox-app" data-csrf="{{ csrf_token }}">
+<div class="demo-heading"><div><h1>광고 비딩 시연</h1><p class="muted">어떤 광고가 왜 선정됐는지, 실제로 표시되고 클릭됐는지 확인하세요.</p></div><a class="admin-link" href="/admin/">광고 등록 · 집행 관리 ↗</a></div>
+{% if focus_campaign %}<section class="panel" style="margin-top:20px;padding:18px 22px"><strong>지금 확인할 캠페인: {{ focus_campaign.name }}</strong><p class="small-note">집행 설정은 {% if focus_campaign.enabled %}켜져{% else %}꺼져{% endif %} 있습니다. 아래 ‘광고 선정하기’를 누르면 다른 적격 광고와 함께 비교합니다. 입찰·관련성·기간·노출 한도에 따라 다른 광고가 선정될 수도 있습니다.</p></section>{% endif %}
+<ol class="demo-steps" aria-label="시연 순서"><li><b>1</b>조건 선택</li><li><b>2</b>광고 선정</li><li><b>3</b>배너 표시 확인</li><li><b>4</b>클릭 · 현황 확인</li></ol>
+<section class="panel condition-panel" aria-labelledby="conditions-title"><h2 id="conditions-title">시연 조건</h2><div class="condition-grid">
+<div><label for="signal">확인된 관심 품목</label><select id="signal"><option value="">지정 안 함 · 일반 광고 비교</option>{% for key,label in signals %}<option value="{{key}}">{{label}}</option>{% endfor %}</select></div>
+<div><label for="source">관심 품목의 확인 근거</label><select id="source"><option value="CONFIRMED_TEXT">사용자가 확정한 텍스트</option><option value="PHOTO_OBJECT">사진에서 확인된 물체</option><option value="REQUEST_CATEGORY">사용자가 요청한 품목</option></select></div>
+<div><label for="placement">광고 표시 위치</label><select id="placement"><option value="EDITOR_RIGHT">편집 화면 오른쪽</option><option value="RESULT_RIGHT">결과 화면 오른쪽</option></select></div></div>
+<div class="actions"><button class="primary" id="new-context">광고 선정하기</button><button id="retry">같은 요청 다시 확인</button><button id="report">누적 현황 새로고침</button></div>
+<p class="small-note">처음에는 관심 품목을 지정하지 않고 시작하세요. 같은 요청은 기존 결과를 재사용하며 새 입찰을 만들지 않습니다.</p>
+</section>
+<div class="bid-layout"><div class="bid-main">
+<section class="panel selection-panel" aria-labelledby="selection-heading"><div class="section-heading"><h2 id="selection-heading">이번 광고 선정 결과</h2><span class="status-chip" id="decision-state">선정 전</span></div>
+<p id="status" class="status" role="status" aria-live="polite">‘광고 선정하기’를 누르면 입찰 결과를 확인할 수 있습니다.</p>
+<h3 id="selected-title">아직 선정된 광고가 없습니다</h3><p class="muted" id="selected-owner">등록된 캠페인의 승인·기간·표시 위치를 먼저 확인합니다.</p>
+<div class="selection-stats"><div><span>선정 포인트</span><strong id="winning-bid">—</strong></div><div><span>비교한 캠페인</span><strong id="candidate-count">—</strong></div><div><span>광고주 대표 후보</span><strong id="representative-count">—</strong></div></div>
+<div class="reason-box"><strong>선정 이유</strong><p id="selection-reason">조건에 맞는 관련 광고를 우선 비교하고, 없으면 일반 광고 후보를 비교합니다.</p></div>
+<h3 class="table-title">입찰 비교</h3><div class="table-scroll"><table class="bid-table"><thead><tr><th scope="col">캠페인 · 광고주</th><th scope="col">입찰 포인트</th><th scope="col">결과</th></tr></thead><tbody id="bid-rows"><tr><td colspan="3" class="table-empty">광고를 선정하면 비교 결과가 표시됩니다.</td></tr></tbody></table></div>
+<p id="bid-note" class="small-note">포인트는 시험용 순위 값입니다. 실제 금액·결제·차감은 없습니다.</p>
+<details class="compact-details"><summary>후보 제외 사유 보기</summary><ul id="excluded-reasons"><li>선정 후 확인할 수 있습니다.</li></ul></details>
+</section>
+<section class="panel current-panel"><h2>이번 광고의 반응</h2><div class="current-events"><div><span>이미지 표시</span><strong id="current-rendered">확인 전</strong></div><div><span>가시 노출</span><strong id="current-visible">확인 전</strong></div><div><span>유효 클릭</span><strong id="current-clicked">확인 전</strong></div></div>
+<p class="small-note">가시 노출은 배너 면적 50% 이상이 활성 화면에 연속 1초 보였을 때 인정합니다. 클릭만으로 가시 노출이 생기지는 않습니다.</p><p id="event-notice" class="event-notice" role="status" aria-live="polite">오른쪽 배너가 표시된 뒤 직접 클릭해 보세요.</p>
+</section></div>
+<aside class="panel preview-panel"><div class="section-heading"><h2>선정된 배너</h2><span class="tag">모의 광고</span></div><p class="small-note" id="expiry-note">표시 기간은 선정 후 확인할 수 있습니다.</p><div id="creative" class="banner hidden"><div class="ad-label">광고 · 클릭하면 승인된 안내 페이지로 이동</div><button id="ad-click" class="banner-button" aria-label="선정된 광고 안내 페이지 열기"><img id="ad-image" alt="선정된 광고 배너"></button></div><p id="empty" class="preview-empty">광고를 선정하면<br>이 자리에 배너가 표시됩니다.</p></aside></div>
+<section class="panel report-panel" aria-labelledby="report-title"><div class="section-heading"><div><h2 id="report-title">전체 시연 누적 현황</h2><p class="small-note">이 브라우저만이 아닌, 별도 시연 DB에 기록된 모든 운영자 테스트 결과입니다.</p></div><span id="report-time" class="small-note">조회 중</span></div>
+<div class="report-metrics"><div><span>이미지 표시</span><strong id="total-rendered">—</strong><small>실제 로드가 확인된 횟수</small></div><div><span>가시 노출</span><strong id="total-visible">—</strong><small>면적 · 연속 시간 기준 충족</small></div><div><span>유효 클릭</span><strong id="total-clicked">—</strong><small>중복 · 진단 사건 제외</small></div><div><span>클릭률</span><strong id="total-ctr">—</strong><small>유효 클릭 ÷ 이미지 표시</small></div></div>
+<div class="table-scroll"><table class="bid-table report-table"><thead><tr><th scope="col">노출일 · 캠페인</th><th scope="col">위치</th><th scope="col">표시</th><th scope="col">가시 노출</th><th scope="col">유효 클릭</th><th scope="col">클릭률</th></tr></thead><tbody id="report-rows"><tr><td colspan="6" class="table-empty">현황을 불러오고 있습니다.</td></tr></tbody></table></div>
+<p id="report-note" class="small-note">노출일은 한국 시간 기준입니다. 표시가 0회이면 클릭률을 계산하지 않습니다.</p></section>
+<details class="developer-details"><summary>개발용 상세 정보 · 원문 JSON</summary><p class="small-note">개발·검수에 필요한 원문입니다. 일반 시연은 위의 한글 요약으로 확인하세요.</p><pre id="output">아직 요청한 결과가 없습니다.</pre></details>
+</section>{% endblock %}
+{% block script %}<script src="{% static 'advertising/sandbox.js' %}"></script>{% endblock %}
