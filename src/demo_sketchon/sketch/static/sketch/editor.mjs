@@ -391,7 +391,7 @@ surface.addEventListener('pointerdown', event => {
     }
     const rect = surface.getBoundingClientRect();
     const previousBox = selectedBox();
-    const handleHit = previousBox && previousBox.width * rect.width >= 56 && previousBox.height * rect.height >= 56 &&
+    const handleHit = previousBox && (selectedValue()?.kind === 'sticker' || (previousBox.width * rect.width >= 56 && previousBox.height * rect.height >= 56)) &&
         pos.x <= previousBox.x + previousBox.width && pos.y <= previousBox.y + previousBox.height &&
         pos.x >= previousBox.x + previousBox.width - 22 / rect.width && pos.y >= previousBox.y + previousBox.height - 22 / rect.height;
     const hitItem = handleHit && selected?.type === 'item' ? selectedValue() : itemAt(pos, rect);
@@ -419,7 +419,7 @@ surface.addEventListener('pointerdown', event => {
         }
         if (item?.kind === 'text') { $('font-size').value = Math.round(item.font_size * 1200); $('font-size-value').value = $('font-size').value; $('color').value = item.color; }
         const alreadySelected = selected?.type === previousSelection?.type && (selected?.type === 'item' ? selected.id === previousSelection?.id : selected?.index === previousSelection?.index);
-        const resizing = resizeMode || (alreadySelected && box.width * rect.width >= 56 && box.height * rect.height >= 56 && (box.x + box.width - pos.x) * rect.width < 28 && (box.y + box.height - pos.y) * rect.height < 28);
+        const resizing = resizeMode || (alreadySelected && (value.kind === 'sticker' || (box.width * rect.width >= 56 && box.height * rect.height >= 56)) && (box.x + box.width - pos.x) * rect.width < 28 && (box.y + box.height - pos.y) * rect.height < 28);
         gesture = {id: event.pointerId, before, start: pos, source: structuredClone(value), box: structuredClone(box), resizing, pointerType: event.pointerType,
             group: selectedGroup(before, value)};
     } else if (mode === 'pen' || mode === 'eraser') {
