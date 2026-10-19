@@ -1,0 +1,2 @@
+# Generated cutout PNGs stay local and are intentionally excluded from Git.
+*.png

@@ -42,7 +42,7 @@ export function outlineHit(item, pos, rect, tolerance = 6) {
     const x = (pos.x - item.x) * rect.width, y = (pos.y - item.y) * rect.height;
     const w = item.width * rect.width, h = item.height * rect.height;
     const t = tolerance + (item.stroke_width || 0) * rect.width / 2;
-    if (item.kind === 'text' || !item.kind) return x >= 0 && y >= 0 && x <= w && y <= h;
+    if (item.kind === 'text' || item.kind === 'sticker' || !item.kind) return x >= 0 && y >= 0 && x <= w && y <= h;
     if (item.kind === 'rectangle') return Math.min(distanceToLine(x, y, 0, 0, w, 0), distanceToLine(x, y, w, 0, w, h), distanceToLine(x, y, w, h, 0, h), distanceToLine(x, y, 0, h, 0, 0)) <= t;
     if (item.kind === 'ellipse') {
         const rx = w / 2, ry = h / 2;

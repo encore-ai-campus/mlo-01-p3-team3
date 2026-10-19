@@ -9,6 +9,7 @@
 ## 프로젝트 문서
 - [interior_recommender 역할별 코드·문서 라우팅](docs/interior-recommender/README.md)
 - [현재 호출 구조와 패키지 계층](docs/interior-recommender/call-structure.md)
+- [SketchOn SQLite 작업 워커·복구·파이프라인 연결 경계](docs/interior-recommender/execution.md)
 - [BRD (Business Requirements Document)](docs/BRD_3차.md)
 - [PRD (Product Requirements Document)](docs/PRD_3차_초안.md)
 - [시스템 아키텍처](docs/design/00-architecture.md)

@@ -37,7 +37,7 @@ class QuotaTests(TestCase):
             self.assertEqual(self.client.post(f"/api/projects/{project['id']}/search/", data, content_type='application/json').status_code,200)
             download = self.client.get(response.json()['download_url'])
             self.assertEqual(download.status_code,200)
-            download.close()
+            b''.join(download.streaming_content)
         self.assertEqual(GuestGenerationUsage.objects.get().successful_count,1)
 
     def test_failed_file_write_rolls_back_usage_and_lock(self):
@@ -60,7 +60,7 @@ class QuotaTests(TestCase):
             self.assertEqual(self.client.get('/api/account/status/').json()['quota']['used'],0)
             self.generate()
         self.assertEqual(GuestGenerationUsage.objects.count(),2)
-        with patch('sketch.quota.timezone.now', return_value=after):
+        with patch('sketch.quota.timezone.now',return_value=after):
             self.assertEqual(self.client.get('/api/account/status/', HTTP_X_FORWARDED_FOR='1.2.3.4').json()['quota']['used'],1)
 
     def test_member_has_no_generation_limit(self):

@@ -389,4 +389,4 @@ Gold의 `product_id`는 서비스 UUID 매핑이다. 최초 게시에서 UUID가
 
 `gold_catalog_quality_daily`는 기준일·품목별 원천 관측 수, 고유 상품 수, 상품–이미지 연결 수, 고유 파일 수, 이미지 검증 수, 속성별 확보 분자/분모, 추천 준비 수와 보류 사유별 건수를 분리한다. 분모 0은 미산출이다. 같은 자료의 재집계는 고정 버전으로 재계산해 Upsert하고 누적 더하기로 중복시키지 않는다.
 
-`readiness_reasons_json`과 위 논리 필드의 실제 MySQL 저장 위치·JSON 스키마·상태 코드는 DDL 전에 확정한다. 해당 컬럼이 현재 ORM에 존재하거나 ETL이 실행됐다는 뜻은 아니다. 운영 검수·이용 범위·상품 활성 원장은 ETL이 덮어쓰지 않는다.
+2026-10-18: MySQL 필수 저장 위치·타입·NULL·원문 참조는 [Gold 게시 필드 계약](../13-gold-mysql-publication.md)을 따른다. 여기의 `readiness_reasons_json`은 논리 표현이며 실제 Gold의 네 준비 boolean, `quality_reason_codes`, `publication_reason_codes`와 대응해 보존한다. 해당 확장이 현재 ORM/참조 DDL/게시 코드에 구현됐다는 뜻은 아니다. 운영 검수·이용 범위·상품 활성 원장은 ETL이 덮어쓰지 않는다.

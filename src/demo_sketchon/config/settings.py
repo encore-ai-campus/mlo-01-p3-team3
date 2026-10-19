@@ -31,6 +31,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": os.environ.get("ROOMPICK_DB_PATH", BASE_DIR / "db.sqlite3"), "OPTIONS": {"timeout": 20, "transaction_mode": "IMMEDIATE"}}}
+# Shared-cache in-memory SQLite raises SQLITE_LOCKED rather than applying the
+# deployed file database's busy timeout. Exercise worker concurrency on a file.
+DATABASES["default"]["TEST"] = {"NAME": os.environ.get("ROOMPICK_TEST_DB_PATH", str(BASE_DIR / f".test-sketchon-{os.getpid()}.sqlite3"))}
 STATIC_URL = "/static/"
 MEDIA_ROOT = Path(os.environ.get("ROOMPICK_MEDIA_ROOT", BASE_DIR / "media"))
 SKETCH_RAW_ROOT = Path(os.environ.get("ROOMPICK_RAW_ROOT", BASE_DIR / "data" / "sketch_raw"))
@@ -46,7 +49,7 @@ SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_NAME = "roompick_sessionid"
 CSRF_COOKIE_NAME = "roompick_csrftoken"
 
-# Local immutable product snapshot; recommendation requests never query a product DB.
+# Immutable product snapshot; server snapshots additionally recheck current MySQL state.
 INTERIOR_RECOMMENDER_PRODUCTS = Path(os.environ.get(
     "INTERIOR_RECOMMENDER_PRODUCTS",
     BASE_DIR.parent / "interior_recommender/sample/crawl_test/full/catalog-with-links/products.json",
@@ -57,6 +60,19 @@ INTERIOR_RECOMMENDER_OUTPUT_ROOT = Path(os.environ.get(
     BASE_DIR.parent.parent / "outputs" / ("sketchon-direct-demo" if INTERIOR_RECOMMENDER_DEMO else "sketchon-direct"),
 )).resolve()
 INTERIOR_RECOMMENDER_RANKING_POLICY = os.environ.get("INTERIOR_RECOMMENDER_RANKING_POLICY")
+# Shared SQLite admission/leases; these values are measurement starting points.
+RECOMMENDATION_API_ACCOUNT = os.environ.get("RECOMMENDATION_API_ACCOUNT", "default")
+RECOMMENDATION_EXECUTION = {
+    name: int(os.environ.get("RECOMMENDATION_" + name.upper(), default))
+    for name, default in {
+        "max_pending": 8, "max_inflight": 2, "sync_workers": 4,
+        "lease_seconds": 90, "heartbeat_seconds": 10, "poll_seconds": 1,
+        "staging_seconds": 120, "max_recoveries": 10, "blas_threads": 1,
+        "analysis_concurrency": 2, "analysis_rpm": 10,
+        "embedding_concurrency": 2, "embedding_rpm": 30,
+        "generation_concurrency": 1, "generation_rpm": 2,
+    }.items()
+}
 if not DEBUG:
     if SECRET_KEY == "roompick-local-development-only":
         raise ValueError("ROOMPICK_SECRET_KEY is required when DEBUG is off")

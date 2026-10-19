@@ -1,5 +1,7 @@
 # AI 응답 검증과 추천 규칙
 
+2026-10-18 기본 정책 변경: [방 특징 추천](../interior-ranking.md)의 `direct-context-v3`/`interior-content-v3`를 적용한다. `domain/interior.py`의 구조화된 방 특징·상품 특징·색조 유사성 가점이 추가됐다. 아래 v1/v2 설명은 구버전 정책 동작이며 기본 v3에서는 방 특징이 있으면 기존 점수 80% + 방 특징 20%로 결합한다. 상품 특징 결측은 UNKNOWN이고 추가 필수 필터가 아니다.
+
 [역할별 라우팅](../README.md) · [직접 추천 계약](../../design/12-direct-recommendation.md) · [크기 정책](../../design/11-scale-policy.md) · [상품 연결](../../design/09-product-links.md)
 
 `domain/recommendation.py`는 `RecommendationContext`, `Condition`, `SizeEvidence`, `Product`, `RankingPolicy`, `ProductIndex`와 맥락 prompt/파싱/검증을 담당한다. `domain/product_links.py`는 `comparison_url()`을 담당한다. 외부 AI 실행은 이 모듈에서 하지 않고 실행 계층이 `Pipeline → adapters`로 호출한다.

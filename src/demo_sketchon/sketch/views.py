@@ -12,6 +12,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.templatetags.static import static
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
@@ -21,6 +22,7 @@ from . import validation
 from .models import Composition, Project, SketchEvent
 from .mock_composition import compose, furniture, render_placements
 from .catalog import CATEGORIES, PRODUCTS
+from .stickers import STICKERS
 from .raw_samples import MAX_RAW_BYTES, save_immutable, strict_constant, validate_sample
 from .quota import charge_guest_generation, GuestLimitReached, quota_status
 from operations.tracking import track_generation, track_raw
@@ -62,7 +64,8 @@ def editor(request, project_id=None):
         result = project.composition_set.order_by("-created_at").first()
         return redirect("result-page", result_id=result.id)
     SketchEvent.objects.create(project=project, event_type="page.viewed", payload={"page": "editor"})
-    return render(request, "sketch/editor.html", {"initial": serialize(project), "visitor_id": project.owner, "platform_config": {"mode": "mock"}})
+    return render(request, "sketch/editor.html", {"initial": serialize(project), "visitor_id": project.owner, "platform_config": {"mode": "mock"},
+                                               "stickers": [{**row, 'url': static(row['image'])} for row in STICKERS]})
 
 
 def prepare_photo(upload):

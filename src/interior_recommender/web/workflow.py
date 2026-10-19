@@ -85,7 +85,7 @@ class DemoAdapter:
 
 
 class Studio:
-    def __init__(self, root, templates=None, demo=False, adapter_factory=None, danawa_index=None):
+    def __init__(self, root, templates=None, demo=False, adapter_factory=None, danawa_index=None, background_workers=2):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.demo = demo
@@ -93,7 +93,7 @@ class Studio:
         self.guard = threading.RLock()
         self.vector_guard = threading.Lock()
         self.reference_guard = threading.Lock()
-        self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="scene-mvp")
+        self.pool = ThreadPoolExecutor(max_workers=background_workers, thread_name_prefix="scene-mvp") if background_workers else None
         self.instance = str(uuid4())
         self.danawa = DanawaCatalog(danawa_index) if danawa_index else None
         if self.danawa:

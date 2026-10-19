@@ -16,13 +16,13 @@ def image_files(directory):
     if not directory.is_dir():
         raise ValueError("Input image directory does not exist: " + str(directory))
     return sorted((p for p in directory.rglob("*") if p.is_file() and not p.is_symlink()
-                   and p.suffix.lower() in {".jpg", ".jpeg", ".png"}),
+                   and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}),
                   key=lambda p: p.relative_to(directory).as_posix())
 
 
 def prepared_image(path):
     data = path.read_bytes()
-    image, size = png_bytes(data, resize=True)
+    image, size = png_bytes(data, resize=True, allow_webp=True)
     return image, size, checksum(data)
 
 

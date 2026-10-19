@@ -1,5 +1,9 @@
 # 카탈로그 준비와 사전 임베딩
 
+2026-10-19: [서버 카탈로그 연결](../server-catalog.md)을 추가했다. `catalog.server`가 읽기 전용 MySQL·Garage와 고정 Delta export를 연결하고 `server_embeddings`가 검증된 기존 배치를 변환한다. `product_pipeline.embedding_vectors`가 Delta 적재/NPY export를 담당한다. 운영 상품 게시·등록/활성화·실제 배포와 구분한다. 서버 카탈로그만 현재 상태를 재조회하며 기존 파일 카탈로그는 유지한다. 아래 10월 18일의 MySQL 어댑터 부재 설명은 당시 상태다.
+
+2026-10-18: 기존 파일 카탈로그를 유지하며 `Product.interior_profile`, `attributes_json`을 선택 입력으로 지원한다. [방 특징 추천](../interior-ranking.md)의 확인 상태·옵션·부위 규칙으로 특징을 인덱스 로딩 시 준비한다. MySQL에서 읽는 어댑터는 아직 없고 실제 이미지/벡터 대응·현재 검수 인수는 후속 범위다. 이 변경만을 이유로 임베딩/카탈로그를 재생성하지 않는다.
+
 [역할별 라우팅](../README.md) · [실행 명령·manifest 예시](../../../src/interior_recommender/README.md) · [데이터 파이프라인 설계](../../design/02-data-pipeline.md)
 
 `catalog/`는 사용자 요청 전에 상품 원장·이미지·벡터를 준비한다. `catalog/danawa.py::DanawaCatalog`는 저장 임베딩의 이미지·벡터·checksum·설정 대응을 읽는 공통 로더다.

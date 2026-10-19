@@ -1,0 +1,1 @@
+{"topic": {"exit_code": 1, "output": "Error while executing topic command : Topic 'product.raw.collected' does not exist as expected\n"}, "acl": {"exit_code": 0, "output": ""}}

@@ -1,9 +1,16 @@
 # 3차 프로젝트 문서
 
+2026-10-18 범위 확장: 추천 후 상품을 선택하면 외부 API로 [상품 배치 미리보기](interior-recommender/product-preview.md)를 생성한다. 아래 2026-10-15 이미지 생성 제외 결정은 선택형 미리보기 추가 이전 기준이다.
+
+2026-10-18 추천 구현 갱신: 신규 로컬 요청은 [방 특징 추천](interior-recommender/interior-ranking.md)의 `interior-content-v3`를 기본으로 사용한다. 아래 v1/v2 수동 가중치 설명은 당시 정책이며 기존 저장 실행은 유지한다. MySQL 연결·운영 배포는 후속 작업이다.
+
 2026-10-15 현행은 **이미지 생성 없는 공간 맞춤 상품 추천**, 설계 direct-recommendation-v3이다. scikit-learn CPU 콘텐츠 유사도와 수동 초기 가중합을 사용하며 전수 사람 라벨링이나 학습 모델이 초기 실행 조건은 아니다. 로컬 웹 구현과 전체 서비스 통합 상태를 구분한다.
 
 | 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| 추천 카탈로그의 MySQL·Garage·Delta 연결 | [서버 카탈로그 연결](interior-recommender/server-catalog.md) | [카탈로그 담당](interior-recommender/roles/catalog.md), [게시 계약](design/13-gold-mysql-publication.md) |
+| 추천 이후 상품 배치 이미지 생성 | [상품 배치 미리보기](interior-recommender/product-preview.md) | [실행·복구](interior-recommender/execution.md), [직접 추천](design/12-direct-recommendation.md) |
+| SketchOn SQLite 실행·복구·비동기/동기 경계 | [작업 실행](interior-recommender/execution.md) | [역할별 라우팅](interior-recommender/README.md), [호출 구조](interior-recommender/call-structure.md) |
 | interior_recommender 코드·호출·담당별 변경 | [역할별 코드·문서 라우팅](interior-recommender/README.md) | [현재 호출 구조](interior-recommender/call-structure.md), [설계 라우팅](design/index.md) |
 | 사업·사용자 범위 | [BRD](BRD_3차.md) | [PRD](PRD_3차_초안.md) |
 | 전체 흐름·담당·내재화 단계 | [직접 추천 계약·다이어그램](design/12-direct-recommendation.md) | [아키텍처](design/00-architecture.md) |
@@ -12,6 +19,7 @@
 | 검색·콘텐츠 추천·후속 평가 | [추천 서버](design/07-ad-server.md) | [파이프라인](design/02-data-pipeline.md), [운영](design/06-operations-migration.md) |
 | 실버·골드 정제 필드·준비 상태 | [Delta 필드 계약](design/data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위) | [파이프라인](design/02-data-pipeline.md#실버골드-필드-적용), [원장 대응](design/03-data-model.md#실버골드와-서비스-원장-대응) |
 | 데이터 변경 | [직접 추천 속성](design/data-dictionary/09-direct-recommendation.md) | [모델](design/03-data-model.md), [ERD](design/03-erd-full.md) |
+| Gold→MySQL 테이블 생성·필수 컬럼·게시 연결 | [게시 필드 계약](design/13-gold-mysql-publication.md) | [상품 속성](design/data-dictionary/02-products.md#gold-게시-필수-확장-컬럼), [게시 실행](../src/data_pipeline/docs/mysql_publication.md) |
 | 상품·링크 | [상품 연결](design/09-product-links.md) | [광고 서버](design/07-ad-server.md) |
 | 인프라·보존·복구 | [인프라](design/01-infrastructure.md) | [Kafka](design/05-kafka-jobs.md), [운영](design/06-operations-migration.md) |
 

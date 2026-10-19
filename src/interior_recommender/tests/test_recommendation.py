@@ -73,7 +73,7 @@ def test_material_is_query_preference_and_never_excludes_or_unverifies(tmp_path,
     result = index(rows, [[1, 0]] * len(rows)).rank([1, 0], context(required=[
         Condition(field="material", operator=operator, value=value, source_quote="재질 요청"),
         Condition(field="price_krw", operator="LE", value=500., source_quote="500원 이하")]))
-    assert result["ranking_version"] == "weighted-content-v2"
+    assert result["ranking_version"] == "interior-content-v3"
     assert {p["product_id"] for p in result["items"]} == {"missing", "wood", "metal"}
     assert [p["product_id"] for p in result["unverified_items"]] == ["unknown-price"]
     assert result["excluded_images"] == 2

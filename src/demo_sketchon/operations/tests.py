@@ -84,7 +84,7 @@ class OperationsTests(TestCase):
         self.client.force_login(staff)
         self.assertEqual(self.client.get(f"/ops/media/projects/{p['id']}/photo/").status_code,403)
         self.client.force_login(self.staff)
-        response=self.client.get(f"/ops/media/projects/{p['id']}/photo/");self.assertEqual(response.status_code,200);response.close()
+        response=self.client.get(f"/ops/media/projects/{p['id']}/photo/");self.assertEqual(response.status_code,200);self.assertTrue(b"".join(response.streaming_content))
         csrf=Client(enforce_csrf_checks=True);csrf.force_login(self.staff)
         self.assertEqual(csrf.post('/ops/collection/index/').status_code,403)
 

@@ -1,0 +1,112 @@
+[
+  {
+    "id": "sofa-cream",
+    "name": "크림 소파",
+    "category": "소파",
+    "image": "sketch/assets/sofa-cream.png",
+    "width": 1899,
+    "height": 828,
+    "sha256": "6a57ae0f9f72818a61b83d99071ae50e91e183a4a2ff09164a2c17df5c3b48d4",
+    "source": "existing-sketchon-asset"
+  },
+  {
+    "id": "sofa-wood",
+    "name": "브라운 소파",
+    "category": "소파",
+    "image": "sketch/assets/sofa-wood.png",
+    "width": 1899,
+    "height": 828,
+    "sha256": "7559631a2dae14b5e5c4e7eec49a74859ceee09c908405f95fedd37146652c98",
+    "source": "existing-sketchon-asset"
+  },
+  {
+    "id": "sofa-sage",
+    "name": "세이지 소파",
+    "category": "소파",
+    "image": "sketch/assets/sofa-sage.png",
+    "width": 1899,
+    "height": 828,
+    "sha256": "deb3bea19f88cb56e42fcf127464206209c757dd13868fab8db4626c0248ef6b",
+    "source": "existing-sketchon-asset"
+  },
+  {
+    "id": "office-chair",
+    "name": "오피스 의자",
+    "category": "의자",
+    "image": "sketch/assets/stickers/office-chair-cutout-v1.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "9be0a494a745e824ed61bf9411f4ac7ea56a4f2b84e12ad08a2cd4e05617a51a",
+    "source_product_id": "danawa:37927139",
+    "source": "ai-edited-local-sample",
+    "source_image_sha256": "f736a9c7021c91bb33a5796b9d015ff1a75163fe33928ab343de4a8fef187cef",
+    "edit_kind": "background-extraction",
+    "preparation": {
+      "tool": "image_gen",
+      "completed_at": "2026-10-18",
+      "status": "SUCCEEDED",
+      "output_file": "exec-8e78e37a-11d7-42af-8a83-58cc0c33cc81.png",
+      "transparent_background": true
+    }
+  },
+  {
+    "id": "gaming-chair",
+    "name": "게이밍 의자",
+    "category": "의자",
+    "image": "sketch/assets/stickers/gaming-chair-cutout-v1.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "2e6feaa48724ed42b15ee9a88714f7dc653b419f04767860cbd6c963f0368541",
+    "source_product_id": "danawa:19077677",
+    "source": "ai-edited-local-sample",
+    "source_image_sha256": "dc4185bbf1fdcca3eb3c09f5486e94b95af1f4cbe30953a0f91b923daa182093",
+    "edit_kind": "background-extraction",
+    "preparation": {
+      "tool": "image_gen",
+      "completed_at": "2026-10-18",
+      "status": "SUCCEEDED",
+      "output_file": "exec-50d11882-7b62-4641-8d0b-bc0f69bbf80b.png",
+      "transparent_background": true
+    }
+  },
+  {
+    "id": "desk",
+    "name": "원목 책상",
+    "category": "책상",
+    "image": "sketch/assets/stickers/desk-cutout-v1.png",
+    "width": 1536,
+    "height": 1024,
+    "sha256": "036afd45dac59aba384f7298ac808878cf5c5e1a7e31672baadd9a9a58663ffd",
+    "source": "ai-edited-local-sample",
+    "source_image_sha256": "00ee7a3d0172facd5285a1e4b5e9453bef990133205b75cdab9d8a3943c22794",
+    "edit_kind": "style-change-and-background-extraction",
+    "preparation": {
+      "tool": "image_gen",
+      "completed_at": "2026-10-18",
+      "status": "SUCCEEDED",
+      "output_file": "exec-2910f812-b024-4118-b980-fa18ffce76f9.png",
+      "transparent_background": true
+    },
+    "reference_product_id": "danawa:15422003"
+  },
+  {
+    "id": "bed",
+    "name": "침대",
+    "category": "침대",
+    "image": "sketch/assets/stickers/bed-cutout-v1.png",
+    "width": 1254,
+    "height": 1254,
+    "sha256": "20913d25b3a39ea90c5db481a58aadc66bb48f9687327451459444d9b758d58c",
+    "source_product_id": "danawa:5097200",
+    "source": "ai-edited-local-sample",
+    "source_image_sha256": "256bdf2bc2b96d25a830f066b55bae925cdf07b17503090d1e9300fc565f035c",
+    "edit_kind": "background-extraction",
+    "preparation": {
+      "tool": "image_gen",
+      "completed_at": "2026-10-18",
+      "status": "SUCCEEDED",
+      "output_file": "exec-9d401e6d-c27a-4071-967e-e0bed39ab13a.png",
+      "transparent_background": true
+    }
+  }
+]

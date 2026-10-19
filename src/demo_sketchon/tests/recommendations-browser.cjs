@@ -12,12 +12,35 @@ const prefix = '/interior-recommand/';
     page.on('pageerror', error => errors.push(error.message));
     const mode = await (await context.request.get(base+prefix+'api/csrf')).json();
     assert.equal(mode.demo,true,'browser check requires offline mode before submission');
+    const pendingRun = '00000000-0000-4000-8000-000000000001';
+    await page.route(base+prefix+'api/runs/'+pendingRun, route => route.fulfill({json:{
+      status:'PENDING', job:{status:'RUNNING'}, text:'테스트 입력', external_project:null,
+      recommendations:{items:[],unverified_items:[]}, context:{reason:'테스트용 해석 노출 검증'}
+    }}));
+    await page.goto(base+prefix+'?run='+pendingRun);
+    await page.getByText('상품을 찾고 있어요. 잠시만 기다려 주세요.',{exact:true}).waitFor();
+    assert.equal(await page.locator('#context').count(),0,'input interpretation has no customer-facing panel');
+    assert.equal(await page.locator('#unverified-panel').count(),0,'unverified candidates have no customer-facing panel');
+    assert.doesNotMatch(await page.locator('body').innerText(),/테스트용 해석 노출 검증|입력 해석|필수 정보 미확인 후보/);
+    await page.unroute(base+prefix+'api/runs/'+pendingRun);
+    const unverifiedRun = '00000000-0000-4000-8000-000000000002';
+    await page.route(base+prefix+'api/runs/'+unverifiedRun, route => route.fulfill({json:{
+      status:'UNVERIFIED_ONLY', job:{status:'SUCCEEDED'}, text:'테스트 입력', external_project:null,
+      recommendations:{items:[],unverified_items:[{name:'미확인 후보'}]}
+    }}));
+    await page.goto(base+prefix+'?run='+unverifiedRun);
+    await page.getByText('요청하신 조건을 확인할 수 있는 상품을 찾지 못했어요. 조건을 바꾸거나 입력을 수정해 다시 추천해 주세요.',{exact:true}).waitFor();
+    assert.equal(await page.locator('#unverified-panel, #items .candidate').count(),0,'unverified products are not rendered');
     await page.goto(base+prefix);
+    await page.unroute(base+prefix+'api/runs/'+unverifiedRun);
     assert.ok(new URL(page.url()).pathname.startsWith('/editor/'),'no run opens the existing SketchOn editor');
     await page.waitForFunction(() => !document.querySelector('#sample-empty').disabled);
     assert.equal(await page.locator('#search').evaluate(el => getComputedStyle(el).backgroundColor),'rgb(36, 79, 66)');
     await page.locator('#sample-empty').click();
     await page.waitForFunction(() => !document.querySelector('#room-photo').hidden && !document.querySelector('#search').disabled);
+    await page.getByRole('button',{name:'오피스 의자 사진 붙이기',exact:true}).click();
+    await page.waitForFunction(() => !document.querySelector('#search').disabled);
+    assert.match(await page.locator('#counts').innerText(),/표시 1개/);
     await page.locator('#text-requirements').fill('창가에 놓을 원목 의자를 찾아줘');
     await page.locator('#surface').scrollIntoViewIfNeeded();
     const box = await page.locator('#surface').boundingBox();
@@ -60,6 +83,7 @@ const prefix = '/interior-recommand/';
       await page.waitForFunction(()=>!document.querySelector('#search').disabled);
       assert.equal(await page.locator('#text-requirements').inputValue(),'창가에 놓을 원목 의자를 찾아줘');
       assert.match(await page.locator('#counts').innerText(),/1획/);
+      assert.match(await page.locator('#counts').innerText(),/표시 1개/);
       await page.locator(button).click();
       await page.waitForURL('**/interior-recommand/?run=*');
       await page.waitForFunction(()=>document.querySelectorAll('#items .candidate').length>0);
@@ -67,10 +91,8 @@ const prefix = '/interior-recommand/';
     }
     await page.goto(base+edit);
     await page.waitForFunction(()=>!document.querySelector('#search').disabled);
-    await page.locator('#tab-description').click();
-    await page.locator('.mock-preview summary').click();
-    await page.locator('#preview-mock').click();
-    await page.waitForURL('**/results/*/');
+    assert.equal(await page.locator('#preview-mock').count(),0);
+    assert.equal(await page.locator('[data-sticker]').count(),7);
     assert.deepEqual(errors,[]);
     console.log('PASS: existing editor → primary/top/mobile submit → read-only input preview and results; edit restores photo/sketch/text; 320–1440px, assets and links.');
   } finally { await browser.close(); }

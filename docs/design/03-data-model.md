@@ -1,5 +1,15 @@
 # 데이터 모델: 직접 추천 변경안과 기존 원장
 
+## Gold 게시 필수 확장
+
+2026-10-18: 서비스 DDL은 [Gold→MySQL 게시 필드 계약](13-gold-mysql-publication.md)을 포함한다. 확장된 참조 DDL `publication_reference_v2.sql`은 제조사·속성·준비 상태·출처·대표 이미지·임베딩 참조·링크 관측을 구현한다. 초기 v1 계약이나 아래 요약만으로 확장을 대신하지 않는다. 실제 운영 DB migration·기존 값 보완은 별도 인수하며 상세 타입/NULL/관계/고유 제약은 게시 계약이 기준이다.
+
+Gold의 모든 컬럼은 직접 저장·관계 변환·불변 게시 원문 참조·미게시 사유 중 하나로 대응한다. 같은 게시 버전의 값과 근거를 보존하고, 운영자 상품/이미지 활성·이용 검수는 별도 소유권으로 유지한다. Gold JSON에 값이 있다는 이유로 확인 상태·옵션·부위를 무시하지 않는다. `products.color` 같은 기존 단일값 필드는 호환용이며 전체 `attributes_json`을 대체하지 않는다.
+
+현재 참조 DDL/게시 코드와 로컬 파일 추천은 이 확장 계약의 구현 전 상태다. 실제 DB 변경·통합 완료를 뜻하지 않는다.
+
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 2026-10-15 현행 변경안은 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)과 [논리 ERD](12-direct-recommendation.md#논리-데이터와-erd-변경안)다. 구현/DDL 반영 완료가 아니다.
 
 신규 입력 버전→추천 맥락→추천 run→항목→노출/행동으로 연결한다. run 접수 시 context_id는 비어 있을 수 있으나 검색 전에는 같은 입력의 확정 맥락을 요구한다. generation_run/scene_object/template FK는 신규 추천 선행 조건이 아니다. 프로젝트 최신 추천 FK는 입력 순번과 완료 상태를 대조해 갱신한다.

@@ -1,0 +1,11 @@
+boto3==1.43.114
+botocore==1.43.114
+confluent-kafka==2.16.0
+dnspython==2.9.0
+jmespath==1.1.0
+pillow==12.3.0
+pymongo==4.19.0
+python-dateutil==2.9.0.post0
+s3transfer==0.19.2
+six==1.17.0
+urllib3==2.8.0
