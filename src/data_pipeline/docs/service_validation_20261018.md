@@ -6,7 +6,7 @@
 
 ## 결과 요약
 
-2026-10-19 추천 카탈로그 담당 후속 검증: 사용자 승인 후 Garage 신규 이미지 1개를 `gemini-embedding-2`/768차원으로 임베딩하고 별도 Silver `product_image_vectors`에 1행 적재했다(API 1회). 03:00 KST 별도 Spark 세션에서 version 1과 벡터 계약/ID/hash를 재검사했다. 기존 full 290개는 승인 후 API 없이 JSONL로 변환했으며 원본 checksum 일치 후보 14개는 실행 시 전처리도 대조한다. 신규 시험 후 Spark Master의 독립 `embedding-service` 실행기를 배포했고 기존 업무 파이프라인/웹 서버는 교체하지 않았다. 첫 429 중단·응답 보존·재사용 실행 경로와 명령은 [추천 카탈로그 연결](../../../docs/interior-recommender/server-catalog.md#서버-임베딩-실행기)을 따른다. MySQL 업무 상품·승인·활성 인덱스를 생성한 결과는 아니다.
+2026-10-19 추천 카탈로그 담당 후속 검증: 사용자 승인 후 Garage 신규 이미지 1개를 `gemini-embedding-2`/768차원으로 임베딩하고 별도 Silver `product_image_vectors`에 1행 적재했다(API 1회). 03:00 KST 별도 Spark 세션에서 version 1과 벡터 계약/ID/hash를 재검사했다. 기존 full 290개는 승인 후 API 없이 JSONL로 변환했다. 첫 재개 실행은 기존 PNG 바이트 checksum과 서버 재전처리 checksum이 달라 중단됐으며 API 시도 0회·Delta 변경 0건이었다. 원본 SHA256과 RGB 픽셀 checksum을 비교해 동일 이미지 재사용을 허용하도록 보강했다. 09:07 KST 재사용 점검은 66개를 모두 픽셀 동일로 확인했고 `--plan`은 기존 Delta 192개, 재사용 후보 66개, 신규 후보 32,880개를 보고했다(API 호출 0회). Spark Master의 `embedding-service`는 이전 release를 보존한 채 새 release `e7117955497d6684d010321d2ed51144980010c9d3d00a4ebfbf07c2a9605c88`로 갱신했다. 대량 임베딩은 자동 시작하지 않았다. 재사용/재개 명령은 [추천 카탈로그 연결](../../../docs/interior-recommender/server-catalog.md#서버-임베딩-실행기)을 따른다. MySQL 업무 상품·승인·활성 인덱스를 생성한 결과는 아니다.
 
 | 검증 | 결과와 실제 범위 |
 |---|---|
