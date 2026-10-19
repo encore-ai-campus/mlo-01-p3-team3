@@ -255,6 +255,24 @@ class IntegrationTests(TransactionTestCase):
         item['sticker_id'] = 'https://evil.test/image.png'
         self.assertEqual(self.submit(document=json.dumps(document)).status_code, 400)
 
+    def test_erased_canvas_text_is_not_restored_as_explicit_request_text(self):
+        document = {'strokes': [], 'items': [{
+            'id': str(uuid4()), 'kind': 'text', 'text': '베이지색', 'color': '#000000',
+            'font_size': .03, 'x': .2, 'y': .2, 'width': .4, 'height': .1,
+            'cuts': [{'tool': 'eraser', 'color': '#000000', 'width': .05,
+                      'pointer_type': 'mouse', 'points': [{'x': .2, 'y': .2, 'pressure': .5}, {'x': .6, 'y': .2, 'pressure': .5}]}],
+        }]}
+        for description in ('', '흰색 의자'):
+            with self.subTest(description=description):
+                response = self.submit(text=description, document=json.dumps(document),
+                    sketch=SimpleUploadedFile('sketch.png', picture(), 'image/png'))
+                self.assertEqual(response.status_code, 202, response.content)
+                run = response.json()['run_id']
+                manifest = read_json(settings.INTERIOR_RECOMMENDER_OUTPUT_ROOT / 'runs' / run / 'manifest.json')
+                self.assertEqual(manifest['request']['text'], description)
+                self.assertEqual(manifest['request']['canvas_document'], document)
+                self.assertEqual(self.calls, [])
+
     def test_invalid_inputs_and_hidden_legacy_routes(self):
         self.assertEqual(self.submit(text="").status_code, 400)
         self.assertEqual(self.submit(request_id="bad-id").status_code, 400)

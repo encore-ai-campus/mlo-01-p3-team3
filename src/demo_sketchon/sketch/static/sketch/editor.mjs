@@ -1,7 +1,7 @@
 import {initAccountState, initialAccount} from './account-state.mjs';
 import {createTracker, identifier} from './events.mjs';
 import {createCollector} from './collector.mjs';
-import {clamp, normalizePoint, moveItem, resizeItem, strokeBounds, transformStroke} from './geometry.mjs';
+import {clamp, normalizePoint, moveItem, resizeItem, strokeBounds, transformStroke, alphaBounds} from './geometry.mjs?v=placement1';
 import {floodRegion, outlineHit, selectedGroup, transformGroup, groupBounds, boxGroup, strokeHit, strokesTouch, fillHit, cutHit} from './paint.mjs';
 const $ = id => document.getElementById(id);
 const visitor = JSON.parse($('visitor-data').textContent);
@@ -117,10 +117,11 @@ function drawInk() {
     context.clearRect(0, 0, ink.width, ink.height);
     renderArtwork(context, ink);
 }
-function renderArtwork(target, size) {
+function renderArtwork(target, size, {excludeText = false} = {}) {
     const layer = document.createElement('canvas'); layer.width = size.width; layer.height = size.height;
     const ctx = layer.getContext('2d');
     for (const value of [...drawing.items.filter(item => item.kind === 'fill'), ...drawing.strokes, ...drawing.items.filter(item => item.kind !== 'fill')]) {
+        if (excludeText && value.kind === 'text') continue;
         const dest = value.cuts?.length ? ctx : target;
         if (dest === ctx) ctx.clearRect(0, 0, layer.width, layer.height);
         if (value.points) {
@@ -135,6 +136,16 @@ function renderArtwork(target, size) {
             target.drawImage(layer, 0, 0);
         }
     }
+}
+function requestedPlacementRegion() {
+    // Use a small render of visible non-text artwork, retaining erasure/transparency.
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 512 / Math.max(project.width, project.height));
+    canvas.width = Math.max(1, Math.round(project.width * scale));
+    canvas.height = Math.max(1, Math.round(project.height * scale));
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    renderArtwork(ctx, canvas, {excludeText:true});
+    return alphaBounds(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
 }
 function fillAt(pos) {
     if (drawing.items.length >= 100) { message('삽입 요소는 100개까지 가능합니다.', true); return; }
@@ -818,6 +829,8 @@ async function recommendDirectly() {
         // Optional style is saved separately; it must never become quoted hard user text.
         form.set('text', text);
         form.set('request_id', directRequestId.id);
+        const placementRegion = requestedPlacementRegion();
+        if (placementRegion) form.set('requested_region', JSON.stringify(placementRegion));
         if (drawing.items.length || drawing.strokes.length) {
             const canvas = document.createElement('canvas'); canvas.width=project.width; canvas.height=project.height;
             renderArtwork(canvas.getContext('2d'), canvas);
