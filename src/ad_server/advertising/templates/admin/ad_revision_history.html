@@ -1,0 +1,11 @@
+{% extends "admin/object_history.html" %}
+{% block content %}
+<div id="content-main">
+<h2>광고 심사 이력</h2>
+<p>제출 버전별 승인·반려 결과와 기록된 심사 사유입니다. 승인 후 집행 켜기는 별도입니다.</p>
+<p><a href="{{ ad_return_url }}">← 제출 내용 및 심사 화면으로 돌아가기</a></p>
+{% if ad_reviews %}<div class="module"><table style="width:100%"><thead><tr><th scope="col">심사 일시</th><th scope="col">결과</th><th scope="col">담당자</th><th scope="col">심사 사유</th></tr></thead><tbody>
+{% for entry in ad_reviews %}<tr><td>{{ entry.created_at|date:"Y-m-d H:i:s" }}</td><td>{% if entry.operation == 'APPROVED' %}승인{% else %}반려{% endif %}</td><td>{{ entry.actor }}</td><td style="white-space:normal;overflow-wrap:anywhere">{{ entry.detail.reason|default:"기록된 사유가 없습니다." }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="module" style="padding:20px"><h3>아직 심사 기록이 없습니다.</h3><p>제출 내용 화면에서 사유를 입력한 뒤 승인 또는 반려하면 여기에 기록됩니다. 사유 입력 오류나 화면 조회만으로는 심사가 저장되지 않습니다.</p></div>{% endif %}
+</div>
+{% endblock %}

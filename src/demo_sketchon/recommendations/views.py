@@ -112,7 +112,7 @@ def index(request):
     get_token(request)
     editor_url = reverse("project-editor", args=[project["id"]]) if project.get("id") else reverse("editor")
     return render(request, "recommendations/direct.html", {"demo": settings.INTERIOR_RECOMMENDER_DEMO,
-                                                          "editor_url": editor_url})
+                                                          "editor_url": editor_url, "ad_run_id": str(UUID(run_id))})
 
 
 @require_GET

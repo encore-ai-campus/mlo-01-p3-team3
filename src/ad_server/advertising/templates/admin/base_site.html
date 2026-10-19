@@ -1,0 +1,5 @@
+{% extends "admin/base.html" %}{% load static %}
+{% block title %}{{ title }} | SketchOn 광고 운영{% endblock %}
+{% block branding %}<div class="ad-brand"><a href="{% url 'admin:index' %}">SketchOn <span>광고 운영</span></a></div>{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'advertising/admin.css' %}">{% endblock %}
+{% block nav-global %}<a class="ad-demo-link" href="/sandbox/">비딩 시연 열기 ↗</a>{% endblock %}

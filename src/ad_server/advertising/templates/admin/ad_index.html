@@ -1,0 +1,14 @@
+{% extends "admin/index.html" %}{% load static %}
+{% block content %}
+<section class="ad-welcome"><div class="ad-mascot-intro"><img src="{% static 'advertising/capysaurus-avatar-128.png' %}" width="128" height="128" alt="" aria-hidden="true"><div><p>처음이라면 새 광고 등록을 시작하세요. 저장할 때마다 다음 화면으로 이어집니다.</p>{% for app in app_list %}{% if app.app_label == 'advertising' %}{% for model in app.models %}{% if model.object_name == 'Advertiser' and model.add_url %}<a class="ad-start-button" href="{{ model.add_url }}?guided=1">새 광고 등록 시작 →</a>{% endif %}{% endfor %}{% endif %}{% endfor %}</div></div><span>모의 운영 · 가상 포인트 · 실제 결제 없음</span></section>
+<nav class="ad-workflow" aria-label="광고 등록과 집행 순서"><ol>
+{% for app in app_list %}{% if app.app_label == 'advertising' %}{% for model in app.models %}
+{% if model.object_name == 'Advertiser' and model.add_url %}<li><a href="{{ model.add_url }}"><b>01</b><strong>광고주 등록</strong><small>업체 이름 · 사용 상태</small></a></li>{% endif %}
+{% if model.object_name == 'MockContract' and model.add_url %}<li><a href="{{ model.add_url }}"><b>02</b><strong>모의 계약 등록</strong><small>계약 승인 · 유효 기간</small></a></li>{% endif %}
+{% if model.object_name == 'Campaign' and model.add_url %}<li><a href="{{ model.add_url }}"><b>03</b><strong>캠페인 만들기</strong><small>광고주와 계약 연결</small></a></li>{% endif %}
+{% if model.object_name == 'Revision' %}{% if model.add_url %}<li><a href="{{ model.add_url }}"><b>04</b><strong>광고 버전 제출</strong><small>배너 · 입찰 · 표시 위치</small></a></li>{% endif %}{% if model.admin_url %}<li><a href="{{ model.admin_url }}"><b>05</b><strong>광고 심사</strong><small>대기 버전 선택 후 승인</small></a></li>{% endif %}{% endif %}
+{% endfor %}{% for model in app.models %}{% if model.object_name == 'Campaign' and model.admin_url %}<li><a href="{{ model.admin_url }}"><b>06</b><strong>집행 켜기</strong><small>승인 후 별도로 활성화</small></a></li>{% endif %}{% endfor %}{% endif %}{% endfor %}
+</ol></nav>
+{{ block.super }}
+{% endblock %}
+{% block sidebar %}<aside id="content-related" class="ad-side-guide"><h2>예제로 먼저 확인하기</h2><p>등록 전에 비딩 동작을 볼 수 있습니다.</p><ol><li>비딩 시연에서 ‘광고 선정하기’를 누릅니다.</li><li>700포인트 광고가 우선 선정되는지 확인합니다.</li><li>해당 캠페인의 집행을 끄고 다시 선정합니다.</li><li>500포인트 광고와 클릭 기록을 확인합니다.</li></ol><a class="ad-guide-button" href="/sandbox/">비딩 시연으로 이동 →</a><div class="ad-side-note"><strong>승인 ≠ 집행 시작</strong><p>승인 후 캠페인에서 ‘광고 집행 켜기’를 체크해야 합니다. 변경은 새 버전으로 제출하세요.</p></div></aside>{% endblock %}
