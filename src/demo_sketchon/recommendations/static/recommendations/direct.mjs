@@ -98,6 +98,7 @@ async function poll() {
     $("material-policy-notice").hidden=!softMaterial;
     const emptyItemsMessage = running ? "상품을 찾고 있어요. 잠시만 기다려 주세요." : "";
     cards($("items"), r?.items || [], emptyItemsMessage);
+    window.dispatchEvent(new Event("sketchon:recommendations-ready"));
     $("verified-panel").hidden = !r?.items?.length && !running;
     if (running) timer=setTimeout(poll, jobStatus === "RETRY_WAIT" ? 3000 : 1200);
   } catch (error) {

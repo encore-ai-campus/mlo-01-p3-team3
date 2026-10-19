@@ -1,0 +1,1 @@
+{% extends "advertising/base.html" %}{% block content %}<section class="panel"><div class="eyebrow">TEST ONLY</div><h1>{% if slug %}모의 광고 상세{% else %}종료된 광고입니다{% endif %}</h1><p class="muted">{% if slug %}{{slug}} · 가상 광고주 테스트 목적지입니다. 실제 상품·판매·구매 화면이 아닙니다.{% else %}결정 유효시간이 지나 새 광고 성과로 집계되지 않습니다.{% endif %}</p><a href="/">배너 확인으로</a></section>{% endblock %}

@@ -1,0 +1,15 @@
+{
+  "test_only": true,
+  "version": "test-local-1",
+  "frequency_window_seconds": 1800,
+  "frequency_limit": 3,
+  "decision_ttl_seconds": 600,
+  "click_join_seconds": 10,
+  "correction_seconds": 60,
+  "clock_skew_seconds": 5,
+  "event_retention_days": 7,
+  "asset_max_bytes": 10485760,
+  "asset_min_width": 300,
+  "asset_min_height": 600,
+  "destination_hosts": []
+}

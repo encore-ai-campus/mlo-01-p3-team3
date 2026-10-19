@@ -704,6 +704,7 @@ async function showProject(next) {
     cropSelection = null; fillCanvases.clear();
     tracker.setProject(project.id);
     window.history.replaceState(null, '', project.editor_url);
+    window.dispatchEvent(new CustomEvent('sketchon:project-changed', {detail:{project_id:project.id}}));
     invalidateResult(); $('room-photo').hidden = !next.photo_url;
     if (next.photo_url) $('room-photo').src = next.photo_url; else $('room-photo').removeAttribute('src');
     stage.style.aspectRatio = next.width + ' / ' + next.height;

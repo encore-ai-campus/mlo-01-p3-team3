@@ -21,7 +21,7 @@ MIDDLEWARE = [
 ]
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True,
-              "OPTIONS": {"context_processors": ["django.template.context_processors.request", "django.contrib.auth.context_processors.auth", "sketch.access.account_context"]}}]
+              "OPTIONS": {"context_processors": ["django.template.context_processors.request", "django.contrib.auth.context_processors.auth", "sketch.access.account_context", "operations.ad_gateway.ad_context"]}}]
 LOGIN_URL = '/accounts/login/'
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -78,3 +78,13 @@ if not DEBUG:
         raise ValueError("ROOMPICK_SECRET_KEY is required when DEBUG is off")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+
+# Server-to-server ad delivery is opt-in. Secrets never enter template context.
+SKETCHON_AD_DELIVERY = {
+    "enabled": os.environ.get("SKETCHON_AD_ENABLED", "0") == "1",
+    "internal_origin": os.environ.get("SKETCHON_AD_INTERNAL_ORIGIN", ""),
+    "public_origin": os.environ.get("SKETCHON_AD_PUBLIC_ORIGIN", ""),
+    "token": os.environ.get("SKETCHON_AD_SERVICE_TOKEN", ""),
+    "timeout": float(os.environ.get("SKETCHON_AD_TIMEOUT_SECONDS", "2")),
+}
