@@ -28,6 +28,7 @@ def main(argv=None):
     parser.add_argument('--image-states',type=Path,help='rehearsal 전용 명시 상태 export')
     parser.add_argument('--max-observations',type=int,default=0,help='0=고정 Bronze 전체, 양수=소량 검증')
     parser.add_argument('--scan-id',help='자동 실행의 고정 flow hash. 다른 실행의 부분 cursor 재사용 방지')
+    parser.add_argument('--batch-writes',action='store_true',help='제한된 페이지를 테이블별 일괄 저장·검증')
     args=parser.parse_args(argv)
     spark=lease=states=None
     started,execution=time.monotonic(),str(uuid4())
@@ -109,9 +110,15 @@ def main(argv=None):
             lease.check(settings)
             page=source.page(cursor['after'])
             if not page:cursor['completed']=True;checkpoint.save(cursor);break
-            for doc in page:
-                out=process(doc,states,sink,inputs,processing_run_id=run_id,as_of=as_of,bronze_version=args.bronze_version,
-                    bronze_path=settings.bronze_path,progress=emit,archive=checkpoint.archive)
+            if args.max_observations:page=page[:args.max_observations-result['processed']]
+            if args.batch_writes:
+                from .batch import process_many
+                outputs=process_many(page,states,sink,inputs,processing_run_id=run_id,as_of=as_of,bronze_version=args.bronze_version,
+                    bronze_path=settings.bronze_path,archive=checkpoint.archive)
+            else:
+                outputs=(process(doc,states,sink,inputs,processing_run_id=run_id,as_of=as_of,bronze_version=args.bronze_version,
+                    bronze_path=settings.bronze_path,progress=emit,archive=checkpoint.archive) for doc in page)
+            for doc,out in zip(page,outputs):
                 result['processed']+=1;result['reused']+=out['reused'];result['quality_wait']+=out['status']=='QUALITY_WAIT'
                 emit(dict(stage='silver_observation',**out))
                 cursor['after']=doc['observation_key'];checkpoint.save(cursor)

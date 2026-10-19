@@ -70,7 +70,13 @@ def _product(db,item,plan,at):
     guard=_check_guard(db,item,catalog,at)
     if guard['price_history_mode']!=plan['price_history_mode']:raise Conflict('PUBLICATION_PRICE_HISTORY_POLICY_CHANGED')
     key=catalog['product_key'];old=db.get('products',dict(product_key=key))
-    if old and (old['status']!='ACTIVE' or old['source_code']!=catalog['source_code'] or old['source_product_id']!=catalog['source_product_id']):
+    activating=bool(old and old['status']=='PENDING_REVIEW' and plan.get('publication_mode')=='ACTIVATE_REVIEWED')
+    if old and plan.get('publication_mode')=='ACTIVATE_REVIEWED':
+        approval=guard.get('activation') or {}
+        if (approval.get('from_status')!=old['status'] or old['status'] not in {'PENDING_REVIEW','ACTIVE'} or approval.get('product_id')!=old['id'] or
+                approval.get('current_snapshot_hash')!=digest(parse(old['gold_snapshot_ref_json'])) or not approval.get('evidence_ref')):
+            raise Conflict('PUBLICATION_ACTIVATION_BASELINE_CHANGED')
+    if old and ((old['status']!='ACTIVE' and not activating) or old['source_code']!=catalog['source_code'] or old['source_product_id']!=catalog['source_product_id']):
         raise Conflict('PUBLICATION_PRODUCT_STATE_CHANGED')
     version=db.get('pipeline_product_versions',dict(product_key=key))
     old_proofs=parse(version['field_versions_json']) if version else {}
@@ -87,6 +93,7 @@ def _product(db,item,plan,at):
         if comparable.get(field) is not None:comparable[field]=format(Decimal(str(comparable[field])).normalize(),'f')
     values,proofs=guarded_projection(comparable,incoming,lineage,old_proofs)
     newer=not version or sql_time(plan['as_of'])>=version['latest_as_of']
+    if activating and not newer:raise Conflict('PUBLICATION_ACTIVATION_STALE')
     values.update(extension_values(old,catalog,values,newer=newer))
     first=sql_time(catalog['first_collected_at'])
     if version and version['first_collected_at'] is not None:
@@ -105,6 +112,7 @@ def _product(db,item,plan,at):
             values.update(more);proofs.update({k:v for k,v in priceproof.items() if k=='price_krw'})
     if newer:
         values['category_id']=uuid_hex(catalog['service_category_id'])
+        if activating:values['status']='ACTIVE'
         # URL uses its own proof timestamp; plan evaluation time is not URL observation time.
         links=[r for r in tables['product_links'] if r['usable'] and r['link_kind']=='COMPARISON' and r['source_url']==catalog['comparison_url']]
         if links:
@@ -130,6 +138,14 @@ def _product(db,item,plan,at):
     if version:db.update('pipeline_product_versions',dict(product_key=key),current)
     else:db.identity('pipeline_product_versions',dict(product_key=key),current)
     image_ids=_images(db,product,catalog,tables,guard,at,newer,item,plan)
+    if plan.get('publication_mode')=='ACTIVATE_REVIEWED':
+        for relation in (guard.get('activation') or {}).get('image_relations',[]):
+            if relation not in image_ids:raise PipelineError('PUBLICATION_ACTIVATION_IMAGE_UNAPPROVED')
+            image=db.get('product_images',dict(id=image_ids[relation]))
+            review=parse(image['usage_review_json'])
+            if review.get('decision')!='APPROVED' or 'DISPLAY' not in review.get('scopes',[]):
+                raise PipelineError('PUBLICATION_ACTIVATION_IMAGE_UNAPPROVED')
+            db.update('product_images',dict(id=image['id']),dict(active=True,updated_at=at))
     if newer:
         representative=catalog['representative_image_key']
         if representative is not None and representative not in image_ids:
@@ -160,6 +176,8 @@ def _images(db,product,catalog,tables,guard,at,newer,item,plan):
         if (asset['checksum']!=image['image_checksum'] or asset['size_bytes']!=evidence['bytes'] or asset['status']!='AVAILABLE' or
                 asset['width_px']!=evidence['width'] or asset['height_px']!=evidence['height']):
             raise Conflict('PUBLICATION_ASSET_CONFLICT')
+        if plan.get('publication_mode')=='ACTIVATE_REVIEWED' and owner.get('asset_policy_hash')!=digest(parse(asset['usage_policy_json'])):
+            raise Conflict('PUBLICATION_ASSET_POLICY_CHANGED')
         link,created=db.identity('product_images',dict(product_id=product['id'],source_code=catalog['source_code'],
             source_product_id=catalog['source_product_id'],image_variant=image['image_slot'],
             raw_document_id=image['raw_document_id'],source_version=image['source_version']),
@@ -176,7 +194,8 @@ def _images(db,product,catalog,tables,guard,at,newer,item,plan):
         # Existing active/review fields are NEVER overwritten; new links stay inactive
         # until the service owner explicitly activates them.
         if link['image_relation_key']!=image['image_relation_key']:
-            raise Conflict('PUBLICATION_IMAGE_RELATION_CHANGED')
+            if plan.get('publication_mode')!='ACTIVATE_REVIEWED':raise Conflict('PUBLICATION_IMAGE_RELATION_CHANGED')
+            db.update('product_images',dict(id=link['id']),dict(image_relation_key=image['image_relation_key']))
         if not created and newer:db.update('product_images',dict(id=link['id']),dict(display_order=image['display_order'],updated_at=at,
             gold_recommendation_approved=image['recommendation_approved'],gold_review_snapshot_hash=image['review_snapshot_hash'],
             source_evidence_json=image['evidence_json'],gold_snapshot_ref_json=snapshot_ref(item,plan,[('product_images',image)])))
@@ -264,7 +283,10 @@ def publish(plan,db,*,hook=None):
         for item in plan['products']:
             staged=db.get('pipeline_publication_staging',dict(**identity,product_key=item['product_key']))
             if staged['body_hash']!=digest(item) or parse(staged['body_json'])!=item:raise Conflict('PUBLICATION_STAGING_CHANGED')
-            ids[item['product_key']]=_product(db,item,plan,at)
+            if plan.get('publication_mode')=='PENDING_REVIEW':
+                from .pending import product as pending_product
+                ids[item['product_key']]=pending_product(db,item,plan,at)
+            else:ids[item['product_key']]=_product(db,item,plan,at)
             if hook:hook('PRODUCT_WRITTEN')
         db.update('pipeline_publications',identity,dict(status='COMPLETED',completed_at=at))
         if hook:hook('BEFORE_COMMIT')
@@ -399,6 +421,11 @@ def _sources(db, reference, *, depth=0, seen=None):
 
 
 def audit_publication(plan,db):
+    if plan.get('publication_mode')=='PENDING_REVIEW':
+        verify_plan(plan)
+        if plan['target']!=db.target:raise Conflict('PUBLICATION_TARGET_MISMATCH')
+        from .pending import audit
+        return audit(plan,db)
     from ..operations.flow_audit import sql_plan_audit
     verify_plan(plan)
     if plan['target']!=db.target:raise Conflict('PUBLICATION_TARGET_MISMATCH')

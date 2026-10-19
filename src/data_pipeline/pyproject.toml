@@ -15,6 +15,8 @@ danawa-bronze = "product_pipeline.bronze.cli:main"
 danawa-silver = "product_pipeline.silver.cli:main"
 danawa-gold = "product_pipeline.gold.cli:main"
 danawa-publication = "product_pipeline.publication.cli:main"
+danawa-run-registration = "product_pipeline.registration:main"
+danawa-review = "product_pipeline.review_cli:main"
 danawa-operations = "product_pipeline.operations.cli:main"
 
 [project.optional-dependencies]

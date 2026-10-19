@@ -73,6 +73,18 @@ class DeltaSink:
             .select('image_state_fingerprint').distinct().limit(2).collect())
         if any(row[0]!=fingerprint for row in values):raise Conflict('SILVER_IMAGE_REVISION_CONFLICT')
 
+    def assert_revisions(self,revisions):
+        from pyspark.sql import functions as F
+        if not revisions or len(revisions)>100:raise PipelineError('SILVER_BATCH_LIMIT')
+        expected={(raw,rev):fp for raw,rev,fp in revisions};condition=None
+        for raw,rev in expected:
+            term=(F.col('raw_document_id')==raw)&(F.col('image_state_revision')==rev)
+            condition=term if condition is None else condition|term
+        values=(self.spark.read.format('delta').load(self.paths['product_images']).filter(condition)
+            .select('raw_document_id','image_state_revision','image_state_fingerprint').distinct().limit(len(expected)+1).collect())
+        if len(values)>len(expected) or any(expected[(r[0],r[1])]!=r[2] for r in values):
+            raise Conflict('SILVER_IMAGE_REVISION_CONFLICT')
+
     def insert(self,table,rows):
         if not rows:return
         from delta.tables import DeltaTable

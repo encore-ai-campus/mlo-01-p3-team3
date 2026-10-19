@@ -2,6 +2,21 @@
 from ..contracts import canonical
 from ..errors import Conflict, PipelineError
 
+
+def write_chunks(rows,*,max_bytes=2*1024*1024,max_records=10):
+    """Bound each Catalyst JSON literal independently of Kafka replay batch size.
+
+    An indivisible source row may exceed the preferred chunk size; it is kept
+    whole. Existing source/document limits still apply before this boundary.
+    """
+    chunk=[];size=2
+    for row in rows:
+        amount=len(canonical(row).encode('utf-8'))+1
+        if chunk and (len(chunk)>=max_records or size+amount>max_bytes):
+            yield chunk;chunk=[];size=2
+        chunk.append(row);size+=amount
+    if chunk:yield chunk
+
 SPECS = {
     'raw': ('raw_document_id', [('raw_document_id', 's'), ('source_code', 's'), ('source_product_id', 's'),
         ('source_record_key', 's'), ('collection_run_id', 's'), ('observation_key', 's'), ('payload_hash', 's'),
@@ -78,6 +93,9 @@ class DeltaSink:
         return self._lookup('raw', 'observation_key', keys)
 
     def insert(self, table, rows):
+        for chunk in write_chunks(rows):self._insert_chunk(table,chunk)
+
+    def _insert_chunk(self, table, rows):
         self.lease.check(self.settings)
         from delta.tables import DeltaTable
         from pyspark.sql import functions as F
@@ -89,6 +107,8 @@ class DeltaSink:
         for row in rows:
             if row[key] in old and not same_content(table, old[row[key]], row):
                 raise Conflict('BRONZE_DELTA_CONTENT_CONFLICT')
+        rows=[row for row in rows if row[key] not in old]
+        if not rows:return
         # Data already resides on Driver as canonical JSON; parse with Spark SQL on JVM.
         # This avoids serializing documents through a second Python worker process.
         frame = (self.spark.range(1).select(F.explode(F.from_json(F.lit(canonical(rows)),

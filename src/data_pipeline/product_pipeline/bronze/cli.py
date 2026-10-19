@@ -12,6 +12,23 @@ from ..files import parse
 from .config import BronzeSettings
 
 
+def await_window(query,lease,max_batches=0):
+    """Stop only after Spark reports checkpointed progress, never callback output."""
+    if not max_batches:
+        query.awaitTermination();lease.check()
+        return dict(source_drained=True)
+    committed=set()
+    while query.isActive:
+        lease.check();query.awaitTermination(1)
+        progress=query.lastProgress
+        if progress and progress.get('numInputRows',0)>0:committed.add(int(progress['batchId']))
+        if len(committed)>=max_batches:
+            query.stop();query.awaitTermination();lease.check()
+            return dict(source_drained=False,committed_batches=len(committed),last_committed_batch_id=max(committed))
+    lease.check()
+    return dict(source_drained=True,committed_batches=len(committed),last_committed_batch_id=max(committed) if committed else None)
+
+
 def env(name):
     value = os.environ.get(name)
     if not value:
@@ -23,12 +40,20 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Kafka/MongoDB -> product Bronze Delta')
     parser.add_argument('--config', required=True)
     parser.add_argument('--available-now', action='store_true', help='Drain current Kafka backlog then exit')
+    parser.add_argument('--max-batches',type=int,default=0,help='0=전체 적체, 양수=확정 배치 단위로 후속 단계 인계')
+    parser.add_argument('--result-file',help='정상 종료 확인 후 단계 실행 결과 기록')
     args = parser.parse_args(argv)
     spark = source = query = lease = None
     previous_sigterm = None
+    result_path=None
     result, code = {'result': 'failed'}, 2
     execution, started = str(uuid4()), time.monotonic()
     try:
+        if args.max_batches<0 or (args.max_batches and not args.available_now):raise PipelineError('BRONZE_INVALID_WINDOW')
+        if args.result_file:
+            from pathlib import Path
+            if Path(args.result_file).resolve()==Path(args.config).resolve():raise PipelineError('BRONZE_RESULT_OVERLAPS_CONFIG')
+            result_path=args.result_file
         if threading.current_thread() is threading.main_thread():
             def terminate(signum, frame):
                 raise KeyboardInterrupt
@@ -74,9 +99,9 @@ def main(argv=None):
         lease.check()
         emit({'result': 'started', 'execution_id': execution, 'query_id': str(query.id),
               'available_now': args.available_now})
-        query.awaitTermination()
+        window=await_window(query,lease,args.max_batches)
         lease.check()
-        result, code = {'result': 'completed'}, 0
+        result, code = {'result': 'completed',**window}, 0
     except KeyboardInterrupt:
         result, code = {'result': 'interrupted'}, 130
     except Exception as exc:
@@ -99,5 +124,9 @@ def main(argv=None):
             result, code = {'result': 'failed', 'error_code': 'BRONZE_SHUTDOWN_UNCONFIRMED'}, 2
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
-    emit({**result, 'execution_id': execution, 'duration_ms': round((time.monotonic() - started) * 1000)})
+    result={**result,'execution_id':execution,'duration_ms':round((time.monotonic()-started)*1000)}
+    if result_path:
+        from ..files import atomic_json
+        atomic_json(result_path,result)
+    emit(result)
     return code

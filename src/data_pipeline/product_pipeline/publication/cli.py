@@ -15,7 +15,7 @@ from .plan import make_plan,load_plan
 from .runner import publish
 
 
-def prepare_from_source(source,guards,target,output,*,batch_size=100):
+def prepare_from_source(source,guards,target,output,*,batch_size=100,pending_category_id=None):
     if type(batch_size) is not int or not 1<=batch_size<=1000:raise PipelineError('PUBLISH_BATCH_LIMIT')
     output=Path(output).resolve()
     if output.exists():raise PipelineError('PUBLISH_OUTPUT_EXISTS')
@@ -26,14 +26,14 @@ def prepare_from_source(source,guards,target,output,*,batch_size=100):
             if not pending:return
             plan=make_plan(pending,source.manifest['gold_versions'],export_hash=source.manifest['content_hash'],
                 as_of=source.manifest['as_of'],guard_hashes=guards,target=target,price_history_mode=source.price_history_mode,
-                price_max_age_seconds=source.price_max_age_seconds,max_products=batch_size)
+                price_max_age_seconds=source.price_max_age_seconds,max_products=batch_size,pending_category_id=pending_category_id)
             name=plan['plan_id']+'.json';atomic_json(build/name,plan);proofs[name]=digest(plan);pending.clear()
         for group in source.groups():
             key=group['receipt']['product_key']
             try:
                 make_plan([group],source.manifest['gold_versions'],export_hash=source.manifest['content_hash'],
                     as_of=source.manifest['as_of'],guard_hashes=guards,target=target,price_history_mode=source.price_history_mode,
-                    price_max_age_seconds=source.price_max_age_seconds)
+                    price_max_age_seconds=source.price_max_age_seconds,pending_category_id=pending_category_id)
             except PipelineError as exc:
                 if exc.code not in {'PUBLISH_CATALOG_QUALITY_WAIT','PUBLISH_OWNER_GUARD_REQUIRED','PUBLISH_HISTORY_POLICY_UNRESOLVED'}:raise
                 blocked.append(dict(product_key=key,reason=exc.code));continue
@@ -56,6 +56,7 @@ def main(argv=None):
     prep=sub.add_parser('prepare')
     for name in ('gold-export','gold-root','archive-root','guard-hashes','mysql-config','output'):prep.add_argument('--'+name,required=True)
     prep.add_argument('--batch-size',type=int,default=100)
+    prep.add_argument('--pending-category-id',help='명시적 검수 대기 적재. 비활성 UNMAPPED 카테고리 UUID 필요')
     for name in ('preflight','publish'):
         q=sub.add_parser(name);q.add_argument('--config',required=True,type=Path);q.add_argument('--local-test',action='store_true')
         if name=='publish':
@@ -92,7 +93,7 @@ def main(argv=None):
             config=read_json(args.mysql_config)
             target=digest(dict(target_id=config['target_id'],database=config['database']))
             result=prepare_from_source(GoldSource(spark,args.gold_export,args.gold_root,args.archive_root),
-                read_json(args.guard_hashes),target,args.output,batch_size=args.batch_size)
+                read_json(args.guard_hashes),target,args.output,batch_size=args.batch_size,pending_category_id=args.pending_category_id)
         elif args.action=='schema-diff':
             from .mysql import schema_difference
             db=MySQL(read_json(args.config),local_test=args.local_test)

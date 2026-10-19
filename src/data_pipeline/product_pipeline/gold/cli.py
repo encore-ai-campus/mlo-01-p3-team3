@@ -26,6 +26,7 @@ def main(argv=None):
     parser.add_argument('--as-of',required=True,help='UTC 업무 평가 기준 시각. 재개 때 동일 값 사용')
     parser.add_argument('--max-products',type=int,default=0)
     parser.add_argument('--rehearse',action='store_true')
+    parser.add_argument('--batch-writes',action='store_true',help='최대 32MiB·100상품의 테이블별 일괄 저장')
     args=parser.parse_args(argv)
     spark=lease=None;previous=None;started=time.monotonic();execution=str(uuid4());code=2
     result=dict(status='FAILED',execution_id=execution,processed=0,reused=0,quality_wait=0)
@@ -92,8 +93,18 @@ def main(argv=None):
             page=source.products(after)
             if not page:drained=True;break
             selections=[]
-            for key in page:
-                out=process(source.groups(key),inputs,versions,sink,processing_run_id=run_id,as_of=as_of,input_refs=refs)
+            if args.max_products:page=page[:args.max_products-result['processed']]
+            if args.batch_writes:
+                from .batch import process_many
+                while True:
+                    try:batches=source.groups_many(page);break
+                    except PipelineError as exc:
+                        if exc.code!='GOLD_PRODUCT_HISTORY_LIMIT' or len(page)==1:raise
+                        page=page[:max(1,len(page)//2)]
+                outputs=process_many(batches,inputs,versions,sink,processing_run_id=run_id,as_of=as_of,input_refs=refs)
+            else:
+                outputs=(process(source.groups(key),inputs,versions,sink,processing_run_id=run_id,as_of=as_of,input_refs=refs) for key in page)
+            for key,out in zip(page,outputs):
                 result['processed']+=1;result['reused']+=out['reused'];result['quality_wait']+=out['status']=='QUALITY_WAIT'
                 emit(dict(stage='GOLD',product_key=key,**out));after=key
                 selections.append(dict(product_key=key,evaluation_key=out['evaluation_key']))

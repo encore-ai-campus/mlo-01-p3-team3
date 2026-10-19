@@ -72,3 +72,35 @@ class GoldSource:
                     if refs.get(name)!=self.manifest['input_refs'].get(name):raise Conflict('PUBLISH_GOLD_INPUT_REF_CONFLICT')
                 validate_group(group,self.manifest['gold_versions']);yield group
         if len(seen)!=self.manifest['product_count']:raise Conflict('PUBLISH_EXPORT_COUNT_CHANGED')
+
+    def groups_batched(self,max_products=100):
+        """Bounded pinned reads; no per-product Spark scan for every output table."""
+        from pyspark.sql import functions as F
+        if not 1<=max_products<=100:raise PipelineError('PUBLISH_BATCH_LIMIT')
+        seen=set()
+        for page in self.manifest['selection_pages']:
+            choices=list(self.read(page)['selections'])
+            while choices:
+                size=min(max_products,len(choices))
+                while True:
+                    chosen=choices[:size];keys=[c['product_key'] for c in chosen];evaluations=[c['evaluation_key'] for c in chosen]
+                    if len(set(keys))!=len(keys) or seen.intersection(keys):raise Conflict('PUBLISH_EXPORT_DUPLICATE_PRODUCT')
+                    budget=[0,0]
+                    try:
+                        data={t:self._rows(frame.filter(F.col('product_key').isin(keys)&F.col('gold_evaluation_key').isin(evaluations)),budget)
+                            for t,frame in self.frames.items()};break
+                    except PipelineError as exc:
+                        if exc.code!='PUBLISH_PRODUCT_GROUP_LIMIT' or size==1:raise
+                        size=max(1,size//2)
+                groups=[]
+                for choice in chosen:
+                    selected={t:[r for r in rows if r['product_key']==choice['product_key'] and r['gold_evaluation_key']==choice['evaluation_key']] for t,rows in data.items()}
+                    if len(selected['pipeline_evaluations'])!=1:raise Conflict('PUBLISH_EXPORT_RECEIPT_MISSING')
+                    group=dict(receipt=selected.pop('pipeline_evaluations')[0],tables=selected)
+                    refs=parse(group['receipt']['input_refs_json'])
+                    if any(refs.get(n)!=self.manifest['input_refs'].get(n) for n in ('inputs','versions','silver_root')):
+                        raise Conflict('PUBLISH_GOLD_INPUT_REF_CONFLICT')
+                    validate_group(group,self.manifest['gold_versions']);groups.append(group)
+                seen.update(keys);choices=choices[size:]
+                yield from groups
+        if len(seen)!=self.manifest['product_count']:raise Conflict('PUBLISH_EXPORT_COUNT_CHANGED')

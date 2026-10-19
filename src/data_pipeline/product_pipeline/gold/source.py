@@ -58,3 +58,24 @@ class SilverSource:
                 tables[table]=[r for r in children[table] if r['evaluation_key']==receipt['evaluation_key']]
             group=dict(receipt=receipt,tables=tables);validate_group(group);groups.append(group)
         return groups
+
+    def groups_many(self,product_keys):
+        """Bound aggregate bytes/rows before collecting any requested table."""
+        from pyspark.sql import functions as F
+        if not product_keys or len(product_keys)>100 or len(set(product_keys))!=len(product_keys):
+            raise PipelineError('GOLD_BATCH_LIMIT')
+        budget=[0,0]
+        receipts=self._rows(self.frames['pipeline_evaluations'].filter(F.col('product_key').isin(product_keys)),budget)
+        if len({r['evaluation_key'] for r in receipts})!=len(receipts):raise Conflict('GOLD_DUPLICATE_SILVER_RECEIPT')
+        children={t:self._rows(frame.filter(F.col('product_key').isin(product_keys)),budget)
+                  for t,frame in self.frames.items() if t!='pipeline_evaluations'}
+        output={key:[] for key in product_keys}
+        for receipt in receipts:
+            tables={}
+            for table,proof in parse(receipt['output_manifest_json']).items():
+                if table not in children or type(proof.get('version')) is not int or not 0<=proof['version']<=self.versions[table]:
+                    raise Conflict('GOLD_SILVER_VERSION_INCOMPLETE')
+                tables[table]=[r for r in children[table] if r['evaluation_key']==receipt['evaluation_key']]
+            group=dict(receipt=receipt,tables=tables);validate_group(group);output[receipt['product_key']].append(group)
+        if any(not output[key] for key in product_keys):raise Conflict('GOLD_SILVER_PRODUCT_KEY_MISSING')
+        return [output[key] for key in product_keys]

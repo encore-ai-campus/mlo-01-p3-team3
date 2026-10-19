@@ -96,8 +96,27 @@ def start(spark, settings, source, options, available_now=False, progress=None, 
         except Exception as exc:
             # Spark prints Python callback exceptions; never expose raw SDK credentials there.
             if progress:
+                # Class/condition identifiers only; SDK messages may contain
+                # source bodies or authentication details.
+                diagnostic={}
+                java=getattr(exc,'java_exception',None)
+                causes=[]
+                if java is not None:
+                    for _ in range(8):
+                        try:
+                            name=str(java.getClass().getName())
+                            condition=None
+                            try:condition=java.getErrorClass()
+                            except Exception:pass
+                            import re
+                            causes.append(dict(type=name,condition=condition if isinstance(condition,str) and re.fullmatch(r'[A-Z0-9_.]+',condition) else None))
+                            java=java.getCause()
+                            if java is None:break
+                        except Exception:break
+                    diagnostic['java_causes']=causes
                 progress({'batch_id': batch_id, 'status': 'FAILED', 'execution_id': execution_id,
                           'error_code': exc.code if isinstance(exc, PipelineError) else type(exc).__name__,
+                          **diagnostic,
                           'duration_ms': round((time.monotonic() - started) * 1000)})
             raise PipelineError(exc.code if isinstance(exc, PipelineError) else type(exc).__name__) from None
         if progress:
