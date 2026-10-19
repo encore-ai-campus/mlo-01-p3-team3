@@ -58,11 +58,6 @@ function cards(target, items, emptyMessage = "표시할 상품이 없습니다."
       if (componentNames[key]) card.append(node("p", `${componentNames[key]}: ${values.map(v=>valueNames[v] || v).join(" / ")}`));
     }
     if (m.metadata_issues?.length) card.append(node("p", "일부 원천 규격은 확인이 필요합니다."));
-    if (Object.keys(m.raw_attributes || {}).length) {
-      const details=node("details", ""); details.append(node("summary", "수집 규격 원문"));
-      for (const [key, values] of Object.entries(m.raw_attributes)) details.append(node("p", `${key}: ${values.join(" / ")}`));
-      card.append(details);
-    }
     const checks = Object.entries(item.checks).map(([key,value])=>`${fieldNames[key.split(":").at(-1)] || "요청 조건"}: ${checkNames[value] || "미확인"}`).join(" · ");
     for (const reason of item.match_explanation || []) card.append(node("p", reason));
     const roomLabels = {palette:"색조", materials:"재질", shapes:"형태", styles:"스타일"};

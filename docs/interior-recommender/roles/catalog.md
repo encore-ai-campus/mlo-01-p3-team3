@@ -15,6 +15,7 @@
 | 사전 임베딩 | `cli embed-directory → batch_embedding.BatchEmbedding.run` | 준비 이미지 → `Pipeline.stage → ModelAdapter` → 저장 임베딩 index |
 | 수집 결과 결합 | `crawl.export` | 준비 manifest·완료 벡터 대응 검증 → 상품 manifest·NPY·이미지 |
 | 별도 원장 결합 | `export.export_catalog` | 저장 다나와 벡터·별도 metadata.json → 상품 카탈로그 |
+| 로컬 시연 스냅샷 | `local_snapshot.build` | 검증된 로컬 카탈로그·고정 Delta export·Garage 인계 대응 → 오프라인 시연 카탈로그. API 호출 없음; [실행](../server-catalog.md#파이프라인-완료-전-로컬-시연) |
 | 온라인 연결 | `DirectStudio → ProductIndex.load` | `--products` manifest 로딩·설정 호환 검사 |
 
 기존 `python -m interior_recommender.crawl_catalog`·`product_catalog` 명령은 유지한다. 새 구현 진입점은 각각 `python -m interior_recommender.catalog.crawl`·`interior_recommender.catalog.export`다. 일괄 임베딩 명령은 기존 `python -m interior_recommender embed-directory`다.

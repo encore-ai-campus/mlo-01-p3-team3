@@ -1,5 +1,32 @@
 # MySQL·Garage·Delta 추천 연결
 
+## 파이프라인 완료 전 로컬 시연
+
+`feature/#34`의 `catalog.local_snapshot`은 검증한 기존 로컬 배치와 고정 Delta 완료분을 파일 카탈로그로 결합한다. 외부 API를 호출하지 않으며 기존 결과를 덮어쓰지 않는다. 서버 추출 자료와 최종 카탈로그는 Git에서 제외된 `data/local-demo/`에 보존한다.
+
+서버 벡터는 Delta version 43의 READY 994개를 고정했다. 모델은 `gemini-embedding-2`, 차원은 768, 전처리는 `exif-rgb-fit1024-png-l2-v1`이다. Mongo 원천과 Garage 인계 스냅샷의 상품·이미지 관계를 사용한다. Garage 인계의 transport/snapshot/file/image checksum을 검사하고 원본 SHA256·전처리 PNG 또는 검증된 RGB 픽셀 대응을 확인한다. 벡터가 있어도 대응 원장이 없으면 임의 상품에 연결하지 않는다.
+
+2026-10-19 실제 추출: Mongo에서 205개 이미지·290개 관계, Garage 인계 127개에서 추가 789개 이미지·878개 관계를 확인해 서버 완료분 994개 모두 대응했다. 로컬 290개 벡터와 서버의 중복 6개를 정리한 최종 스냅샷은 **1,421개 상품·1,278개 고유 이미지·1,457개 상품-이미지 관계**다. 상품 이미지 임베딩 API 호출은 0회다. 카테고리를 확정하지 못한 241개 관계는 UNKNOWN으로 보존한다.
+
+출력은 `products.json`, `vectors.npy`, `images/`, 출처·행 대응·파일 checksum을 기록한 `manifest.json`이다. 한 이미지가 여러 상품에 연결되면 이미지 파일은 공유하고 벡터 행은 상품-이미지 관계별로 유지한다. 같은 상품의 메타데이터는 최신 관측을 사용하고 결측 속성은 기존 정제 규칙으로 UNKNOWN을 유지한다. `test_only=true`, `bronze_verified=false`인 로컬 시연 자료이며 MySQL 게시·승인·활성 인덱스 완료를 뜻하지 않는다.
+
+저장소 루트에서 카탈로그를 재결합해야 할 경우 기존 산출물을 먼저 검사하고 프로젝트의 재사용 승인 규칙을 따른다. 서버 완료분 export와 추가 인계 자료는 이미 추출된 파일을 입력으로 사용하며 Spark나 상품 임베딩을 다시 실행하지 않는다.
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path src).Path
+..\.venv\Scripts\python.exe -m interior_recommender.catalog.local_snapshot --local-products src/interior_recommender/sample/crawl_test/full/catalog-with-links/products.json --server-archive data/local-demo/server-delta-v43.zip --server-inventory data/local-demo/server-delta-v43-inventory.json --supplement data/local-demo/server-delta-v43-handoff.zip --output data/local-demo/NEW-SNAPSHOT
+```
+
+준비된 `data/local-demo/snapshot-v43`로 실행한다. `-Python`과 `-Snapshot`으로 설치 환경과 다른 스냅샷을 명시할 수도 있다.
+
+```powershell
+.\scripts\Start-LocalDemo.ps1 -Mode Init
+.\scripts\Start-LocalDemo.ps1 -Mode Check
+.\scripts\Start-LocalDemo.ps1 -Mode Worker
+```
+
+다른 터미널에서 `.\scripts\Start-LocalDemo.ps1 -Mode Web`을 실행하고 `http://127.0.0.1:8003/`에 접속한다. 두 프로세스는 `outputs/local-demo-v43/`의 독립 SQLite·미디어·원천·추천 결과와 같은 카탈로그를 사용한다. 기존 `src/interior_recommender/.env`를 읽으며 새 입력의 해석·질의 임베딩과 선택형 배치 미리보기는 외부 API를 사용한다. 갱신한 `.env`는 Git에 포함하지 않고, 후속 서버 배포 때 보호 설정으로 함께 전송한 뒤 웹·워커를 재시작한다. 로컬 시연 준비는 VMware 웹 배포가 아니다.
+
 2026-10-19. 연결 코드와 Garage 임베딩 실행기를 준비했다. 업무 상품 게시·MySQL 등록/활성화와 임베딩 실행기 배포는 별도 단계다. 기존 로컬 카탈로그와 SketchOn SQLite 작업 원장은 유지한다.
 
 ## 확인한 상태와 구현 범위

@@ -59,6 +59,11 @@ def test_preview_reuses_selected_snapshot_and_receipt_after_local_failure(prepar
     prompt, images = prompts["generate"]
     assert len(images) == 2
     assert "Image 2 is the selected product" in prompt
+    assert "For a chair, preserve the backrest and seat outlines" in prompt
+    assert "For a desk or table, preserve the tabletop outline" in prompt
+    assert "For a bed, preserve the exact headboard and footboard outlines" in prompt
+    assert "Never stretch, squash, bend, crop or shorten structural parts" in prompt
+    assert "soft location hint, not a new product aspect ratio" in prompt
     data = json.loads(prompt[prompt.index('{"product_name"'):])
     assert data["placement_region"] == {"x_min": 0, "y_min": .25, "x_max": 1, "y_max": .75}
     assert read_json(directory / "manifest.json")["request"]["parent_run_id"] == parent
@@ -75,6 +80,37 @@ def test_preview_rejects_changed_product_and_foreign_owner(prepared):
     with pytest.raises(ValueError, match="checksum"):
         engine.submit_preview(parent, owner, item["image_id"])
     assert calls["generate"] == 0
+
+
+def test_changed_prompt_policy_creates_a_new_preview_without_overwriting_old_result(prepared, monkeypatch):
+    engine, owner, parent, item, calls, prompts = prepared
+    monkeypatch.setattr(preview, "PROMPT_POLICY", "legacy-test-policy")
+    old_child = engine.submit_preview(parent, owner, item["image_id"])
+    old_directory = engine.directory(old_child, owner)
+    preview.prepare(Pipeline(old_directory, engine.factory))
+    old_manifest = (old_directory / "manifest.json").read_bytes()
+    monkeypatch.setattr(preview, "PROMPT_POLICY", "preserve-product-geometry-v2")
+    new_child = engine.submit_preview(parent, owner, item["image_id"])
+    assert new_child != old_child
+    assert (old_directory / "manifest.json").read_bytes() == old_manifest
+    assert read_json(engine.directory(new_child, owner) / "manifest.json")["preview_contract"]["prompt_policy"] == preview.PROMPT_POLICY
+    assert calls["generate"] == 1  # New admission does not call a provider.
+
+
+def test_legacy_preview_keeps_its_original_prompt_and_remains_readable(prepared):
+    engine, owner, parent, item, calls, prompts = prepared
+    child = engine.submit_preview(parent, owner, item["image_id"])
+    directory = engine.directory(child, owner)
+    manifest = read_json(directory / "manifest.json")
+    manifest["preview_contract"] = {"version": preview.VERSION}
+    manifest["input_hash"] = preview.contract_hash(manifest)
+    write_json(directory / "manifest.json", manifest)
+    pipeline = Pipeline(directory, engine.factory)
+    preview.validate(pipeline, True)
+    preview.prepare(pipeline)
+    assert "place ONE matching product" in prompts["generate"][0]
+    assert "For a bed" not in prompts["generate"][0]
+    assert engine.state(child, owner)["result_image"] == "generated.png"
 
 
 def test_preview_policy_tampering_is_rejected(prepared):
