@@ -29,9 +29,12 @@ def claim_guest_projects(request, user):
 
 
 def account_context(request):
+    from operations.permissions import entry_url
+    ops_url=entry_url(request.user)
     return {'signup_completed':request.user.is_authenticated and request.session.pop('signup_completed', False),
         'account_initial': {'authenticated':request.user.is_authenticated,
         'actor_key':f'user:{request.user.pk}' if request.user.is_authenticated else 'guest:' + visitor_id(request),
+        'can_access_ops': bool(ops_url), 'ops_url':ops_url,
         'nickname':(request.user.first_name or request.user.username) if request.user.is_authenticated else ''}}
 
 

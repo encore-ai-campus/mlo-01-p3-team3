@@ -1,0 +1,1 @@
+<nav class="ops-pagination" aria-label="페이지">{% if rows.has_previous %}<a href="?{{ query_string }}&page={{ rows.previous_page_number }}">← 이전</a>{% endif %}<span>{{ rows.number }} / {{ rows.paginator.num_pages }} · {{ rows.paginator.count }}건</span>{% if rows.has_next %}<a href="?{{ query_string }}&page={{ rows.next_page_number }}">다음 →</a>{% endif %}</nav>

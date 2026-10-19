@@ -25,13 +25,14 @@ from .catalog import CATEGORIES, PRODUCTS
 from .stickers import STICKERS
 from .raw_samples import MAX_RAW_BYTES, save_immutable, strict_constant, validate_sample
 from .quota import charge_guest_generation, GuestLimitReached, quota_status
+from operations.tracking import track_generation, track_raw
 
 
 from .access import visitor_id as owner, project_scope, owned_project, owned_result
 
 
 def serialize(project):
-    return {"id": str(project.id), "writer_id":project.owner, "title": project.title, "width": project.width, "height": project.height,
+    return {"id": str(project.id), "flow_id":str(project.flow_id) if project.flow_id else None, "writer_id":project.owner, "title": project.title, "width": project.width, "height": project.height,
             "photo_url": f"/api/projects/{project.id}/photo/" if project.photo else None,
             "document": project.document, "request_context": project.request_context, "revision": project.revision, "locked": project.locked,
             "editor_url": f"/editor/{project.id}/", "updated_at": project.updated_at.isoformat()}
@@ -40,9 +41,9 @@ def serialize(project):
 @require_GET
 @ensure_csrf_cookie
 def home(request):
-    project = Project.objects.create(owner=owner(request), account=request.user if request.user.is_authenticated else None, title="Home 방문")
+    project = Project.objects.create(flow_id=uuid4(), owner=owner(request), account=request.user if request.user.is_authenticated else None, title="Home 방문")
     SketchEvent.objects.create(project=project, event_type="home.viewed", payload={})
-    return render(request, "sketch/home.html", {"initial": {"id": str(project.id)}, "visitor_id": project.owner, "platform_config": {"mode": "mock"}})
+    return render(request, "sketch/home.html", {"initial": {"id": str(project.id)}, "editor_start_url":f'/editor/?flow_id={project.flow_id}', "visitor_id": project.owner, "platform_config": {"mode": "mock"}})
 
 
 @require_GET
@@ -51,7 +52,14 @@ def editor(request, project_id=None):
     if project_id:
         project = owned_project(request, project_id)
     else:
-        project = Project.objects.create(owner=owner(request), account=request.user if request.user.is_authenticated else None, title="나의 공간 스케치")
+        flow_id = uuid4()
+        try:
+            requested = UUID(request.GET.get('flow_id',''))
+            if Project.objects.filter(project_scope(request), flow_id=requested).exists():
+                flow_id = requested
+        except ValueError:
+            pass
+        project = Project.objects.create(flow_id=flow_id, owner=owner(request), account=request.user if request.user.is_authenticated else None, title="나의 공간 스케치")
     if project.locked:
         result = project.composition_set.order_by("-created_at").first()
         return redirect("result-page", result_id=result.id)
@@ -95,11 +103,12 @@ def projects(request):
         rows = Project.objects.filter(project_scope(request)).order_by("-updated_at")
         return JsonResponse({"projects": [{"id": str(row.id), "title": row.title, "updated_at": row.updated_at.isoformat()} for row in rows[:100]]})
     try:
-        project = Project(owner=session_owner, account=request.user if request.user.is_authenticated else None, title=validation.title(request.POST.get("title", "나의 공간")))
+        project = Project(flow_id=uuid4(), owner=session_owner, account=request.user if request.user.is_authenticated else None, title=validation.title(request.POST.get("title", "나의 공간")))
         source_id = request.POST.get('source_project_id')
         if source_id:
             source = owned_project(request, UUID(source_id))
             project.saved_project = source.saved_project
+            project.flow_id = source.flow_id
         upload = request.FILES.get("photo")
         content = None
         original_bytes = None
@@ -206,6 +215,7 @@ def collect_events(request, project_id):
 
 
 @require_http_methods(["POST"])
+@track_raw
 def collect_sample(request, project_id):
     project = owned_project(request, project_id)
     try:
@@ -249,6 +259,7 @@ def serialize_result(result):
 
 
 @require_http_methods(["POST"])
+@track_generation
 def search(request, project_id):
     project = owned_project(request, project_id)
     result = None
@@ -408,7 +419,7 @@ def redraw(request, result_id):
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({"error": "다시 그리기 요청이 올바르지 않습니다."}, status=400)
     with transaction.atomic():
-        project = Project.objects.create(owner=result.project.owner, account=result.project.account, saved_project=result.project.saved_project if mode != "new" else None, title=result.project.title,
+        project = Project.objects.create(flow_id=uuid4() if mode == 'new' else result.project.flow_id, owner=result.project.owner, account=result.project.account, saved_project=result.project.saved_project if mode != "new" else None, title=result.project.title,
             photo=result.project.photo.name if mode != "new" else "",
             original_photo=result.project.original_photo.name if mode != "new" else "",
             original_checksum=result.project.original_checksum if mode != "new" else "",
@@ -443,7 +454,7 @@ def crop_photo(request, project_id):
                 raise ValueError("자르기 영역은 가로·세로 4픽셀 이상이어야 합니다.")
             image = original.crop((x, y, right, bottom)).convert("RGB")
             stream = io.BytesIO(); image.save(stream, format="JPEG", quality=90)
-        project = Project(owner=source_project.owner, account=source_project.account, saved_project=source_project.saved_project, title=source_project.title, width=image.width, height=image.height,
+        project = Project(flow_id=source_project.flow_id, owner=source_project.owner, account=source_project.account, saved_project=source_project.saved_project, title=source_project.title, width=image.width, height=image.height,
             original_photo=source_project.original_photo.name, original_checksum=source_project.original_checksum,
             request_context=copy.deepcopy(source_project.request_context))
         with transaction.atomic():

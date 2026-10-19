@@ -25,7 +25,7 @@ export function createTracker(projectId, visitor) {
     function record(event_type, payload = {}) {
         const id = identifier();
         queue.add({id, project_id: project.id, event_id: id, event_type,
-            payload: {...structuredClone(payload), client_time: new Date().toISOString()}});
+            payload: {...structuredClone(payload), client_actor_kind: actor.startsWith('user:') ? 'member' : 'guest', client_time: new Date().toISOString()}});
         return id;
     }
 

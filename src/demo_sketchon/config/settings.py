@@ -8,11 +8,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("ROOMPICK_SECRET_KEY", "roompick-local-development-only")
 DEBUG = os.environ.get("ROOMPICK_DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.environ.get("ROOMPICK_HOSTS", "localhost,127.0.0.1,[::1],192.168.0.44").split(",")
-INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "sketch", "recommendations"]
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "sketch", "operations.apps.OperationsConfig", "recommendations"]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "operations.tracking.ActorContextMiddleware",
     "sketch.access.PrivateResponseMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
