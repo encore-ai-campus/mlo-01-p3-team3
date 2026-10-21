@@ -2,6 +2,8 @@
 
 ## 파이프라인 완료 전 로컬 시연
 
+MVP 구현 당시 데이터 파이프라인 구축과 서비스 연동 준비가 완료되지 않아 실제 파이프라인과 연동하지 못했다. #34 시연은 `src/local_demo/`에 분리하고 기존 dev의 `src/demo_sketchon/` 및 MySQL·Garage·Delta 연결 코드는 보존한다. [분리 배경·현재 실행](local-demo.md)을 따른다.
+
 `feature/#34`의 `catalog.local_snapshot`은 검증한 기존 로컬 배치와 고정 Delta 완료분을 파일 카탈로그로 결합한다. 외부 API를 호출하지 않으며 기존 결과를 덮어쓰지 않는다. 서버 추출 자료와 최종 카탈로그는 Git에서 제외된 `data/local-demo/`에 보존한다.
 
 서버 벡터는 Delta version 43의 READY 994개를 고정했다. 모델은 `gemini-embedding-2`, 차원은 768, 전처리는 `exif-rgb-fit1024-png-l2-v1`이다. Mongo 원천과 Garage 인계 스냅샷의 상품·이미지 관계를 사용한다. Garage 인계의 transport/snapshot/file/image checksum을 검사하고 원본 SHA256·전처리 PNG 또는 검증된 RGB 픽셀 대응을 확인한다. 벡터가 있어도 대응 원장이 없으면 임의 상품에 연결하지 않는다.
@@ -25,7 +27,7 @@ $env:PYTHONPATH = (Resolve-Path src).Path
 .\scripts\Start-LocalDemo.ps1 -Mode Worker
 ```
 
-다른 터미널에서 `.\scripts\Start-LocalDemo.ps1 -Mode Web`을 실행하고 `http://127.0.0.1:8003/`에 접속한다. 두 프로세스는 `outputs/local-demo-v43/`의 독립 SQLite·미디어·원천·추천 결과와 같은 카탈로그를 사용한다. 기존 `src/interior_recommender/.env`를 읽으며 새 입력의 해석·질의 임베딩과 선택형 배치 미리보기는 외부 API를 사용한다. 갱신한 `.env`는 Git에 포함하지 않고, 후속 서버 배포 때 보호 설정으로 함께 전송한 뒤 웹·워커를 재시작한다. 로컬 시연 준비는 VMware 웹 배포가 아니다.
+다른 터미널에서 `.\scripts\Start-LocalDemo.ps1 -Mode Web`을 실행하고 `http://127.0.0.1:8004/`에 접속한다. 두 프로세스는 `outputs/local-demo-v43/`의 독립 SQLite·미디어·원천·추천 결과와 같은 카탈로그를 사용한다. 기존 `src/interior_recommender/.env`를 읽으며 새 입력의 해석·질의 임베딩과 선택형 배치 미리보기는 외부 API를 사용한다. 갱신한 `.env`는 Git에 포함하지 않고, 후속 서버 배포 때 보호 설정으로 함께 전송한 뒤 웹·워커를 재시작한다. 로컬 시연 준비는 VMware 웹 배포가 아니다.
 
 2026-10-19. 연결 코드와 Garage 임베딩 실행기를 준비했다. 업무 상품 게시·MySQL 등록/활성화와 임베딩 실행기 배포는 별도 단계다. 기존 로컬 카탈로그와 SketchOn SQLite 작업 원장은 유지한다.
 

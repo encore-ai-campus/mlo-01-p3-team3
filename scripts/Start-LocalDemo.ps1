@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Init', 'Check', 'Web', 'Worker')]
     [string]$Mode = 'Web',
-    [int]$Port = 8003,
+    [int]$Port = 8004,
     [string]$Snapshot = '',
     [string]$Python = ''
 )
@@ -19,15 +19,17 @@ $Snapshot = (Resolve-Path -LiteralPath $Snapshot).Path
 $products = Join-Path $Snapshot 'products.json'
 if (-not (Test-Path -LiteralPath $products)) { throw "Catalog not found: $products" }
 $runtimeRoot = Join-Path $projectRoot 'outputs/local-demo-v43'
-New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
+if ($Mode -ne 'Check') { New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null }
 $env:PYTHONPATH = Join-Path $projectRoot 'src'
+$env:PYTHONDONTWRITEBYTECODE = '1'
 $env:INTERIOR_RECOMMENDER_PRODUCTS = $products
 $env:INTERIOR_RECOMMENDER_DEMO = '0'
 $env:INTERIOR_RECOMMENDER_OUTPUT_ROOT = Join-Path $runtimeRoot 'recommendations'
 $env:ROOMPICK_DB_PATH = Join-Path $runtimeRoot 'db.sqlite3'
 $env:ROOMPICK_MEDIA_ROOT = Join-Path $runtimeRoot 'media'
 $env:ROOMPICK_RAW_ROOT = Join-Path $runtimeRoot 'raw'
-$manage = Join-Path $projectRoot 'src/demo_sketchon/manage.py'
+$manage = Join-Path $projectRoot 'src/local_demo/manage.py'
+if (-not (Test-Path -LiteralPath $manage)) { throw "Local demo entry point not found: $manage" }
 
 # Every process uses the same fixed catalog, SQLite database and output root.
 Write-Host "Local demo: $Mode | $products"

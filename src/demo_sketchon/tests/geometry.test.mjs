@@ -1,19 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizePoint, moveItem, resizeItem, strokeBounds, transformStroke, alphaBounds} from '../sketch/static/sketch/geometry.mjs';
-
-test('placement bounds use visible pixels including the final pixel edge', () => {
-    const pixels = new Uint8ClampedArray(10 * 8 * 4);
-    for (let y = 2; y <= 5; y++) for (let x = 3; x <= 7; x++) pixels[(y * 10 + x) * 4 + 3] = 255;
-    pixels[3] = 15; // Transparent/near-transparent annotation residue is ignored.
-    assert.deepEqual(alphaBounds(pixels, 10, 8), {x_min:.3, y_min:.25, x_max:.8, y_max:.75});
-    for (let x = 3; x <= 7; x++) pixels[(2 * 10 + x) * 4 + 3] = 0;
-    assert.equal(alphaBounds(pixels, 10, 8).y_min, 3 / 8);
-});
-
-test('fully erased artwork supplies no placement override', () => {
-    assert.equal(alphaBounds(new Uint8ClampedArray(16 * 4), 4, 4), null);
-});
+import {normalizePoint, moveItem, resizeItem, strokeBounds, transformStroke} from '../sketch/static/sketch/geometry.mjs';
 
 test('photo center stays normalized across desktop and phone layouts', () => {
     assert.deepEqual(normalizePoint(510, 320, {left: 10, top: 20, width: 1000, height: 600}), {x: .5, y: .5});

@@ -17,13 +17,13 @@ const base = process.env.ROOMPICK_TEST_URL || 'http://127.0.0.1:18037';
         await require('./browser-member.cjs')(context,base);
         await page.goto(base);
         await page.locator('#start-sketch').click();
-        await page.waitForFunction(() => Object.keys(sessionStorage).some(key=>key.startsWith('roompick.history.')) && !document.querySelector('#search').disabled);
+        await page.waitForFunction(() => Object.keys(sessionStorage).some(key=>key.startsWith('local_demo.history.')) && !document.querySelector('#search').disabled);
         await page.locator('#sample-empty').click();
         await page.waitForFunction(() => !document.querySelector('#room-photo').hidden && !document.querySelector('#search').disabled);
         await page.locator('[data-sticker="office-chair"]').click();
         await page.waitForFunction(() => !document.querySelector('#search').disabled && document.querySelector('#counts').textContent.includes('1개'));
         const sticker=await page.evaluate(() => {
-            const key=Object.keys(sessionStorage).find(key=>key.startsWith('roompick.history.'));
+            const key=Object.keys(sessionStorage).find(key=>key.startsWith('local_demo.history.'));
             return JSON.parse(sessionStorage.getItem(key)).drawing.items.find(item=>item.kind==='sticker');
         });
         await page.locator('[data-tool="text"]').click();

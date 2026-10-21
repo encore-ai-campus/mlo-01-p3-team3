@@ -1,5 +1,7 @@
 # 3차 프로젝트 문서
 
+2026-10-21: #34의 로컬 시연 MVP를 `src/local_demo/`로 분리하고 기존 `src/demo_sketchon/`은 PR 대상 dev 소스로 보존한다. **MVP 구현 당시 데이터 파이프라인 구축·연동 준비가 완료되지 않아 실제 파이프라인과 연동하지 못했고 고정 파일 카탈로그로 시연했다.** [분리 배경·실행·DB 연결 보존 기준](interior-recommender/local-demo.md)을 따른다.
+
 2026-10-18 범위 확장: 추천 후 상품을 선택하면 외부 API로 [상품 배치 미리보기](interior-recommender/product-preview.md)를 생성한다. 아래 2026-10-15 이미지 생성 제외 결정은 선택형 미리보기 추가 이전 기준이다.
 
 2026-10-18 추천 구현 갱신: 신규 로컬 요청은 [방 특징 추천](interior-recommender/interior-ranking.md)의 `interior-content-v3`를 기본으로 사용한다. 아래 v1/v2 수동 가중치 설명은 당시 정책이며 기존 저장 실행은 유지한다. MySQL 연결·운영 배포는 후속 작업이다.
@@ -8,6 +10,7 @@
 
 | 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| dev 원본 보존·로컬 시연 MVP 분리 | [시연 분리·미연동 배경](interior-recommender/local-demo.md) | [시연 실행](../src/local_demo/README.md), [서버 카탈로그](interior-recommender/server-catalog.md) |
 | 추천 카탈로그의 MySQL·Garage·Delta 연결 | [서버 카탈로그 연결](interior-recommender/server-catalog.md) | [카탈로그 담당](interior-recommender/roles/catalog.md), [게시 계약](design/13-gold-mysql-publication.md) |
 | 추천 이후 상품 배치 이미지 생성 | [상품 배치 미리보기](interior-recommender/product-preview.md) | [실행·복구](interior-recommender/execution.md), [직접 추천](design/12-direct-recommendation.md) |
 | SketchOn SQLite 실행·복구·비동기/동기 경계 | [작업 실행](interior-recommender/execution.md) | [역할별 라우팅](interior-recommender/README.md), [호출 구조](interior-recommender/call-structure.md) |

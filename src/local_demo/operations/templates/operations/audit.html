@@ -1,0 +1,2 @@
+{% extends 'operations/base.html' %}{% block content %}{% include 'operations/filters.html' %}<p class="ops-muted">민감 데이터 열람과 운영 변경을 기록합니다. 이 화면에서 수정·삭제할 수 없습니다.</p><section class="ops-panel">{% for row in rows %}<details><summary>{{ row.created_at|date:'Y-m-d H:i:s' }} · {{ row.actor.username }} · {{ row.action }}</summary><p>{{ row.object_type }} · {{ row.object_id }}<br>{{ row.reason }}</p><pre>이전: {{ row.before }}
+이후: {{ row.after }}</pre></details>{% empty %}<p>감사 이력 없음</p>{% endfor %}</section>{% include 'operations/pagination.html' %}{% endblock %}

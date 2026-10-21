@@ -1,5 +1,7 @@
 # SketchOn SQLite 작업 실행과 복구
 
+2026-10-21: #34의 시연 워커·웹은 `src/local_demo/manage.py`로 분리했다. 기존 `src/demo_sketchon`은 dev 소스를 보존한다. 시연 기본 DB·출력은 기존 `outputs/local-demo-v43/`, 기본 카탈로그는 `data/local-demo/snapshot-v43/`이며, 포트·쿠키·브라우저 저장소를 분리한다. [분리 배경·실행·서버 반영 순서](local-demo.md)를 확인한다. 아래 책임/큐/복구 계약은 각 앱의 별도 프로세스에 적용한다.
+
 2026-10-18 [선택형 상품 배치 미리보기](product-preview.md): 기존 테이블에서 자식 run을 접수하고 migration 없이 `preview_contract`로 구분한다. `application.preview.validate/prepare`만 실행하며 해석/임베딩/추천 계산은 반복하지 않는다. 제공처와 image_model·`GENERATION_CONCURRENCY=1`·`GENERATION_RPM=2`를 사용한다. 전체 접수/실행 슬롯은 공유한다. 웹·워커를 함께 재시작한다. 아래 해석/임베딩 중심 설명은 추천 작업에 해당한다.
 
 2026-10-18. 현재 범위는 로컬 SQLite와 기존 상품 스냅샷이다. 팀원의 데이터 파이프라인 완료 후 MySQL·Kafka·Bronze·광고 서버를 연결한다. 서비스 논리 스키마와 이 문서의 로컬 작업 원장을 같은 테이블로 간주하지 않는다.

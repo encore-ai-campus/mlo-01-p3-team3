@@ -1,5 +1,7 @@
 # 웹 진입과 Canvas 연동
 
+2026-10-21 [dev/시연 경계](../local-demo.md): #34의 편집·배치 영역·추천 입력 보완은 `src/local_demo/sketch/`와 `src/local_demo/recommendations/`에서 실행한다. 기존 `src/demo_sketchon/`의 dev 소스는 보존한다. 쿠키·브라우저 저장소·기본 데이터 경로·포트는 분리하고 공통 엔진/서버 카탈로그 API는 유지한다. 아래 2026-10-19 변경은 시연 앱에 적용되며 dev 원본에 소급하지 않는다.
+
 2026-10-19 입력 삭제 보완: SketchOn 추천 접수의 `text`는 설명 입력창의 현재 값만 저장한다. 캔버스 텍스트 객체의 원문은 별도 텍스트에 합치지 않고 현재 렌더링된 스케치 이미지에서만 해석한다. 지우개 `cuts` 이후에도 편집·실행 취소용 객체 원문이 남을 수 있으므로 이를 다시 필수 조건의 인용 근거로 사용하지 않는다. 기존 저장 추천은 유지하고 수정한 입력은 새 추천으로 접수한다.
 
 2026-10-18: 두 추천 화면의 카드 버튼과 공유 `web/ui/product-preview.mjs`에서 [배치 미리보기](../product-preview.md)를 제공한다. `POST api/runs/{parent}/previews`는 추천 image_id만 받고 기존 소유권·CSRF·상태/asset API를 사용한다. SketchOn은 `ui/product-preview.mjs`로 공통 스크립트를 제공한다. 계정 변경·입력 교체 시 이전 미리보기와 늦은 응답을 비운다.

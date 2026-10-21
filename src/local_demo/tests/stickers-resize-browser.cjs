@@ -14,12 +14,13 @@ const base = process.env.ROOMPICK_TEST_URL || 'http://127.0.0.1:18037';
                 await require('./browser-member.cjs')(context, base);
                 await page.goto(base);
                 await page.locator('#start-sketch').click();
+                await page.waitForFunction(() => Object.keys(sessionStorage).some(key => key.startsWith('local_demo.history.')) && !document.querySelector('#sample-empty').disabled);
                 await page.locator('#sample-empty').click();
                 await page.waitForFunction(() => !document.querySelector('#room-photo').hidden && !document.querySelector('#search').disabled);
                 await page.locator('[data-sticker="sofa-cream"]').click();
-                await page.waitForFunction(() => Object.keys(sessionStorage).some(key => key.startsWith('roompick.history.') && JSON.parse(sessionStorage.getItem(key)).drawing.items.some(item => item.kind === 'sticker')));
+                await page.waitForFunction(() => Object.keys(sessionStorage).some(key => key.startsWith('local_demo.history.') && JSON.parse(sessionStorage.getItem(key)).drawing.items.some(item => item.kind === 'sticker')));
                 const item = () => page.evaluate(() => {
-                    const key = Object.keys(sessionStorage).find(key => key.startsWith('roompick.history.'));
+                    const key = Object.keys(sessionStorage).find(key => key.startsWith('local_demo.history.'));
                     return JSON.parse(sessionStorage.getItem(key)).drawing.items.find(item => item.kind === 'sticker');
                 });
                 const drag = async (value, dx, dy, corner = true) => {

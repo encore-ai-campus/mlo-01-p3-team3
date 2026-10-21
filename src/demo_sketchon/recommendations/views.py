@@ -144,9 +144,9 @@ def submit(request):
     if len(json.dumps(document).encode("utf-8")) > 2 * 1024 * 1024:
         raise ValueError("Canvas document too large")
     validate_document(document)
-    # Canvas text can remain in the editable document after eraser cuts hide it.
-    # Interpret only its rendered pixels; only the description is explicit text.
-    text = request.POST.get("text", "").strip()
+    text = "\n".join([request.POST.get("text", "").strip(), *[
+        item.get("text", "") for item in document["items"] if item.get("kind") == "text"
+    ]]).strip()
     if len(text) > 10000:
         raise ValueError("Text too long")
     project = form_json(request, "project", {})

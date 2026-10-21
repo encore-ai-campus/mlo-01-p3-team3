@@ -1,5 +1,7 @@
 # interior_recommender 역할별 라우팅
 
+2026-10-21: [로컬 시연 분리](local-demo.md). dev 원본은 `src/demo_sketchon/`, #34 시연은 `src/local_demo/`에서 별도 실행한다. 아래 기존 SketchOn 경로 설명은 dev 원본/과거 통합 기록이며, 시연 변경은 새 폴더에만 반영한다. 공유 MySQL·Garage·Delta 어댑터는 유지한다.
+
 2026-10-18 SketchOn은 웹과 별도 SQLite 작업 워커로 실행한다. 상태·lease·재시도는 작업 원장, 추천 조정/규칙은 기존 application/domain, Gemini native async 통신은 adapters가 맡는다. [실행 책임·설정·후속 파이프라인 연결](execution.md)을 확인한다. 아래 독립 웹의 로컬 스레드풀과 구분한다.
 
 2026-10-16 코드 기준. 패키지 이름은 `interior_recommender`다. 이 문서는 실제 로컬 호출과 담당 코드를 찾는 진입점이며, 서비스 설계 기준은 [직접 추천 계약](../design/12-direct-recommendation.md)이다.
@@ -10,6 +12,7 @@
 
 | 담당·작업 | 먼저 읽을 문서 | 함께 확인할 문서 | 구현 위치 |
 |---|---|---|---|
+| dev 원본·시연 실행 분리 | [로컬 시연 경계](local-demo.md) | [시연 README](../../src/local_demo/README.md), [서버 연결](server-catalog.md) | `src/local_demo/`, `scripts/Start-LocalDemo.ps1`; dev 원본은 `src/demo_sketchon/` |
 | MySQL·Garage·Delta 상품 연결 | [서버 카탈로그](server-catalog.md) | [카탈로그](roles/catalog.md), [게시 계약](../design/13-gold-mysql-publication.md) | `catalog/server.py`, `catalog/server_embeddings.py`, `product_pipeline/embedding_{table,vectors}.py` |
 | 추천 이후 선택 상품 이미지 생성 | [상품 배치 미리보기](product-preview.md) | [웹](roles/web.md), [실행·복구](execution.md) | `application/preview.py`, `recommendations/preview_submissions.py`, worker/adapters |
 | SketchOn 단일 서버 MVP | [SQLite 실행·복구](execution.md), [통합 설치·실행](../../src/demo_sketchon/docs/ver2/직접추천_통합_실행.md) | [웹 담당](roles/web.md), [호출 구조](call-structure.md) | `recommendations/{views,submissions,queue,worker}.py` → `application/direct.py`, `application/deferred.py` |
