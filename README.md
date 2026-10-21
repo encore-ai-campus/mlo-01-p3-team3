@@ -105,6 +105,24 @@
 
 Garage는 **S3 호환 객체 저장소**이며 AWS S3에 배포한 구성이 아닙니다.
 
+서버 소프트웨어 인벤토리는 아래의 운영 소프트웨어 스택에서 확인할 수 있습니다. 대시보드는 WebApp VM의 Django 6.1.2와 별도 venv의 Django 5.2.18이 각각 표시되고 있으며, 실제 구현 및 테스트에는 Django 5.2.18를 사용하였습니다. WebApp VM의 PyMySQL 1.2.3과 저장소 서버 잠금의 1.1.2도 별도 환경 버전입니다.
+
+<details>
+<summary><strong>온프레미스 인프라 아키텍처 보기</strong></summary>
+
+<img src="assets/PJ3%20온프레미스%20인프라%20아키텍처.png" alt="PJ3 온프레미스 서버 역할과 데이터 경로 아키텍처" width="1200">
+
+이 그림은 서버 역할 배치와 목표 연결을 나타냅니다. 하단의 “검증된 주요 흐름” 표시는 실제 검증 범위보다 넓게 읽힐 수 있습니다. NiFi 원격 tick과 일부 구성요소 시험은 기록되어 있지만, 전체 7단계 업무 FLOW와 NiFi→Kafka→Spark→MySQL→WebApp 종단 통합 시험은 수행하지 않았습니다.
+
+</details>
+
+<details>
+<summary><strong>운영 소프트웨어 스택 보기</strong></summary>
+
+<img src="assets/PJ3%20운영%20소프트웨어%20스택%20인포그래픽_v2.png" alt="20대 서버의 PJ3 운영 소프트웨어 인벤토리" width="1200">
+
+</details>
+
 <details>
 <summary><strong>보조 라이브러리와 처리 방식</strong></summary>
 
