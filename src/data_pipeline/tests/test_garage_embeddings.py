@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
+from PIL import Image
 
 from product_pipeline import garage_embeddings as worker
 from product_pipeline.contracts import canonical
@@ -57,11 +58,13 @@ class WorkerTests(unittest.TestCase):
         self.assertAlmostEqual(sum(x*x for x in value['vector']), 1, places=5)
         self.assertEqual(value['record_hash'], worker.result(self.payload, 'a'*64, 'b'*64, self.cfg)['record_hash'])
 
-    def exercise(self, effects, *, reuse_file=None, plan=False):
+    def exercise(self, effects, *, reuse_file=None, plan=False, prepared=b'png'):
         self.committed = []
         items = [dict(checksum=x*64, key=x, bytes=3) for x in 'abc']
+        if reuse_file:
+            items = items[:1]
         with patch.object(worker, 'delta_child', side_effect=self.child), patch.object(worker, 'storage'), \
-                patch.object(worker, 'images', return_value=items), patch.object(worker, 'prepare', return_value=b'png'), \
+                patch.object(worker, 'images', return_value=items), patch.object(worker, 'prepare', return_value=prepared), \
                 patch.object(worker, 'embed', side_effect=effects) as api, patch.object(worker.time, 'sleep'):
             result = worker.run(self.cfg, self.work, reuse_file=reuse_file, plan=plan)
         return result, api
@@ -99,6 +102,23 @@ class WorkerTests(unittest.TestCase):
         reuse.write_text(canonical(worker.serializable(value))+'\n')
         with self.assertRaisesRegex(Exception, 'REUSE_PREPROCESSING_CHECKSUM_MISMATCH'):
             self.exercise([], reuse_file=reuse)
+
+    def test_reuse_accepts_identical_pixels_with_different_png_encoding(self):
+        first, second = io.BytesIO(), io.BytesIO()
+        image = Image.new('RGB', (32, 24), (20, 80, 140))
+        image.save(first, format='PNG', compress_level=1)
+        image.save(second, format='PNG', compress_level=9)
+        self.assertNotEqual(worker.hashlib.sha256(first.getvalue()).hexdigest(),
+                            worker.hashlib.sha256(second.getvalue()).hexdigest())
+        self.assertEqual(worker.pixel_checksum(first.getvalue()), worker.pixel_checksum(second.getvalue()))
+        value = worker.result(self.payload, 'a'*64, worker.hashlib.sha256(first.getvalue()).hexdigest(), self.cfg)
+        value['preprocessed_pixel_checksum'] = worker.pixel_checksum(first.getvalue())
+        reuse = self.work/'pixel-reuse.jsonl'
+        reuse.write_text(canonical(worker.serializable(value))+'\n')
+        report, api = self.exercise([], reuse_file=reuse, prepared=second.getvalue())
+        self.assertEqual(report['reused'], 1)
+        self.assertEqual(api.call_count, 0)
+        self.assertEqual(len(self.committed), 1)
 
 
 if __name__ == '__main__':

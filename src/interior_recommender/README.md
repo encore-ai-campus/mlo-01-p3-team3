@@ -1,5 +1,7 @@
 # scikit-learn 콘텐츠 추천과 선택 상품 배치 미리보기 MVP
 
+2026-10-21: #34 로컬 시연 웹은 `../local_demo/`, dev 원본 웹은 `../demo_sketchon/`으로 분리했다. 공유 추천/생성 엔진과 MySQL·Garage·Delta 연결은 이 패키지에 유지한다. 시연의 파이프라인 미연동 배경·스냅샷·실행은 [분리 안내](../../docs/interior-recommender/local-demo.md)를 따른다. 아래 기존 웹 경로 설명은 해당 시점의 기록이다.
+
 2026-10-19: [MySQL·Garage·Delta 서버 카탈로그 연결](../../docs/interior-recommender/server-catalog.md) 코드를 추가했다. 실제 접속 설정은 Git에서 제외하고, 기존 파일 카탈로그와 같은 형식으로 export한 서버 카탈로그만 현재 MySQL 상태를 재검증한다. 운영 상품 적재·임베딩 이전·DB 등록/활성화·서버 배포는 별도이며 이번에는 연결 코드와 읽기 전용 접속을 준비했다.
 
 2026-10-18: 추천 카드의 **이 상품을 방에 배치해 보기**로 외부 이미지 생성 API를 호출하는 선택 기능을 추가했다. 방·선택 상품·선택 스케치를 사용하며 추천/상품 벡터는 재생성하지 않는다. [설정·구동·선택/중복/복구 계약](../../docs/interior-recommender/product-preview.md)을 따른다. 아래 생성 제외 설명은 추천 선행 생성과 과거 템플릿 흐름에 관한 내용이다.

@@ -1,5 +1,7 @@
 # 역할별 코드 계층과 호출 구조
 
+2026-10-21 [시연 분리](local-demo.md): `scripts/Start-LocalDemo.ps1 → src/local_demo/manage.py → local_demo의 recommendations → 기존 interior_recommender application/adapters`가 #34 시연 경로다. `src/demo_sketchon`은 최신 dev 소스와 동일하게 보존한다. 두 앱은 별도 프로세스이며 공통 엔진·운영 DB 카탈로그 어댑터는 공유한다.
+
 2026-10-19 [서버 연결](server-catalog.md): 배치 `catalog.server`가 읽기 전용 MySQL + Garage + 고정 Delta export에서 기존 형식의 불변 상품 카탈로그를 만든다. `ProductIndex.load`는 서버 binding을 인식하고 `rank` 반환 전 `LiveGuard`로 현재 상태를 대조한다. `DirectRunReader/DirectStudio.product_link`도 현재 MySQL 링크를 재검증하고 선택 생성은 별도 이용 범위를 확인한다. 기존 파일/데모 카탈로그는 DB를 조회하지 않는다. 운영 배포와 광고 서버 HTTP 분리는 미실행이며 아래 과거 MySQL 미구현 설명과 구분한다.
 
 2026-10-18 선택 생성: 추천 카드 → `POST previews` → `application.preview.selected_source/snapshot` → SQLite 큐/워커 preview 분기 → `preview.prepare` → `DeferredPipeline` → `ModelAdapter.acall(generate)` → Cloudflare/Gemini → receipt·generated.png → 공유 `product-preview.mjs`. 독립 웹은 `DirectStudio.submit_preview/launch`의 풀에서 같은 application을 실행한다. [선택 생성 계약](product-preview.md).

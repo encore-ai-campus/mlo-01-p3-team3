@@ -1,0 +1,92 @@
+import os
+from pathlib import Path
+from interior_recommender.config import load_environment
+
+load_environment()
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent.parent
+LOCAL_DEMO_RUNTIME = PROJECT_ROOT / "outputs" / "local-demo-v43"
+SECRET_KEY = os.environ.get("ROOMPICK_SECRET_KEY", "local-demo-development-only")
+DEBUG = os.environ.get("ROOMPICK_DEBUG", "1") == "1"
+ALLOWED_HOSTS = os.environ.get("ROOMPICK_HOSTS", "localhost,127.0.0.1,[::1],192.168.0.44").split(",")
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.staticfiles", "sketch", "operations.apps.OperationsConfig", "recommendations"]
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "operations.tracking.ActorContextMiddleware",
+    "sketch.access.PrivateResponseMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+ROOT_URLCONF = "config.urls"
+TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": True,
+              "OPTIONS": {"context_processors": ["django.template.context_processors.request", "django.contrib.auth.context_processors.auth", "sketch.access.account_context", "operations.ad_gateway.ad_context"]}}]
+LOGIN_URL = '/accounts/login/'
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+WSGI_APPLICATION = "config.wsgi.application"
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": os.environ.get("ROOMPICK_DB_PATH", LOCAL_DEMO_RUNTIME / "db.sqlite3"), "OPTIONS": {"timeout": 20, "transaction_mode": "IMMEDIATE"}}}
+# Shared-cache in-memory SQLite raises SQLITE_LOCKED rather than applying the
+# deployed file database's busy timeout. Exercise worker concurrency on a file.
+DATABASES["default"]["TEST"] = {"NAME": os.environ.get("ROOMPICK_TEST_DB_PATH", str(BASE_DIR / f".test-sketchon-{os.getpid()}.sqlite3"))}
+STATIC_URL = "/static/"
+MEDIA_ROOT = Path(os.environ.get("ROOMPICK_MEDIA_ROOT", LOCAL_DEMO_RUNTIME / "media"))
+SKETCH_RAW_ROOT = Path(os.environ.get("ROOMPICK_RAW_ROOT", LOCAL_DEMO_RUNTIME / "raw"))
+DATA_UPLOAD_MAX_MEMORY_SIZE = 35 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+LANGUAGE_CODE = "ko-kr"
+TIME_ZONE = "Asia/Seoul"
+USE_TZ = True
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+SESSION_COOKIE_AGE = 365 * 24 * 60 * 60
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_NAME = "local_demo_sessionid"
+CSRF_COOKIE_NAME = "local_demo_csrftoken"
+
+# Immutable product snapshot; server snapshots additionally recheck current MySQL state.
+INTERIOR_RECOMMENDER_PRODUCTS = Path(os.environ.get(
+    "INTERIOR_RECOMMENDER_PRODUCTS",
+    PROJECT_ROOT / "data/local-demo/snapshot-v43/products.json",
+)).resolve()
+INTERIOR_RECOMMENDER_DEMO = os.environ.get("INTERIOR_RECOMMENDER_DEMO", "0") == "1"
+INTERIOR_RECOMMENDER_OUTPUT_ROOT = Path(os.environ.get(
+    "INTERIOR_RECOMMENDER_OUTPUT_ROOT",
+    LOCAL_DEMO_RUNTIME / ("recommendations-offline" if INTERIOR_RECOMMENDER_DEMO else "recommendations"),
+)).resolve()
+INTERIOR_RECOMMENDER_RANKING_POLICY = os.environ.get("INTERIOR_RECOMMENDER_RANKING_POLICY")
+# Shared SQLite admission/leases; these values are measurement starting points.
+RECOMMENDATION_API_ACCOUNT = os.environ.get("RECOMMENDATION_API_ACCOUNT", "default")
+RECOMMENDATION_EXECUTION = {
+    name: int(os.environ.get("RECOMMENDATION_" + name.upper(), default))
+    for name, default in {
+        "max_pending": 8, "max_inflight": 2, "sync_workers": 4,
+        "lease_seconds": 90, "heartbeat_seconds": 10, "poll_seconds": 1,
+        "staging_seconds": 120, "max_recoveries": 10, "blas_threads": 1,
+        "analysis_concurrency": 2, "analysis_rpm": 10,
+        "embedding_concurrency": 2, "embedding_rpm": 30,
+        "generation_concurrency": 1, "generation_rpm": 2,
+    }.items()
+}
+if not DEBUG:
+    if SECRET_KEY == "local-demo-development-only":
+        raise ValueError("ROOMPICK_SECRET_KEY is required when DEBUG is off")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+
+# Server-to-server ad delivery is opt-in. Secrets never enter template context.
+SKETCHON_AD_DELIVERY = {
+    "enabled": os.environ.get("SKETCHON_AD_ENABLED", "0") == "1",
+    "internal_origin": os.environ.get("SKETCHON_AD_INTERNAL_ORIGIN", ""),
+    "public_origin": os.environ.get("SKETCHON_AD_PUBLIC_ORIGIN", ""),
+    "token": os.environ.get("SKETCHON_AD_SERVICE_TOKEN", ""),
+    "timeout": float(os.environ.get("SKETCHON_AD_TIMEOUT_SECONDS", "2")),
+}

@@ -4,6 +4,8 @@ This command never calls an embedding API. The source batch is never modified.
 """
 import argparse
 from datetime import datetime, timezone
+import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -11,6 +13,16 @@ import tempfile
 from ..assets import checksum, read_json
 from ..pipeline import contract_hash
 from ..schemas import normalized_vector
+
+
+def pixel_checksum(data):
+    """Hash the RGB pixels independently of PNG compression and metadata."""
+    from PIL import Image, ImageOps
+    with Image.open(io.BytesIO(data)) as source:
+        source.load()
+        image = ImageOps.exif_transpose(source).convert('RGB')
+        header = json.dumps({'mode': 'RGB', 'size': list(image.size)}, sort_keys=True, separators=(',', ':')).encode()
+        return hashlib.sha256(b'preprocessed-pixels-v1\0' + header + b'\0' + image.tobytes()).hexdigest()
 
 
 def completed(index_path):
@@ -50,6 +62,7 @@ def completed(index_path):
             raise ValueError('BATCH_OUTPUT_IDENTITY_MISMATCH')
         vector = normalized_vector(value['values'], value['dimension'])
         row = dict(image_checksum=value['image_checksum'], preprocessed_checksum=value['preprocessed_checksum'],
+                   preprocessed_pixel_checksum=pixel_checksum(asset),
                    model_version=value['model'], preprocessing_version=value['preprocessing_version'],
                    dimension=value['dimension'], vector=vector)
         key = (row['image_checksum'], *expected)

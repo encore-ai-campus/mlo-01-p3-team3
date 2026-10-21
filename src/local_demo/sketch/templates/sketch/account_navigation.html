@@ -1,0 +1,6 @@
+<nav class="account-nav" aria-label="계정" data-account-nav>
+<a class="account-login button subtle" href="/accounts/login/?next={{ request.get_full_path|urlencode }}" {% if user.is_authenticated %}hidden{% endif %}>로그인</a>
+<span class="account-member" {% if not user.is_authenticated %}hidden{% endif %}><a href="/my/projects/" class="account-nickname">{{ user.first_name|default:user.username }}</a><a href="/my/profile/">My</a><form method="post" action="/accounts/logout/">{% csrf_token %}<button type="submit" class="subtle">로그아웃</button></form></span>
+<a href="{{ account_initial.ops_url|default:'/ops/' }}" class="button subtle" data-ops-link {% if not account_initial.can_access_ops %}hidden{% endif %}>운영 관리</a></nav>
+{{ account_initial|json_script:'account-initial' }}
+{% if signup_completed %}<script>window.alert('가입이 완료되었습니다!');</script>{% endif %}

@@ -96,6 +96,16 @@ def prepare(client, bucket, item):
     return output.getvalue()
 
 
+def pixel_checksum(data):
+    """Hash decoded RGB pixels; PNG compression can differ across OS builds."""
+    from PIL import Image, ImageOps
+    with Image.open(io.BytesIO(data)) as source:
+        source.load()
+        image = ImageOps.exif_transpose(source).convert('RGB')
+        header = json.dumps({'mode': 'RGB', 'size': list(image.size)}, sort_keys=True, separators=(',', ':')).encode()
+        return hashlib.sha256(b'preprocessed-pixels-v1\0' + header + b'\0' + image.tobytes()).hexdigest()
+
+
 class RateLimited(Exception):
     def __init__(self, seconds):
         self.seconds = seconds
@@ -249,13 +259,18 @@ def run(cfg, work, *, max_api_calls=0, rpm=10, batch_size=25, reuse_file=None, p
         if reuse_file:
             with Path(reuse_file).open(encoding='utf-8') as stream:
                 for line in stream:
-                    value = vector_row(json.loads(line))
+                    source = json.loads(line)
+                    value = vector_row(source)
                     if (value['model_version'],value['preprocessing_version'],value['dimension']) != (
                             cfg['model'],cfg['preprocessing'],cfg['dimension']):
                         raise PipelineError('REUSE_EMBEDDING_SETTINGS_MISMATCH')
-                    if value['image_checksum'] in reuse and reuse[value['image_checksum']]['record_hash'] != value['record_hash']:
+                    if (value['image_checksum'] in reuse and
+                            reuse[value['image_checksum']]['row']['record_hash'] != value['record_hash']):
                         raise PipelineError('REUSE_EMBEDDING_CONFLICT')
-                    reuse[value['image_checksum']] = value
+                    pixel_hash = source.get('preprocessed_pixel_checksum')
+                    if pixel_hash is not None and not re.fullmatch(r'[0-9a-f]{64}', pixel_hash):
+                        raise PipelineError('REUSE_PIXEL_CHECKSUM_INVALID')
+                    reuse[value['image_checksum']] = dict(row=value, pixel_checksum=pixel_hash)
         client = storage(cfg)
         inputs = list(images(client, cfg['bucket']))
         summary = dict(status='PLANNED', source_images=len(inputs), completed_before=len(inventory),
@@ -310,8 +325,10 @@ def run(cfg, work, *, max_api_calls=0, rpm=10, batch_size=25, reuse_file=None, p
                     value = result(cached['payload'],checksum,prepared,cfg)
                     summary['reused'] += 1
                 elif checksum in reuse:
-                    value = reuse[checksum]
-                    if value['preprocessed_checksum'] != prepared:
+                    cached = reuse[checksum]
+                    value = cached['row']
+                    if (value['preprocessed_checksum'] != prepared and
+                            (cached['pixel_checksum'] is None or cached['pixel_checksum'] != pixel_checksum(png))):
                         raise PipelineError('REUSE_PREPROCESSING_CHECKSUM_MISMATCH')
                     summary['reused'] += 1
                 else:
