@@ -12,21 +12,37 @@ from ..files import parse
 from .config import BronzeSettings
 
 
-def await_window(query,lease,max_batches=0):
+def await_window(query,lease,max_batches=0,window_control=None):
     """Stop only after Spark reports checkpointed progress, never callback output."""
     if not max_batches:
         query.awaitTermination();lease.check()
         return dict(source_drained=True)
     committed=set()
-    while query.isActive:
-        lease.check();query.awaitTermination(1)
+    def progress_commits():
         progress=query.lastProgress
         if progress and progress.get('numInputRows',0)>0:committed.add(int(progress['batchId']))
+    def stopped_boundary():
+        progress_commits()
+        boundary=(window_control or {}).get('boundary_batch_id')
+        return (type(boundary) is int and len(committed)>=max_batches and boundary==max(committed)+1
+                and not query.isActive)
+    while query.isActive:
+        lease.check()
+        try:query.awaitTermination(1)
+        except Exception:
+            if not stopped_boundary():raise
+        progress_commits()
         if len(committed)>=max_batches:
-            query.stop();query.awaitTermination();lease.check()
+            try:query.stop();query.awaitTermination()
+            except Exception:
+                if not stopped_boundary():raise
+            lease.check()
             return dict(source_drained=False,committed_batches=len(committed),last_committed_batch_id=max(committed))
-    lease.check()
-    return dict(source_drained=True,committed_batches=len(committed),last_committed_batch_id=max(committed) if committed else None)
+    try:query.awaitTermination()
+    except Exception:
+        if not stopped_boundary():raise
+    progress_commits();lease.check()
+    return dict(source_drained=not stopped_boundary(),committed_batches=len(committed),last_committed_batch_id=max(committed) if committed else None)
 
 
 def env(name):
@@ -59,6 +75,8 @@ def main(argv=None):
                 raise KeyboardInterrupt
             previous_sigterm = signal.signal(signal.SIGTERM, terminate)
         settings = BronzeSettings.load(args.config)
+        from .recovery import validate_replay_plan
+        validate_replay_plan(settings)
         if any(getattr(settings, k).startswith('replace-with-') for k in ('environment_id', 'mongo_database', 'kafka_cluster_id')):
             raise PipelineError('EXAMPLE_CONFIG_NOT_DEPLOYABLE')
         uri, kafka = env(settings.mongo_uri_env), parse(env(settings.kafka_options_env))
@@ -94,18 +112,20 @@ def main(argv=None):
         lease.start_heartbeat(stop_on_lease_loss)
         from .mongo import MongoSource
         source = MongoSource(settings, uri)
+        window_control=dict(limit=args.max_batches,calls=0,boundary_batch_id=None)
         query = start(spark, settings, source, kafka, available_now=args.available_now,
-                      progress=lambda value: emit({'stage': 'bronze_batch', **value}), lease=lease)
+                      progress=lambda value: emit({'stage': 'bronze_batch', **value}), lease=lease,window_control=window_control)
         lease.check()
         emit({'result': 'started', 'execution_id': execution, 'query_id': str(query.id),
               'available_now': args.available_now})
-        window=await_window(query,lease,args.max_batches)
+        window=await_window(query,lease,args.max_batches,window_control)
         lease.check()
         result, code = {'result': 'completed',**window}, 0
     except KeyboardInterrupt:
         result, code = {'result': 'interrupted'}, 130
     except Exception as exc:
-        result = {'result': 'failed', 'error_code': exc.code if isinstance(exc, PipelineError) else type(exc).__name__}
+        gap='OffsetOutOfRangeException' in str(exc) or 'KAFKA_DATA_LOSS' in str(exc)
+        result = {'result': 'failed', 'error_code': 'BRONZE_KAFKA_OFFSETS_OUT_OF_RANGE' if gap else exc.code if isinstance(exc, PipelineError) else type(exc).__name__}
     finally:
         stopped = True
         for resource, cleanup in ((query, lambda: query.stop() if query.isActive else None),
@@ -124,6 +144,11 @@ def main(argv=None):
             result, code = {'result': 'failed', 'error_code': 'BRONZE_SHUTDOWN_UNCONFIRMED'}, 2
         if previous_sigterm is not None:
             signal.signal(signal.SIGTERM, previous_sigterm)
+    if lease is not None and getattr(lease,'_lost',False) is True:
+        from .lease import RECOVERY_ERRORS
+        if result.get('error_code') not in RECOVERY_ERRORS:
+            result.update(result='failed',trigger_error_code=result.get('error_code'),error_code='BRONZE_WRITER_LEASE_LOST');code=2
+    if lease is not None and getattr(lease,'loss_diagnostic',None):result['lease_failure']=lease.loss_diagnostic
     result={**result,'execution_id':execution,'duration_ms':round((time.monotonic()-started)*1000)}
     if result_path:
         from ..files import atomic_json

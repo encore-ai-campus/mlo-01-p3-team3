@@ -36,12 +36,14 @@ class BronzeRuntimeTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(PipelineError):
                 kafka_options({'kafka.bootstrap.servers': 'test:9092', key: 'bad'}, self.settings())
     def test_actual_kafka_cluster_is_verified_before_checkpoint_reuse(self):
-        from unittest.mock import MagicMock
+        from unittest.mock import MagicMock,patch
         spark = MagicMock()
         admin = spark._jvm.org.apache.kafka.clients.admin.AdminClient.create.return_value
         future = admin.describeCluster.return_value.clusterId.return_value
         future.get.return_value = 'test-cluster'
-        check_kafka_cluster(spark, {'kafka.bootstrap.servers': 'a:9092'}, self.settings())
+        with patch('product_pipeline.bronze.recovery.check_frontiers') as offsets:
+            check_kafka_cluster(spark, {'kafka.bootstrap.servers': 'a:9092'}, self.settings())
+            offsets.assert_called_once()
         admin.close.assert_called_once()
         future.get.return_value = 'another-cluster'
         with self.assertRaises(PipelineError) as found:

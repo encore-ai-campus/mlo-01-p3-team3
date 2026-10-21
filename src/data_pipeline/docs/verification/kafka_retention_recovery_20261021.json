@@ -1,0 +1,101 @@
+{
+  "status": "VERIFIED_ONE_BATCH_PAUSED",
+  "at": "2026-10-21T01:49:59.990Z",
+  "retention_ms": 1209600000,
+  "retention_bytes": 2147483648,
+  "original_checkpoint_preserved": true,
+  "original_checkpoint_latest_modified": "2026-10-20T15:01:40.433000+00:00",
+  "recovery_checkpoint": "s3a://pj3-data/lake/pj3-danawa/checkpoints/bronze-recovery/7e9a2a3fc3d3416f8e29f4ed300ed199",
+  "recovery_manifest_hash": "47f5d6dd11638e15690926da93158bb5f2edd2e41501bffa0f142494d3c15c1e",
+  "replay_plan": {
+    "bytes": 66675036,
+    "content_hash": "d5cfd1525030836dbdc6f698e37a62ba143831817f0506a53256b1ae64d83266",
+    "contract_version": 1,
+    "created_at": "2026-10-21T01:04:33.878Z",
+    "events": 81882,
+    "events_sha256": "eb8a6a787ae249ea9bac4f4f6a9b5d7665295c128bc284217f9301862c0ae7d9",
+    "source_run_id": "0685b031-7662-45c6-bdfe-c7b499051069"
+  },
+  "replayed_events": 1100,
+  "remaining_replay_events": 80782,
+  "backpressure": {
+    "events_sent": 1100,
+    "last_delivery": {
+      "offset": 82981,
+      "partition": 0
+    },
+    "queue_ceiling": 1000,
+    "second_call_additional_events": 0,
+    "status": "VERIFIED"
+  },
+  "started_at": "2026-10-21T01:09:08.658Z",
+  "finished_at": "2026-10-21T01:40:25.883Z",
+  "execution_duration_ms": 1877225,
+  "first_mysql_duration_ms": 1386245,
+  "stage_duration_ms": {
+    "bronze": 852133,
+    "plan": 44778,
+    "silver": 200548,
+    "gold": 195213,
+    "publish": 34492,
+    "activation": 490384
+  },
+  "observations": 25,
+  "products": 25,
+  "mysql_before": {
+    "active": 195,
+    "pending": 14,
+    "products": 209
+  },
+  "mysql_after": {
+    "active": 213,
+    "pending": 21,
+    "products": 234
+  },
+  "selected_products": {
+    "quality_reasons": {
+      "CATEGORY_UNRESOLVED": 6,
+      "COMPARISON_LINK_UNREADY": 7,
+      "EMBEDDING_INPUT_UNREADY": 7,
+      "IMAGE_RECOMMENDATION_UNREADY": 7,
+      "PRODUCT_STATE_UNVERIFIED": 7,
+      "REPRESENTATIVE_PRICE_UNRESOLVED": 7
+    },
+    "selected_products": 25,
+    "statuses": {
+      "ACTIVE": 18,
+      "PENDING_REVIEW": 7
+    },
+    "waiting": {
+      "GOLD_CATALOG_QUALITY_WAIT": 7
+    }
+  },
+  "activation_normalization_skipped": 10,
+  "bronze_committed_batches": 1,
+  "new_checkpoint_last_committed_batch_id": 0,
+  "next_downstream_batch_started": false,
+  "cluster_quiescent": true,
+  "workers": [
+    {
+      "host": "192.168.0.122",
+      "state": "ALIVE",
+      "coresused": 0,
+      "memoryused": 0
+    },
+    {
+      "host": "192.168.0.123",
+      "state": "ALIVE",
+      "coresused": 0,
+      "memoryused": 0
+    },
+    {
+      "host": "192.168.0.124",
+      "state": "ALIVE",
+      "coresused": 0,
+      "memoryused": 0
+    }
+  ],
+  "local_tests": 84,
+  "server_tests": 84,
+  "final_patch_sha256": "0da4fba75f32cfaf619bdc7233f96e7990e5e89d478d21ab0cd5d5c479ee599e"
+}
