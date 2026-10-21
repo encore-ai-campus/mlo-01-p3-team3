@@ -34,4 +34,25 @@ def main():
     atomic_json(progress_path,state);return 0
 
 
-if __name__=='__main__':raise SystemExit(main())
+def run():
+    if os.environ.get('PIPELINE_WINDOWED_FLOW')=='1':
+        progress_path=ROOT/'downstream-progress.json'
+        cut=ROOT/'bounded-downstream-v1'
+        if progress_path.exists():
+            previous=read_json(progress_path)
+            if previous.get('execution_root')!=str(cut):
+                from product_pipeline.contracts import digest
+                atomic_json(ROOT/'downstream/status-history'/(digest(previous)+'.json'),previous)
+        state=dict(status='RUNNING',stage='windows',scope='SAVED_BRONZE_BOUNDED_WINDOWS',execution_root=str(cut),updated_at=now())
+        atomic_json(progress_path,state)
+        env=dict(os.environ,PIPELINE_EXECUTION_ROOT=str(cut),PIPELINE_CONTINUOUS='1')
+        code=subprocess.run([sys.executable,str(ROOT/'production_window_work.py')],cwd=ROOT,env=env,stdin=subprocess.DEVNULL).returncode
+        state.update(status='COMPLETED' if code==0 else 'PAUSED_AFTER_BATCH' if code==75 else 'INTERRUPTED',updated_at=now())
+        atomic_json(progress_path,state)
+    else:code=main()
+    if code==0 and os.environ.get('PIPELINE_RESUME_FLOW_AFTER_DOWNSTREAM')=='1':
+        os.execv(sys.executable,[sys.executable,str(ROOT/'continuous_work.py')])
+    return code
+
+
+if __name__=='__main__':raise SystemExit(run())

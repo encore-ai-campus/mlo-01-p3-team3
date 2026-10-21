@@ -1,5 +1,5 @@
 from ansible.module_utils.basic import AnsibleModule
-import hashlib,json,os,pwd,shutil,subprocess,tarfile
+import hashlib,json,os,pwd,shutil,subprocess,tarfile,sys
 from pathlib import Path
 BASE=Path('/var/lib/pj3/product-pipeline/spark')
 ROOT=BASE/'production-pending-20261019'
@@ -11,7 +11,7 @@ def main():
     ROOT.mkdir(exist_ok=True,mode=0o700);os.chown(ROOT,u.pw_uid,u.pw_gid)
     pidfile=ROOT/'worker.pid';alive=False
     if pidfile.exists():
-        pid=int(pidfile.read_text());proc=Path(f'/proc/{pid}/cmdline');alive=proc.exists() and any(s in proc.read_bytes() for s in [b'production_work.py',b'continuous_work.py',b'production_downstream_work.py'])
+        pid=int(pidfile.read_text());proc=Path(f'/proc/{pid}/cmdline');alive=proc.exists() and any(s in proc.read_bytes() for s in [b'production_work.py',b'continuous_work.py',b'production_window_work.py',b'production_downstream_work.py',b'repair_current_batch.py',b'recover_offer_observations.py'])
         if alive and action=='status':
             args=proc.read_bytes().split(b'\0')
             stage='downstream' if b'production_downstream_work.py' in proc.read_bytes() else ('flow' if b'continuous_work.py' in proc.read_bytes() else next((s for s in ['preflight','bronze','silver','gold','publish'] if s.encode() in args),stage))
@@ -69,7 +69,7 @@ def main():
                 (ROOT/'deployment.json').write_text(json.dumps(dict(source_sha256=checksum)))
                 for p in [source,*(source.rglob('*'))]:os.chown(p,u.pw_uid,u.pw_gid)
         shutil.copyfile(STAGE/'production_work.py',ROOT/'production_work.py');os.chown(ROOT/'production_work.py',u.pw_uid,u.pw_gid)
-        for name in ['continuous_work.py','raw_relay.py','production_downstream_work.py']:
+        for name in ['continuous_work.py','raw_relay.py','production_downstream_work.py','production_window_work.py']:
             if (STAGE/name).exists():
                 shutil.copyfile(STAGE/name,ROOT/name);os.chown(ROOT/name,u.pw_uid,u.pw_gid);os.chmod(ROOT/name,0o600)
         if (STAGE/'connect.py').exists():
@@ -88,19 +88,27 @@ def main():
         attempt=dict(started_at=datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z'))
         (ROOT/(stage+'-attempt.json')).write_text(json.dumps(attempt))
         logpath=ROOT/(stage+'.private.log');log=logpath.open('ab');os.chmod(logpath,0o600)
-        env={'PATH':'/usr/bin:/bin','HOME':str(ROOT),'JAVA_HOME':'/usr/lib/jvm/java-21-openjdk-amd64','SPARK_CONF_DIR':'/etc/pj3/spark','SPARK_LOCAL_IP':'127.0.0.1','PYTHONPATH':str(ROOT/'source'),'PYSPARK_PYTHON':PY,'PYSPARK_DRIVER_PYTHON':PY,'LANG':'C.UTF-8',
+        sys.path.insert(0,str(ROOT/'source'))
+        from product_pipeline.runtime_overrides import load
+        records,runtime_path,runtime=load(ROOT,BASE)
+        env={'PATH':'/usr/bin:/bin','HOME':str(ROOT),'JAVA_HOME':'/usr/lib/jvm/java-21-openjdk-amd64','SPARK_CONF_DIR':'/etc/pj3/spark','SPARK_LOCAL_IP':runtime['driver_host'],'PYTHONPATH':str(ROOT/'source'),'PYSPARK_PYTHON':runtime['executor_python'],'PYSPARK_DRIVER_PYTHON':PY,'LANG':'C.UTF-8',
             'AWS_CA_BUNDLE':'/etc/pj3-clients/s3/ca.pem','AWS_DEFAULT_REGION':'us-east-1','PIPELINE_S3_ENDPOINT':'https://192.168.0.141:8443','PIPELINE_S3_CREDENTIALS_FILE':'/etc/pj3-clients/s3/spark.properties',
             'PIPELINE_SPARK_S3_PROFILE':'garage_v241','PIPELINE_SPARK_S3_CREDENTIALS_FILE':'/etc/pj3-clients/s3/spark.properties','PIPELINE_SPARK_S3_BUCKET':'pj3-data',
             'SPARK_SUBMIT_OPTS':'-Djavax.net.ssl.trustStore=/etc/pj3-clients/s3/ca-truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit'}
+        env.update(PIPELINE_WINDOW_RECORDS=str(records),PIPELINE_SPARK_RUNTIME_FILE=runtime_path)
+        if stage=='downstream':
+            env['PIPELINE_RESUME_FLOW_AFTER_DOWNSTREAM']='1'
+            env['PIPELINE_WINDOWED_FLOW']='1'
         command=([PY,str(ROOT/'production_downstream_work.py')] if stage=='downstream' else
             ([PY,str(ROOT/'continuous_work.py')] if stage=='flow' else [PY,str(ROOT/'production_work.py'),stage]))
         p=subprocess.Popen(command,cwd=ROOT,env=env,user=u.pw_uid,group=u.pw_gid,extra_groups=[],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
         pidfile.write_text(str(p.pid));alive=True
     result={'worker_alive':alive,'stage':stage,'root':str(ROOT)}
+    if (ROOT/'runtime-overrides.json').exists():result['runtime_overrides']=json.loads((ROOT/'runtime-overrides.json').read_text())
     if (ROOT/'deployment.json').exists():result['deployment']=json.loads((ROOT/'deployment.json').read_text())
     delta=ROOT/'source/product_pipeline/bronze/delta.py'
     if delta.exists():result['bronze_delta_sha256']=hashlib.sha256(delta.read_bytes()).hexdigest()
-    for name in ['flow-progress.json','downstream-progress.json','raw-relay-progress.json','raw-relay-failure.json']:
+    for name in ['flow-progress.json','downstream-progress.json','raw-relay-progress.json','raw-relay-failure.json','offer-recovery-progress.json','bronze-tls-recovery.json']:
         if (ROOT/name).exists():result[name]=json.loads((ROOT/name).read_text())
     if (ROOT/(stage+'-attempt.json')).exists():result['attempt_started_at']=json.loads((ROOT/(stage+'-attempt.json')).read_text())['started_at']
     if action=='preflight':
@@ -137,6 +145,10 @@ def main():
         else:
             flow=json.loads((ROOT/'flow-progress.json').read_text());epoch=ROOT/'epochs'/('%06d'%int(flow.get('epoch',0)))
         diag={}
+        window_progress=epoch/'windows-progress.json'
+        if window_progress.exists():
+            result['windows-progress.json']=json.loads(window_progress.read_text())
+            epoch=Path(result['windows-progress.json']['execution_root'])
         for phase in ['bronze','silver','gold','publish']:
             file=epoch/(phase+'.private.log')
             if not file.exists():continue

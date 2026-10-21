@@ -30,10 +30,14 @@ class Checkpoint:
 
     def _path(self,name):return self.jvm.org.apache.hadoop.fs.Path(self.path,name)
     def _read(self,path):
+        from ..spark_session import bump
+        bump('archive_reads')
         stream=self.fs.open(path)
         try:return parse(bytes(stream.readAllBytes()).decode('utf-8'))
         finally:stream.close()
     def _write(self,path,value,overwrite):
+        from ..spark_session import bump
+        bump('archive_writes')
         self.lease.check(self.settings)
         stream=self.fs.create(path,overwrite)
         try:stream.write(bytearray(canonical(value).encode()));stream.hflush()
@@ -41,9 +45,22 @@ class Checkpoint:
         self.lease.check(self.settings)
 
     def archive(self,value):
+        import time
+        from ..spark_session import bump
+        started=time.monotonic()
+        try:return self._archive(value)
+        finally:bump('archive_ms',round((time.monotonic()-started)*1000))
+
+    def _archive(self,value):
+        from ..spark_session import cache_get,cache_put
         checksum=digest(value)
         path=self._path('inputs/'+checksum+'.json')
-        self.fs.mkdirs(path.getParent())
+        reference=path.toString();key=(self.stage,reference)
+        # A successful readback of this content-addressed object is reusable
+        # within one Driver only. A restart always reads storage again.
+        if cache_get('verified_input_archives',key) is True:return reference
+        if not getattr(self,'_archive_parent_ready',False):
+            self.fs.mkdirs(path.getParent());self._archive_parent_ready=True
         if self.fs.exists(path):
             try:stored=self._read(path)
             except (PipelineError,UnicodeError) as exc:
@@ -53,9 +70,11 @@ class Checkpoint:
                 self._write(path,value,True)
                 stored=self._read(path)
             if stored!=value:raise Conflict('SILVER_INPUT_ARCHIVE_CONFLICT')
-        else:self._write(path,value,False)
-        if self._read(path)!=value:raise Conflict('SILVER_INPUT_ARCHIVE_UNCONFIRMED')
-        return path.toString()
+        else:
+            self._write(path,value,False)
+            if self._read(path)!=value:raise Conflict('SILVER_INPUT_ARCHIVE_UNCONFIRMED')
+        cache_put('verified_input_archives',key,True)
+        return reference
 
     def cursor(self,version):
         path=self._path('discovery.json')

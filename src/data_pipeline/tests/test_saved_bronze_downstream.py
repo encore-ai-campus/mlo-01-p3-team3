@@ -14,6 +14,14 @@ def module():
 
 
 class DownstreamTests(unittest.TestCase):
+    def test_flow_resumes_only_after_successful_saved_data_publication(self):
+        job=module()
+        with patch.dict(job.os.environ,PIPELINE_RESUME_FLOW_AFTER_DOWNSTREAM='1'):
+            with patch.object(job,'main',return_value=2),patch.object(job.os,'execv') as execute:
+                self.assertEqual(job.run(),2);execute.assert_not_called()
+            with patch.object(job,'main',return_value=0),patch.object(job.os,'execv') as execute:
+                self.assertEqual(job.run(),0)
+                self.assertEqual(execute.call_args.args[1][-1],str(job.ROOT/'continuous_work.py'))
     def test_starts_from_silver_and_reuses_completed_stages_on_resume(self):
         job=module();calls=[]
         with tempfile.TemporaryDirectory() as directory:

@@ -25,11 +25,11 @@ def call(action,stage):
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description='실서버 파이프라인 상태·TLS 점검·단계 실행')
-    parser.add_argument('action',choices=['status','preflight','all','flow',*STAGES])
+    parser.add_argument('action',choices=['status','preflight','all','flow','downstream',*STAGES])
     args=parser.parse_args(argv)
     try:
-        if args.action=='flow':
-            print(json.dumps(call('start','flow'),ensure_ascii=False,indent=2));return 0
+        if args.action in {'flow','downstream'}:
+            print(json.dumps(call('start',args.action),ensure_ascii=False,indent=2));return 0
         if args.action in {'status','preflight'}:
             print(json.dumps(call(args.action,'bronze'),ensure_ascii=False,indent=2));return 0
         stages=STAGES if args.action=='all' else (args.action,)

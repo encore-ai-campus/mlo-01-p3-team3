@@ -1,0 +1,10 @@
+{
+  "bootstrap.servers": "replace-with-broker-1:9092,replace-with-broker-2:9092,replace-with-broker-3:9092",
+  "security.protocol": "SSL",
+  "ssl.keystore.location": "/etc/pj3-clients/kafka/pipeline/keystore.p12",
+  "ssl.truststore.location": "/etc/pj3-clients/kafka/pipeline/truststore.p12",
+  "ssl.keystore.password": "replace-in-protected-server-config",
+  "ssl.truststore.password": "replace-in-protected-server-config",
+  "ssl.key.password": "replace-in-protected-server-config",
+  "ssl.endpoint.identification.algorithm": "https"
+}

@@ -29,16 +29,29 @@ def process_many(groups,inputs,versions,sink,*,processing_run_id,as_of,input_ref
             expected={r['row_key']:r['record_hash'] for r in result['tables'][table]}
             if proof['records']!=expected:raise Conflict('GOLD_RECEIPT_OUTPUT_CONFLICT')
             proofs.setdefault((table,proof['version']),{}).update(expected)
-    for (table,version),expected in proofs.items():sink.verify(table,expected,version)
+    prior=[(table,version,expected) for (table,version),expected in proofs.items()]
+    if hasattr(sink,'verify_many'):sink.verify_many(prior)
+    else:
+        for table,version,expected in prior:sink.verify(table,expected,version)
     manifests={r['evaluation_key']:{} for r in pending}
-    for table in results[0]['tables']:
-        rows=[row for result in pending for row in result['tables'][table]]
-        if pending:
-            sink.insert(table,rows);version=sink.version(table)
-            sink.verify(table,{r['row_key']:r['record_hash'] for r in rows},version)
+    output_rows={table:[row for result in pending for row in result['tables'][table]] for table in results[0]['tables']}
+    if pending and hasattr(sink,'insert_many'):sink.insert_many(output_rows,hook=hook)
+    else:
+        for table,rows in output_rows.items():
+            if pending:sink.insert(table,rows)
+            if hook:hook(table)
+    if pending:
+        tables=list(results[0]['tables'])
+        versions_out=sink.versions_many(tables) if hasattr(sink,'versions_many') else {t:sink.version(t) for t in tables}
+        proofs=[]
+        for table in tables:
+            rows=output_rows[table];version=versions_out[table]
+            proofs.append((table,version,{r['row_key']:r['record_hash'] for r in rows}))
             for result in pending:manifests[result['evaluation_key']][table]=dict(version=version,
                 records={r['row_key']:r['record_hash'] for r in result['tables'][table]})
-        if hook:hook(table)
+        if hasattr(sink,'verify_many'):sink.verify_many(proofs)
+        else:
+            for table,version,expected in proofs:sink.verify(table,expected,version)
     receipts=[]
     for result in pending:
         catalog=result['tables']['product_catalog'][0]
