@@ -27,7 +27,7 @@ $env:PYTHONPATH = (Resolve-Path src).Path
 .\scripts\Start-LocalDemo.ps1 -Mode Worker
 ```
 
-다른 터미널에서 `.\scripts\Start-LocalDemo.ps1 -Mode Web`을 실행하고 `http://127.0.0.1:8004/`에 접속한다. 두 프로세스는 `outputs/local-demo-v43/`의 독립 SQLite·미디어·원천·추천 결과와 같은 카탈로그를 사용한다. 기존 `src/interior_recommender/.env`를 읽으며 새 입력의 해석·질의 임베딩과 선택형 배치 미리보기는 외부 API를 사용한다. 갱신한 `.env`는 Git에 포함하지 않고, 후속 서버 배포 때 보호 설정으로 함께 전송한 뒤 웹·워커를 재시작한다. 로컬 시연 준비는 VMware 웹 배포가 아니다.
+다른 터미널에서 `.\scripts\Start-LocalDemo.ps1 -Mode Web`을 실행하고 `http://127.0.0.1:8005/`에 접속한다. 두 프로세스는 `outputs/local-demo-v43/`의 독립 SQLite·미디어·원천·추천 결과와 같은 카탈로그를 사용한다. 기존 `src/interior_recommender/.env`를 읽으며 새 입력의 해석·질의 임베딩과 선택형 배치 미리보기는 외부 API를 사용한다. 갱신한 `.env`는 Git에 포함하지 않고, 후속 서버 배포 때 보호 설정으로 함께 전송한 뒤 웹·워커를 재시작한다. 로컬 시연 준비는 VMware 웹 배포가 아니다.
 
 2026-10-19. 연결 코드와 Garage 임베딩 실행기를 준비했다. 업무 상품 게시·MySQL 등록/활성화와 임베딩 실행기 배포는 별도 단계다. 기존 로컬 카탈로그와 SketchOn SQLite 작업 원장은 유지한다.
 

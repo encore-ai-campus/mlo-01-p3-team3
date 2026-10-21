@@ -67,6 +67,14 @@ SketchOn 기본 생성 제한은 `RECOMMENDATION_GENERATION_CONCURRENCY=1`, `REC
 
 ## 검증
 
+### 보존된 실제 생성 결과 확인
+
+2026-10-21 문서 대조에서 `outputs/local-demo-v43/recommendations/runs/2a45ab7f-e918-4caa-a3df-31682551f33e/`의 기존 결과를 읽기 전용으로 확인했다. 2026-10-21 12:47 KST 실행은 Cloudflare `@cf/black-forest-labs/flux-2-klein-4b`, `web_demo=false`, `preview.json`의 `demo=false`, manifest `COMPLETED`·preview stage `SUCCEEDED`이며 제공처 요청 ID가 남아 있다. `generated.png` 존재와 manifest에 기록된 결과 JSON·receipt의 SHA256 일치를 확인했다. 이번 확인에서 API를 새로 호출하거나 기존 결과를 재생성하지 않았다.
+
+따라서 로컬 실제 생성 성공은 확인한 상태다. VMware 실행 환경의 성공·실패·재시도와 생성 품질·상품 동일성·지연·부하 검증은 별도로 남는다. 아래 2026-10-18 기록은 당시 비과금 시험 범위다.
+
+### 초기 비과금 회귀 검증
+
 2026-10-18 실행 결과: 엔진 pytest 221개, Django 추천/실행 31개와 신규 제공처 gate 1개, Node 30개 통과. Django check와 수정 Markdown 19개의 로컬 링크도 확인했다. Playwright 미설치로 브라우저 시각 점검은 수행하지 않았고 실제 유료 생성 API·운영 DB 변경은 하지 않았다.
 
 권한·CSRF·추천 포함 여부·checksum·자동 생성 없음·중복 클릭·선택 상품 대응·생성 실패 시 추천 보존·실패 재시도·receipt 이후 저장 실패 복구를 비과금 응답으로 검사한다. 제공처 async 전송/gate도 가상 통신으로 검사한다. 실제 생성 품질·지연·부하·시각적 동일성·운영 배포 완료를 의미하지 않는다.

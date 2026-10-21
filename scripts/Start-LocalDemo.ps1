@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Init', 'Check', 'Web', 'Worker')]
     [string]$Mode = 'Web',
-    [int]$Port = 8004,
+    [int]$Port = 8005,
     [string]$Snapshot = '',
     [string]$Python = ''
 )

@@ -16,7 +16,7 @@
 | `src/local_demo/` | #34 시연용 Django 앱 | 시연 코드·화면·테스트를 분리하고 독립 진입점 제공 |
 | `src/interior_recommender/` | 공유 추천·생성 엔진, 운영 카탈로그 어댑터 | MySQL·Garage·Delta 연결 코드 보존 |
 | `src/data_pipeline/`, `src/ad_server/` | 팀 파이프라인·광고 서버 | 시연 분리를 이유로 원복하거나 교체하지 않음 |
-| `scripts/Start-LocalDemo.ps1` | 시연 전용 실행 | `src/local_demo/manage.py`만 실행, 기본 포트 8004 |
+| `scripts/Start-LocalDemo.ps1` | 시연 전용 실행 | `src/local_demo/manage.py`만 실행, 기본 포트 8005 (광고 서버 안내는 8004) |
 
 원격 dev는 `git fetch origin dev` 후 확인했다. 오래된 로컬 `dev`는 복원 기준으로 사용하지 않았다. 이후 dev가 변경되면 PR 차이를 다시 확인한다. 두 앱은 각각 별도 프로세스로 실행하며 같은 이름의 Django 앱을 한 프로세스에 동시에 로딩하지 않는다.
 
@@ -32,7 +32,7 @@
 
 ## 실행과 검증
 
-[시연 README](../../src/local_demo/README.md)의 한 줄 명령을 사용한다. 기존 스크립트의 Init·Check·Web·Worker 인터페이스는 유지하며 기본 포트만 8004로 분리한다. Check는 기존 스냅샷 checksum·행 대응·Django 설정만 검사한다. Init는 시연 DB 변경 명령이며 승인한 시연 경로에서만 실행한다. Web·Worker는 같은 카탈로그·SQLite·출력을 사용해야 한다.
+[시연 README](../../src/local_demo/README.md)의 한 줄 명령을 사용한다. 기존 스크립트의 Init·Check·Web·Worker 인터페이스는 유지하며 기본 포트를 8005로 변경해 광고 서버 안내의 8004와 구분한다. Check는 기존 스냅샷 checksum·행 대응·Django 설정만 검사한다. Init는 시연 DB 변경 명령이며 승인한 시연 경로에서만 실행한다. Web·Worker는 같은 카탈로그·SQLite·출력을 사용해야 한다. 포트 변경 후 8004 origin의 브라우저 저장소는 8005 origin으로 자동 이전되지 않으며 기존 DB·파일은 유지한다.
 
 검증은 별도 임시 SQLite·미디어·Raw·추천 출력에서 원본 앱과 시연 앱을 각자 실행한다. 원본은 `src/demo_sketchon/manage.py`, 시연은 `src/local_demo/manage.py`의 Django check·테스트와 Node/브라우저 회귀를 사용한다. 실제 API는 호출하지 않으며 테스트 종료 시 임시 파일·프로세스를 정리한다. `git diff origin/dev -- src/demo_sketchon`에 소스 변경이 없어야 한다.
 
