@@ -1,15 +1,54 @@
 # 데이터 모델: 직접 추천 변경안과 기존 원장
 
+## Gold 게시 필수 확장
+
+2026-10-18: 서비스 DDL은 [Gold→MySQL 게시 필드 계약](13-gold-mysql-publication.md)을 포함한다. 확장된 참조 DDL `publication_reference_v2.sql`은 제조사·속성·준비 상태·출처·대표 이미지·임베딩 참조·링크 관측을 구현한다. 초기 v1 계약이나 아래 요약만으로 확장을 대신하지 않는다. 실제 운영 DB migration·기존 값 보완은 별도 인수하며 상세 타입/NULL/관계/고유 제약은 게시 계약이 기준이다.
+
+Gold의 모든 컬럼은 직접 저장·관계 변환·불변 게시 원문 참조·미게시 사유 중 하나로 대응한다. 같은 게시 버전의 값과 근거를 보존하고, 운영자 상품/이미지 활성·이용 검수는 별도 소유권으로 유지한다. Gold JSON에 값이 있다는 이유로 확인 상태·옵션·부위를 무시하지 않는다. `products.color` 같은 기존 단일값 필드는 호환용이며 전체 `attributes_json`을 대체하지 않는다.
+
+현재 참조 DDL/게시 코드와 로컬 파일 추천은 이 확장 계약의 구현 전 상태다. 실제 DB 변경·통합 완료를 뜻하지 않는다.
+
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 2026-10-15 현행 변경안은 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)과 [논리 ERD](12-direct-recommendation.md#논리-데이터와-erd-변경안)다. 구현/DDL 반영 완료가 아니다.
 
 신규 입력 버전→추천 맥락→추천 run→항목→노출/행동으로 연결한다. run 접수 시 context_id는 비어 있을 수 있으나 검색 전에는 같은 입력의 확정 맥락을 요구한다. generation_run/scene_object/template FK는 신규 추천 선행 조건이 아니다. 프로젝트 최신 추천 FK는 입력 순번과 완료 상태를 대조해 갱신한다.
 
 기존 상품/Offer/이미지/원천/링크/인덱스·입력 버전·AI 호출·작업·이벤트의 UUID·시점·보존/권한 원칙은 유지한다. 요청 조건/공간 관찰/배치/크기 근거/코드 검증·정책과 요청 당시 후보/특징을 별도 보존한다. 실험 라벨은 요청 당시 특징과 분리한다. AI 추정 치수를 상품 규격 원장에 쓰지 않는다.
 
-아래 상세 목록은 기존 컬럼의 출처를 보존한 자료다. 특히 recommendation_runs의 생성물 필수 연결·projects.latest_generation_run_id·생성 엔터티는 신규 v2 명세로 사용하지 않는다. 실제 마이그레이션과 구버전 이력 조회/제약 전환은 별도 구현한다.
+아래 상세 목록은 기존 컬럼의 출처를 보존한 자료다. 특히 recommendation_runs의 생성물 필수 연결·projects.latest_generation_run_id·생성 엔터티는 신규 직접 추천 명세로 사용하지 않는다. 실제 마이그레이션과 구버전 이력 조회/제약 전환은 별도 구현한다.
 
 
-운영 scikit-learn 추천은 run별 ranking_model_ref_json·feature_schema_version·ranking_version·인덱스 버전을 고정하고 item별 model_score를 보존한다. 모델 artifact/전처리/특징·실행 환경의 호환성과 checksum을 배포 전 확인한다. 기존 원장을 덮어쓰지 않고 새 run이 활성 모델을 사용하며 미준비/추론 오류는 별도 상태다. 상세 필드와 학습/배포 계약은 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)을 따른다. 실제 코드/DDL 도입은 별도 작업이다.
+운영 추천은 run별 ranking_policy_json(수동 가중치·결측/미선호 정책·MANUAL_INITIAL)·ranking_version·인덱스/임베딩 버전을 고정한다. item별 ranking_score·score_components_json과 조건별 상태를 보존한다. 초기에는 학습 모델 artifact가 필요 없으며 후속 학습 모델 참조는 선택 사항이다. 상세 필드는 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)을 따른다. 실제 DB/DDL 반영은 별도 작업이다.
+
+## 실버·골드와 서비스 원장 대응
+
+2026-10-16 반영. Delta 관측 테이블과 MySQL 서비스 테이블은 별도다. [실버·골드 필드 사전](data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위)의 행 기준·원문 경로·확인 상태를 적용하며 물리 스키마와 마이그레이션 완료를 뜻하지 않는다.
+
+Silver 공통 추적은 `source_code`·`source_product_id`·`product_key`·`raw_document_id`·원문/추출 hash·`collection_run_id`·`observed_at`·`normalizer_version`·`processing_run_id`다. 속성/가격/이미지/링크는 옵션과 자식 항목의 안정 키로 관측에 연결한다. 같은 입력 재전달은 같은 관측을 재사용하고 다른 시점 관측은 새 이력이다. 정확한 복합 키·hash 계산은 구현 전에 확정한다. 다른 저장소 사이에 물리 FK를 추가하지 않는다.
+
+| Gold 논리 출력 | 행 기준·키 | 서비스 원장 또는 사용처 |
+|---|---|---|
+| `gold_product_catalog` | 안정 `product_key`의 현재 상품, 옵션 연결 유지 | `products`의 UUID·상품명·품목·브랜드/모델·확인 규격 및 확장 속성 |
+| `gold_recommendation_images` | 상품–이미지 연결과 벡터/인덱스 버전 | `product_images`, `assets`, `product_embeddings`, `search_index_versions` 대응 검증 |
+| `gold_product_links` | 상품별 검증한 비교 링크 | `products.comparison_url`, 추천 시 `link_snapshot_json` |
+| `gold_offers_current` | 안정 `offer_key`별 현재 판매 항목 | `offers`; 확인된 판매처·옵션이 없으면 행을 만들지 않음 |
+| `gold_offer_snapshots` | 판매 항목·관측 시점·원천의 안정 이력 키 | `offer_snapshots`, 당시 가격·조건·URL·원천 참조 |
+| `gold_catalog_quality_daily` | 기준일·품목·고정 입력 버전의 집계 | 운영 품질 조회. 사용자 반응 `ad_metrics_daily`나 광고 예산 원장과 별도 |
+
+| 논리 필드 묶음 | 대응·확장 규칙 |
+|---|---|
+| `display_name`, `normalized_name`, `manufacturer`, `brand`, `model` | 확인 표시명은 기존 `products.name`, 모델은 `products.model_name`에 대응한다. 정규 이름·제조사·필드별 provenance는 확장 저장 계약을 DDL 전에 정한다. 제조사를 브랜드에 대입하지 않는다. |
+| `source_category_path`, `collection_category_context`, `category_code`, `mapping_status`, `mapping_version` | API 분류와 수집 설정 분류를 별개로 보존한다. 기존 `category_mappings`·`categories`와 버전 대응하며 미매핑·제외를 구분한다. |
+| 색상·재질·형태 및 `dimension_raw`·`dimension_status`·`measurement_target`·`option_key` | 코드 목록과 원문·부위·옵션·확인 상태를 보존한다. 기존 단일 `color`에 복수 옵션을 손실 저장하지 않는다. 서비스 확장 컬럼/JSON·직렬화는 별도 확정하며 이미 존재하는 컬럼으로 가정하지 않는다. |
+| `price_krw`, `price_kind`, 가격 조건·시각·확인 상태 | 상품 목록 가격 관측은 판매처 Offer 가격과 별도다. 목록 가격을 기존 `offers.price_amount`로 복제해 가상 판매처를 만들지 않는다. |
+| 네 가지 준비 상태·`readiness_reasons_json` | 상품 카탈로그·검색 벡터·비교 주소·구매 주소별 준비를 나눈다. 기존 `products.status`, 이미지 `active`, `offers.eligible`은 각 원장의 상태로 유지하고 서로 자동 치환하지 않는다. |
+
+Gold 현재 값은 필드별 출처·관측 시각·확인 상태·선택 정책 버전으로 결정한다. 수집 실패로 이전 확인값을 NULL로 덮어쓰지 않으며 값 철회·상품 비활성화는 별개다. 값의 관측 시각과 최신 수집 실패를 함께 남긴다. 옵션별 가격·색상·규격을 다른 옵션에서 조합하지 않는다.
+
+Gold 내부 상품 UUID는 안정 업무 키의 기존 매핑을 사용한다. `image_id`는 `assets.id`, 상품–이미지 연결 ID는 `product_images.id`로 분리한다. 벡터는 이미지 asset 단위로 공유하고 상품별 유효 연결은 조회 시 확장한다. 요청별 `ranking_score`·`score_components_json`·조건 판정은 추천 run/item의 이력이며 Gold 상품 속성이 아니다.
+
+현재 컬럼을 유지하는 서비스 게시와 새 논리 필드의 저장 확장은 구분한다. 추가 필드의 NULL·타입·enum·원장 소유자·API 계약을 정한 뒤 ORM/DDL을 검증한다. 현행 상세 ERD의 MySQL 엔터티 수에 위 Delta 논리 테이블을 더해 표시하지 않는다.
 
 <details>
 <summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>
@@ -220,7 +259,7 @@ product_embeddings에는 product_id를 두지 않는다. 상품별 연결은 pro
 
 확인된 일반 판매가격·혜택가격·배송비·옵션 조건을 분리한다. 미확인 금액은 NULL이다. offer_snapshots.pricing_terms_json에 당시 조건을 보존한다. 현재 다나와 상품의 확인된 소비자 판매 조건만 서비스 가격 필드에 적재한다. 다른 출처의 가격은 이번 서비스 상품 가격으로 옮기지 않는다.
 
-recommendation_items.offer_snapshot_id는 확인된 Offer가 없는 비교 상품 추천에서 NULL을 허용한다. 이 경우 추천 당시 comparison_url을 link_snapshot_json에 고정하고 가격/직접 구매 버튼은 미제공으로 표시한다. 구매 클릭은 Offer·옵션·현재 링크 검증 성공 사례에만 기록한다.
+recommendation_items.offer_snapshot_id는 확인된 Offer가 없는 비교 상품 추천에서 NULL을 허용한다. 이 경우 추천 당시 comparison_url을 link_snapshot_json에 고정하고 직접 구매 버튼은 제공하지 않는다. 검증된 목록 가격 관측이 있으면 가격 종류·조건·관측 시각과 함께 별도 표시하고 없으면 미제공으로 표시한다. 구매 클릭은 Offer·옵션·현재 링크 검증 성공 사례에만 기록한다.
 
 ## 쓰기 책임
 

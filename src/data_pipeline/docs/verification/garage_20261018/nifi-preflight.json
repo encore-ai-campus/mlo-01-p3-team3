@@ -1,0 +1,1 @@
+{"role": "nifi", "uid": 999, "status": "PREFLIGHT", "production_objects_modified": false, "service_config_modified": false, "protected_file_readable": true, "ca_readable": true, "boto3_available": true}

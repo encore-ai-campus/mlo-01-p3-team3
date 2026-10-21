@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RoomPick 상품 추천</title><link rel="stylesheet" href="ui/studio.css"></head>
+<body>
+<header><a class="brand" href="./">Room<span>Pick</span></a><span class="mode">{% if demo %}데모 · 가상 상품/고정 해석{% else %}공간 맞춤 상품 추천{% endif %}</span></header>
+<main>
+  <h1>우리 방에 어울리는 가구 찾기</h1>
+  <p>방 사진과 원하는 가구를 알려주세요. 스케치가 있으면 함께 보낼 수 있습니다.</p>
+  <div class="layout">
+    <aside class="panel">
+      <form id="request-form">
+        <label>방 사진<input name="photo" type="file" accept="image/png,image/jpeg,image/webp" required></label>
+        <label>원하는 가구<textarea name="text" rows="5" placeholder="예: 원목 의자, 폭 60cm 이하로 찾아줘"></textarea></label>
+        <label>스케치 (선택)<input name="sketch" type="file" accept="image/png,image/jpeg"></label>
+        <p class="hint">스케치는 사진과 같은 크기로 준비하세요. 기존 Canvas에서도 요청할 수 있습니다.</p>
+        <button class="primary" type="submit" disabled>상품 추천받기</button>
+      </form>
+      <img id="room" class="room" alt="입력한 방 사진" hidden>
+    </aside>
+    <section class="content" aria-live="polite">
+      <div id="status" class="notice">사진과 텍스트 또는 스케치를 입력하세요.</div>
+      <button id="retry" class="quiet" hidden>같은 요청 재시도</button>
+      <div id="context" class="panel" hidden></div>
+      <div class="panel"><h2>조건을 확인한 상품</h2><div id="items" class="candidates"></div></div>
+      <div id="unverified-panel" class="panel" hidden><h2>필수 정보 미확인 후보</h2><p class="hint">품목·규격 등 필요한 정보가 없어 조건 충족 여부를 확인하지 못했습니다.</p><div id="unverified" class="candidates"></div></div>
+      <section id="product-preview" class="panel" hidden><h2 data-preview-title>상품 배치 미리보기</h2><p data-preview-status role="status"></p><img data-preview-image class="room" alt="AI가 만든 상품 배치 미리보기" hidden><button data-preview-retry type="button" hidden>미리보기 재시도</button><p class="hint">실제 상품의 형태·색상·크기 및 설치 가능성은 원래 상품 정보에서 확인하세요. 같은 상품을 다시 선택하면 기존 작업과 결과를 불러옵니다.</p></section>
+    </section>
+  </div>
+  <p class="hint">추정 크기는 실측이 아닙니다. 설치 가능 여부는 확인된 상품 규격과 실제 공간을 기준으로 확인해야 합니다. 가격·상품 연결이 없는 이미지 후보에는 구매 링크를 제공하지 않습니다.</p>
+</main>
+<script type="module" src="ui/direct.js"></script>
+</body></html>

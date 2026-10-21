@@ -1,0 +1,56 @@
+.result-toolbar { flex-wrap: wrap; }
+.view-tabs, .placement-history { display: flex; flex-wrap: wrap; gap: 8px; }
+.view-tabs button[aria-pressed="true"], .scene-object-button[aria-pressed="true"] { border-color: var(--green); background: #edf1e6; }
+.placement-history { padding: 10px 18px; }
+.placement-history button { font-size: 12px; }
+.object-panel { margin-top: 24px; padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
+.object-panel h2 { margin-top: 0; font-size: 20px; }
+.panel-description, .object-tip p, .object-correction p { color: #748071; font-size: 13px; line-height: 1.7; }
+.scene-object-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.scene-object-button { display: flex; gap: 10px; align-items: center; padding: 10px; text-align: left; }
+.scene-object-button img, .recommendation-context img { width: 58px; height: 58px; object-fit: contain; background: #f3f5ef; border-radius: 8px; }
+.scene-object-button strong, .scene-object-button small { display: block; }
+.scene-object-button small { font-size: 11px; font-weight: normal; color: #748071; margin-top: 4px; }
+.object-check { visibility: hidden; }
+.scene-object-button[aria-pressed="true"] .object-check { visibility: visible; }
+.object-correction { margin: 16px 0; border-top: 1px solid var(--border); padding-top: 14px; }
+.object-correction summary { cursor: pointer; font-size: 13px; padding: 8px 0; }
+.object-correction select { width: 100%; max-width: 360px; margin: 8px 0; padding: 10px; }
+.bbox-fields { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.bbox-fields label { font-size: 12px; }
+.bbox-fields input { width: 100%; min-width: 0; padding: 8px; margin-top: 6px; }
+#search-region { position: absolute; z-index: 3; outline: 2px dashed #ba7440; background: #d8954422; touch-action: none; cursor: move; color: #563410; font-size: 12px; }
+#search-region > span:first-child { background: #f9e8cb; padding: 3px 6px; pointer-events: none; }
+.region-resize { position: absolute; bottom: 0; right: 0; width: 32px; height: 32px; display: grid; place-items: center; background: #ba7440; color: white; cursor: nwse-resize; }
+.recommendation-context { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.recommendation-context strong, .recommendation-context span { display: block; font-size: 12px; }
+.recommendation-context button { margin-left: auto; }
+.product-image { overflow: hidden; position: relative; }
+.product-image img { width: 100%; height: 100%; object-fit: contain; }
+.product-image .sample-label { position: absolute; left: 8px; bottom: 8px; background: #fff; font-size: 10px; padding: 4px 6px; border-radius: 5px; }
+.product-image .image-fallback { font-size: 13px; }
+.product-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.product-actions button { flex: 1 1 90px; font-size: 12px; padding: 9px; }
+.product-actions .product-link { flex-basis: 100%; }
+.product-actions button[aria-pressed="true"] { border-color: var(--green); background: #edf1e6; }
+.product-card.rejected { background: #f3f2ef; }
+.product-card.skeleton { opacity: .6; }
+.error-text { color: #a43f32; }
+#retry-recommendation { margin-top: 16px; }
+[hidden] { display: none !important; }
+@media(max-width:650px) {
+    .result-toolbar > span { width: 100%; }
+    .result-toolbar button, .placement-history button { min-height: 44px; }
+    .object-panel { padding: 16px; }
+    .scene-object-list { display: grid; grid-template-columns: minmax(0,1fr); }
+    .bbox-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .product-grid { grid-template-columns: minmax(0,1fr); gap: 16px; }
+    .product-card { display: grid; grid-template-columns: 110px minmax(0,1fr); column-gap: 12px; padding: 12px; }
+    .product-image { grid-column: 1; grid-row: 1 / 6; }
+    .product-card > h3, .product-card > p, .product-actions { grid-column: 2; }
+    .product-card h3 { font-size: 14px; margin-top: 4px; }
+    .product-card p { font-size: 12px; }
+    .product-actions { grid-column: 1 / -1; }
+    .product-actions button { min-height: 44px; }
+    .recommendation-context { flex-wrap: wrap; }
+}

@@ -305,3 +305,13 @@ price_amount는 확인한 일반 판매가격. 조건부 혜택 가격은 별도
 - 형식: json
 - 예시: `{"storage":{"status":"APPROVED"},"display":{"status":"PENDING"},"embedding":{"status":"PENDING"},"generation":{"status":"DENIED"}}`
 - 해석: 용도별 scope·검토자·시각·만료·근거·감사 event_id·source_version·permission_snapshot_hash를 포함한다. 상태 예시는 근거 없는 승인 기본값이 아니다. 상품 원본의 초기 생성 이용은 금지하며 검토 변경 이력을 보존한다.
+
+## 실버·골드 가격·이미지·링크 준비
+
+2026-10-16 입력 경로와 상세 규칙은 [실버·골드 필드 계약](01-raw-delta.md#실버골드-필드-계약-적용-범위)을 따른다. `price.min`·목록 가격은 목록 최저가 관측이며 `price.total`, `member`, `memberTotal`과 의미 미확인 `initial`·`initialTypeName`·`promotionMinPriceQ`를 같은 일반가로 합치지 않는다. formatted 문자열은 숫자 대조용 원문이며 충돌은 품질 문제로 남긴다.
+
+`gold_product_links`의 `comparison_link_ready`는 비교 페이지 대응·현재 상태 검증, `gold_offers_current`의 `purchase_link_ready`는 판매처·옵션·조건·직접 주소 검증이다. `catalog_ready`나 다운로드 성공으로 링크를 승인하지 않는다. 미준비는 버튼을 비활성화하고 상태별 사유를 보존한다. TTL·대표가격 선택 정책·동일 시각 충돌 우선순위는 팀이 확정한다.
+
+`image.version`은 `source_image_version`으로 보존하고 바이트 checksum과 분리한다. 로컬 파일 경로는 `asset_ref`의 배포 저장소 참조로 대응하되 URL/경로 존재만으로 다운로드 성공을 표시하지 않는다. 파일 디코딩·해시·크기 대조와 상품별 이용 범위·원천 버전은 별도로 확인한다.
+
+목록 가격은 `price_kind`·조건·관측 시각을 명시해 표시할 수 있다. Offer가 없다는 이유로 확인된 목록 가격 관측까지 폐기하지 않으며, 이를 최종 결제금액이나 판매처 일반가로 표시하지 않는다. 준비 상태·추가 가격 필드의 실제 서비스 저장은 [원장 대응](../03-data-model.md#실버골드와-서비스-원장-대응)을 먼저 확정한다.

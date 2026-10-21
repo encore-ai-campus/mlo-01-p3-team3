@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interior-recommender"
+version = "0.1.0"
+description = "CPU content-based product recommendations with multimodal API interpretation"
+requires-python = ">=3.11"
+dependencies = ["google-genai>=2.30.1,<3", "Pillow>=11,<13", "pydantic>=2.10,<3", "httpx>=0.28.1,<1", "python-dotenv>=1.1,<2", "Django>=5.2,<5.3", "scikit-learn>=1.6,<2", "numpy>=1.24,<3", "threadpoolctl>=3.1,<4"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+server = ["PyMySQL==1.1.2", "boto3>=1.40,<2"]
+
+[project.scripts]
+interior-recommender = "interior_recommender.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = ".."}
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["interior_recommender*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"interior_recommender" = ["templates/*.json", "examples/*.json"]
+"interior_recommender.web" = ["ui/*.html", "ui/*.css", "ui/*.js", "ui/*.mjs", "*.mjs", "*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".."]

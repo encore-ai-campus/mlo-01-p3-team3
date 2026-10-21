@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.env
+.env.*
+!src/.env.example
+outputs/
+data/
+/src/interior_recommender/sample/
+
+build/
+dist/

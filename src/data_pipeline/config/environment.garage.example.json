@@ -1,0 +1,15 @@
+{
+  "environment_id": "replace-with-approved-environment",
+  "mongo_database": "replace-with-approved-database",
+  "mongo_replica_set": "rs-products",
+  "mongo_uri_env": "PIPELINE_MONGO_URI",
+  "image_bucket": "pj3-data",
+  "handoff_bucket": "pj3-data",
+  "s3_endpoint_env": "PIPELINE_S3_ENDPOINT",
+  "s3_profile": "garage_v241",
+  "s3_credentials_file_env": "PIPELINE_S3_CREDENTIALS_FILE",
+  "kafka_topic": "product.raw.collected",
+  "kafka_config_env": "PIPELINE_KAFKA_CONFIG",
+  "lease_seconds": 120,
+  "max_attempts": 3
+}

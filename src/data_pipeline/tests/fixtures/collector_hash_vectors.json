@@ -1,0 +1,42 @@
+{
+  "source_revision": "67e837d",
+  "vectors": [
+    {
+      "input": {
+        "listings": [
+          {
+            "category": {
+              "category_id": "1"
+            },
+            "collected_at": "old",
+            "product_id": "11",
+            "name": "의자"
+          }
+        ],
+        "detail": {
+          "collected_at": "old",
+          "status": "ok"
+        }
+      },
+      "sha256": "4eb47f1648ffb3af152453d66993afaaddeb531b9c079a2c19b7535427cf8ef5"
+    },
+    {
+      "input": {
+        "listings": [
+          {
+            "price_text": "1,000원",
+            "api_product": {
+              "productCode": 11,
+              "names": [
+                "A",
+                "B"
+              ]
+            }
+          }
+        ],
+        "detail": null
+      },
+      "sha256": "eed4500afe76918190c7d9fd6b92ccf4914a02feb8d13329e5f4db1332ad922c"
+    }
+  ]
+}

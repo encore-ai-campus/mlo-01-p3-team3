@@ -1,0 +1,5 @@
+# VM client profile; keep the existing Spark service unchanged.
+# Resolve transitive Python dependencies, run pip check, and retain pip freeze.
+# JVM jars must use the Spark 4.1 artifact and its complete runtime dependencies.
+pyspark==4.1.3
+delta-spark==4.4.1

@@ -1,6 +1,12 @@
 # Application과 외부 AI: 입력 맥락 기반 추천
 
-2026-10-15 현행 설계. 상세 책임·응답 구획·코드 검증 예시는 [직접 추천 계약](12-direct-recommendation.md)을 따른다. 기존 생성 MVP 코드/스키마는 이번 문서 작업에서 변경하지 않았다.
+2026-10-18 선택 생성 추가: [상품 배치 미리보기](../interior-recommender/product-preview.md)는 추천 상품 선택 후 `application.preview`가 저장된 방·상품·스케치를 확인하고 코드로 프롬프트/좌표를 조립해 이미지 API만 호출한다. Cloudflare/Gemini native async·별도 생성 한도를 사용하며 해석/질의 임베딩/생성물 분석은 추가 호출하지 않는다. 성공 추천과 생성 상태/실패는 분리한다.
+
+2026-10-18 로컬 구현: [방 특징 추천](../interior-recommender/interior-ranking.md)의 `direct-context-v3`는 palette/materials/shapes/styles와 관찰 근거·불확실성을 별도 수신한다. `interior-content-v3`는 이를 검색 질의와 소프트 가점에 반영한다. API 호출은 기존 해석/질의 임베딩 각 1회이며 사용자 필수조건·검증된 상품 사실·추정 공간 치수와 분리한다. 현재 MySQL 연결은 후속 범위다.
+
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
+2026-10-15 현행 설계. 상세 책임·응답 구획·코드 검증 예시는 [직접 추천 계약](12-direct-recommendation.md)을 따른다. 직접 추천 로컬 웹 경로를 구현했으며 서비스 DB/API v2 전환은 별도다.
 
 ## AI와 해석 이후 코드의 책임
 
@@ -20,7 +26,9 @@ RECEIVED→BRONZE_PENDING→INTERPRETING→VALIDATING→SEARCHING→COMPLETED �
 
 ## 이번 운영 추천과 후속 고도화
 
-scikit-learn은 저장한 후보 특징/라벨로 학습·평가하고 광고 서버 CPU에서 실제 사용자 추천 순위를 결정한다. Application은 모델/특징/점수 버전을 저장한다. 모델 로딩/추론 실패를 후보 없음으로 숨기지 않는다. 후속은 데이터/모델/재학습 고도화와 임베딩/인덱스·멀티모달 추가 내재화다. 크기 추정의 정확도는 추천 모델 배포와 별개로 검증한다.
+초기 추천은 라벨 없이 scikit-learn `cosine_similarity`와 수동 초기 가중치로 수행한다. `weighted-content-v1`은 선호 색상이 있으면 `0.85 × 유사도 + 0.15 × 색상 일치`, 없으면 유사도만 사용한다. 필수 조건 불일치는 제외하고 결측·미지원 필수 조건은 UNKNOWN 목록으로 분리한다. 가중치는 학습값이 아니며 점수는 확률이 아니다. 사람의 6만 이미지 전수 적합/부적합 라벨링·LogisticRegression 학습·직렬화 모델 파일은 초기 실행 조건이 아니다. 반응 자료를 충분히 확보한 뒤 지도학습을 별도 평가한다.
+
+로컬 구현은 `src/interior_recommender/recommendation.py`와 `src/interior_recommender/web/direct.py`다. `python -m interior_recommender.web` 기본 경로가 직접 추천이며 기존 Canvas의 `POST /api/runs`를 재사용한다. 해석 1회와 질의 임베딩 1회를 기본으로 하며 성공 receipt를 재사용한다. 별도 입력 절차·템플릿 선택·이미지 생성은 없다. 실제 DB·Kafka·Delta Bronze·광고 서버 HTTP·FAISS·상품 링크 검증 API 통합 및 운영 배포는 아직 미구현이다. 논리 서비스 계약을 로컬 파일 구현 완료와 혼동하지 않는다.
 
 <details>
 <summary>이전 설계 이력 — 이미지 생성 중심 흐름과 당시 계약</summary>

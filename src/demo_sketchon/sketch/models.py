@@ -1,0 +1,137 @@
+import uuid
+from django.db import models
+from django.conf import settings
+
+
+def empty_document():
+    return {"strokes": [], "items": []}
+
+
+class Project(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.CharField(max_length=32, db_index=True)
+    flow_id = models.UUIDField(null=True, blank=True, db_index=True)
+    account = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT)
+    saved_project = models.ForeignKey('SavedProject', null=True, blank=True, on_delete=models.PROTECT)
+    title = models.CharField(max_length=100)
+    photo = models.FileField(upload_to="rooms/", blank=True)
+    original_photo = models.FileField(upload_to="originals/", blank=True)
+    original_checksum = models.CharField(max_length=64, blank=True)
+    request_context = models.JSONField(default=dict)
+    width = models.PositiveIntegerField(default=1200)
+    height = models.PositiveIntegerField(default=800)
+    document = models.JSONField(default=empty_document)
+    revision = models.PositiveIntegerField(default=0)
+    locked = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SketchEvent(models.Model):
+    event_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.PROTECT)
+    event_type = models.CharField(max_length=40)
+    event_time = models.DateTimeField(auto_now_add=True)
+    payload = models.JSONField(default=dict)
+    actor_kind = models.CharField(max_length=12, default='unknown')
+    actor_account = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    visitor_id = models.CharField(max_length=32, blank=True)
+    flow_id = models.UUIDField(null=True, blank=True, db_index=True)
+    reported_actor_kind = models.CharField(max_length=12, default='unknown')
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["published_at", "event_time"])]
+
+
+class Composition(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.PROTECT)
+    image = models.FileField(upload_to="results/")
+    input_document = models.JSONField()
+    placements = models.JSONField()
+    revision = models.PositiveIntegerField()
+    version = models.PositiveIntegerField(default=0)
+    generation_context = models.JSONField(default=dict)
+    initial_placements = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class RecommendationRun(models.Model):
+    """Application-owned request/result; an Ad provider never writes user history."""
+    id = models.UUIDField(primary_key=True, editable=False)
+    composition = models.ForeignKey(Composition, on_delete=models.PROTECT)
+    scene_object_id = models.UUIDField()
+    input_version = models.PositiveIntegerField()
+    input_hash = models.CharField(max_length=64)
+    lease_token = models.UUIDField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=20, default="SUCCEEDED")
+    mode = models.CharField(max_length=20, default="mock")
+    items = models.JSONField(default=list)
+    metadata = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SceneObjectRevision(models.Model):
+    """An explicit search correction; the generated scene image stays unchanged."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    composition = models.ForeignKey(Composition, on_delete=models.PROTECT)
+    placement_id = models.CharField(max_length=80)
+    base_version = models.PositiveIntegerField()
+    previous_object_id = models.UUIDField()
+    category_id = models.CharField(max_length=40)
+    bbox = models.JSONField()
+    request_id = models.UUIDField(unique=True)
+    input_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["composition", "placement_id", "created_at"], name="scene_revision_lookup")]
+
+
+class GuestGenerationUsage(models.Model):
+    client_ip = models.GenericIPAddressField()
+    usage_date = models.DateField()
+    successful_count = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['client_ip','usage_date'], name='guest_ip_day')]
+
+
+class SavedProject(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    title = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SavedProjectVersion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    saved_project = models.ForeignKey(SavedProject, on_delete=models.PROTECT, related_name='versions')
+    version_number = models.PositiveIntegerField()
+    composition = models.ForeignKey(Composition, on_delete=models.PROTECT)
+    source_result_version = models.PositiveIntegerField()
+    request_id = models.UUIDField(unique=True)
+    snapshot = models.JSONField()
+    image = models.FileField(upload_to='saved_projects/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['saved_project','version_number'], name='saved_project_version'),
+                       models.UniqueConstraint(fields=['composition','source_result_version'], name='saved_source_version')]
+
+
+class WishlistEntry(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    stable_item_key = models.CharField(max_length=200)
+    item_snapshot = models.JSONField()
+    recommendation_run = models.ForeignKey(RecommendationRun, on_delete=models.PROTECT)
+    item_id = models.UUIDField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user','stable_item_key'], name='wishlist_user_item')]
