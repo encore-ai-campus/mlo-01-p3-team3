@@ -1,0 +1,73 @@
+{
+  "verified_date": "2026-10-21",
+  "local_unit_tests": 26,
+  "applications": [
+    {
+      "app_id": "app-20261021094030-0022",
+      "classes": {
+        "org.apache.hadoop.fs.s3a.S3AFileSystem": "file:/opt/pj3/s3-clients/hadoop-3.4.2/hadoop-aws-3.4.2.jar",
+        "software.amazon.awssdk.services.s3.S3Client": "file:/opt/pj3/s3-clients/hadoop-3.4.2/bundle-2.29.52.jar"
+      },
+      "driver_classpath": "/opt/pj3/s3-clients/hadoop-3.4.2/hadoop-aws-3.4.2.jar:/opt/pj3/s3-clients/hadoop-3.4.2/bundle-2.29.52.jar",
+      "duration_seconds": 30.33,
+      "executor_classpath": "/opt/pj3/s3-clients/hadoop-3.4.2/hadoop-aws-3.4.2.jar:/opt/pj3/s3-clients/hadoop-3.4.2/bundle-2.29.52.jar",
+      "hosts": [
+        "pj3-spark-worker01/127.0.1.1",
+        "pj3-spark-worker02/127.0.1.1",
+        "pj3-spark-worker03/127.0.1.1"
+      ],
+      "read_rows": 1,
+      "status": "VERIFIED"
+    },
+    {
+      "app_id": "app-20261021094119-0023",
+      "classes": {
+        "org.apache.hadoop.fs.s3a.S3AFileSystem": "file:/opt/pj3/s3-clients/hadoop-3.4.2/hadoop-aws-3.4.2.jar",
+        "software.amazon.awssdk.services.s3.S3Client": "file:/opt/pj3/s3-clients/hadoop-3.4.2/bundle-2.29.52.jar"
+      },
+      "driver_classpath": "/opt/pj3/s3-clients/hadoop-3.4.2/hadoop-aws-3.4.2.jar:/opt/pj3/s3-clients/hadoop-3.4.2/bundle-2.29.52.jar",
+      "duration_seconds": 34.84,
+      "executor_classpath": "/opt/pj3/s3-clients/hadoop-3.4.2/hadoop-aws-3.4.2.jar:/opt/pj3/s3-clients/hadoop-3.4.2/bundle-2.29.52.jar",
+      "hosts": [
+        "pj3-spark-worker01/127.0.1.1",
+        "pj3-spark-worker02/127.0.1.1",
+        "pj3-spark-worker03/127.0.1.1"
+      ],
+      "read_rows": 1,
+      "status": "VERIFIED"
+    }
+  ],
+  "production_writes": false,
+  "workers": [
+    {
+      "host": "pj3-spark-worker02",
+      "bundle_copies": 0,
+      "original_sha256": "62638f33045690c6bc5e496b54b0b2e89a9ad38cbedacdf6e017fea6bc85f55c",
+      "old_probe_removed": true,
+      "recent_probe_preserved": true,
+      "free_bytes": 27367960576,
+      "interval_seconds": 60,
+      "retention_seconds": 3600
+    },
+    {
+      "host": "pj3-spark-worker01",
+      "bundle_copies": 0,
+      "original_sha256": "62638f33045690c6bc5e496b54b0b2e89a9ad38cbedacdf6e017fea6bc85f55c",
+      "old_probe_removed": true,
+      "recent_probe_preserved": true,
+      "free_bytes": 27987750912,
+      "interval_seconds": 60,
+      "retention_seconds": 3600
+    },
+    {
+      "host": "pj3-spark-worker03",
+      "bundle_copies": 0,
+      "original_sha256": "62638f33045690c6bc5e496b54b0b2e89a9ad38cbedacdf6e017fea6bc85f55c",
+      "old_probe_removed": true,
+      "recent_probe_preserved": true,
+      "free_bytes": 27369897984,
+      "interval_seconds": 60,
+      "retention_seconds": 3600
+    }
+  ]
+}
