@@ -214,8 +214,10 @@ def _links(db,product,tables,item,plan,at):
 
 
 def _offers(db,product,catalog,tables,guard,at,max_age,item,plan):
+    _observed_offers(db,product,catalog,tables,at,item,plan)
     grouped={}
     for offer in tables['current_offers']:
+        if parse(offer['evidence_json']).get('offer_publication_status')=='OBSERVED_UNVERIFIED':continue
         if offer['offer_key'] in grouped:raise PipelineError('PUBLICATION_MULTIPLE_CURRENT_CONDITIONS')
         grouped[offer['offer_key']]=offer
     for key,offer in grouped.items():
@@ -258,6 +260,58 @@ def _offers(db,product,catalog,tables,guard,at,max_age,item,plan):
             raise Conflict('PUBLICATION_IMMUTABLE_HISTORY_CONFLICT')
         if not created and parse(old['pricing_terms_json'])!=parse(values['pricing_terms_json']):
             raise Conflict('PUBLICATION_HISTORY_TERMS_CONFLICT')
+
+
+def _observed_offers(db,product,catalog,tables,at,item,plan):
+    """Store identified seller prices without asserting regular price or purchase readiness."""
+    for offer in tables['current_offers']:
+        proof=parse(offer['evidence_json'])
+        if proof.get('offer_publication_status')!='OBSERVED_UNVERIFIED':continue
+        identity,price=proof['identity'],proof['price']
+        if (not all(identity.get(k) for k in ('source_seller_id','source_offer_id','option_key'))
+                or offer['purchase_ready'] or offer['purchase_url'] is not None or offer['currency']!='KRW'):
+            raise PipelineError('PUBLICATION_OBSERVED_OFFER_INVALID')
+        stamp=sql_time(offer['observed_at'])
+        if not stamp or stamp>at:raise PipelineError('PUBLICATION_OBSERVED_OFFER_TIME_INVALID')
+        values=dict(product_id=product['id'],source_code=catalog['source_code'],
+            source_product_id=catalog['source_product_id'],source_seller_id=identity['source_seller_id'],
+            source_offer_id=identity['source_offer_id'],source_variant_id=identity['option_key'],
+            title=None,price_amount=money(offer['amount']),currency='KRW',purchase_url=None,
+            availability='UNKNOWN',collected_at=stamp,latest_raw_document_id=offer['raw_document_id'],
+            eligible=False,price_basis='UNKNOWN',price_conditions_json=price['condition_json'],
+            option_attributes_json=canonical(dict(option_key=identity['option_key'],
+                status=parse(identity['identity_evidence_json']).get('option_status','UNKNOWN'))),
+            gold_snapshot_ref_json=snapshot_ref(item,plan,[('current_offers',offer)]),created_at=at,updated_at=at)
+        saved,created=db.identity('offers',dict(offer_key=offer['offer_key']),values)
+        if saved['product_id']!=product['id'] or any(saved[k]!=values[k] for k in ('source_seller_id','source_offer_id','source_variant_id')):
+            raise Conflict('PUBLICATION_OFFER_IDENTITY_CONFLICT')
+        if not created:
+            if saved['collected_at']==stamp and (saved['price_amount']!=values['price_amount'] or saved['currency']!='KRW'):
+                raise Conflict('PUBLICATION_EQUAL_TIME_CONFLICT')
+            if saved['collected_at']<stamp or (saved['collected_at']==stamp and not saved['eligible']):
+                db.update('offers',dict(id=saved['id']),{k:v for k,v in values.items() if k not in {
+                    'product_id','source_code','source_product_id','source_seller_id','source_offer_id','source_variant_id','created_at'}})
+    # Observed prices are valid history even when their sale conditions are unverified.
+    if plan['price_history_mode'] not in {'SNAPSHOT_V1','PRICE_EFFECT_V2'}:return
+    for history in tables['offer_history']:
+        if history['eligible'] or history['currency']!='KRW' or history['amount'] is None:continue
+        evidence=parse(history['evidence_json'])
+        if evidence['silver_price']['numeric_status']!='CONFIRMED' or Decimal(str(history['amount']))<=0:continue
+        offer=db.get('offers',dict(offer_key=history['offer_key']))
+        if not offer:continue
+        if offer['product_id']!=product['id']:raise Conflict('PUBLICATION_OFFER_IDENTITY_CONFLICT')
+        stamp=sql_time(history['observed_at'])
+        if not stamp or stamp>at:continue
+        effect=evidence['price_effect']
+        key=history['snapshot_key'] if plan['price_history_mode']=='SNAPSHOT_V1' else history['price_effect_key']
+        values=dict(offer_id=offer['id'],raw_document_id=history['raw_document_id'],
+            price_amount=money(history['amount']),currency='KRW',purchase_url=None,availability='UNKNOWN',
+            collected_at=stamp,pricing_terms_json=canonical(effect),created_at=at,
+            gold_snapshot_ref_json=snapshot_ref(item,plan,[('offer_history',history)]))
+        old,created=db.identity('offer_snapshots',dict(snapshot_key=key),values)
+        if not created and any(old[k]!=values[k] for k in ('offer_id','price_amount','currency','collected_at')):
+            raise Conflict('PUBLICATION_IMMUTABLE_HISTORY_CONFLICT')
+        if not created and parse(old['pricing_terms_json'])!=effect:raise Conflict('PUBLICATION_HISTORY_TERMS_CONFLICT')
 
 
 def publish(plan,db,*,hook=None):
@@ -343,9 +397,13 @@ def attribute_projection(previous, incoming):
             continue
         old_time=old.get('observed_at')
         new_time=max((r.get('observed_at') or '' for r in candidates),default='')
-        semantic=lambda r: [r.get(k) for k in ('value_type','value_text','value_decimal','value_min','value_max','codes','unit')]
-        if old_time and new_time and utc(new_time)==utc(old_time) and any(semantic(r)!=semantic(old) for r in candidates if r.get('observed_at') and utc(r['observed_at'])==utc(old_time)):
-            raise Conflict('PUBLICATION_ATTRIBUTE_EQUAL_TIME_CONFLICT')
+        semantic=lambda r: canonical([r.get(k) for k in ('value_type','value_text','value_decimal','value_min','value_max','codes','unit')])
+        if old_time and new_time and utc(new_time)==utc(old_time):
+            # A product may carry several confirmed dimensions under an unresolved
+            # axis. Compare complete value sets, not every old/new cross pair.
+            prior={semantic(r) for r in retained if key(r)==identity and r.get('observed_at') and utc(r['observed_at'])==utc(old_time)}
+            current={semantic(r) for r in candidates if r.get('observed_at') and utc(r['observed_at'])==utc(old_time)}
+            if prior!=current:raise Conflict('PUBLICATION_ATTRIBUTE_EQUAL_TIME_CONFLICT')
         if not new_time and any(semantic(r)!=semantic(old) for r in candidates):
             raise PipelineError('PUBLICATION_ATTRIBUTE_TIME_UNAVAILABLE')
         if old_time and (not new_time or utc(new_time)<utc(old_time)):

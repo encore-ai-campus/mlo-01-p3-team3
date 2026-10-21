@@ -16,7 +16,7 @@ KEYS=dict(product_observations='evaluation_key',product_attributes='attribute_ke
           price_observations='price_observation_key',product_images='image_relation_key',
           link_observations='link_observation_key',quality_issues='issue_key',
           normalized_offers='normalized_offer_key',pipeline_evaluations='evaluation_key')
-VERSION='danawa-silver-1.0.3'
+VERSION='danawa-silver-1.0.4'
 POLICY='silver-quality-1'
 DIAGNOSTICS={'record_hash','processing_run_id','processed_at','completed_at','image_state_checked_at'}
 
@@ -33,13 +33,12 @@ def source_time(value):
     return (utc(value),'OBSERVED') if value else (None,'UNKNOWN')
 
 
-def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None):
-    UUID(processing_run_id)
+def evaluation_input(doc,state,inputs,as_of):
+    """Identity shared by normalization and observation-specific reuse checks."""
     utc(as_of)
     validate_raw(doc,event_for(doc,'00000000-0000-4000-8000-000000000001',doc['collected_at']))
     image=image_state(doc,state)
     related=project(doc,inputs,as_of)
-    rules=[r for r in related['rules']['rows'] if r['effective_status']=='ACTIVE']
     normalizer_version=VERSION+':'+digest(related['rules'])
     gallery_hash=digest(dict(slots=doc['image_refs'], freshness_policy='NOT_EVALUATED'))
     fingerprint=digest(dict(stage='SILVER',raw_document_id=doc['_id'],document_hash=doc['document_hash'],
@@ -48,6 +47,14 @@ def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None
         review_snapshot_hash=digest(related['reviews']),link_validation_snapshot_hash=digest(related['links']),
         normalizer_version=normalizer_version,quality_policy_version=POLICY,gold_policy_version=None,contract_version=1))
     eval_key='silver-eval-v1:'+digest(dict(stage='SILVER',raw_document_id=doc['_id'],processing_input_fingerprint=fingerprint))
+    return dict(evaluation_key=eval_key,processing_input_fingerprint=fingerprint,image_state=image),related,normalizer_version
+
+
+def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None):
+    UUID(processing_run_id)
+    identity,related,normalizer_version=evaluation_input(doc,state,inputs,as_of)
+    image=identity['image_state'];fingerprint=identity['processing_input_fingerprint'];eval_key=identity['evaluation_key']
+    rules=[r for r in related['rules']['rows'] if r['effective_status']=='ACTIVE']
     common=dict(evaluation_key=eval_key,raw_document_id=doc['_id'],document_hash=doc['document_hash'],
         observation_key=doc['observation_key'],source_code=doc['source_code'],source_product_id=doc['source_product_id'],
         product_key='danawa:'+doc['source_product_id'],collection_run_id=doc['collection_run_id'],
@@ -137,8 +144,10 @@ def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None
 
     # Every distinct price kind and source time survives; no global minimum selection.
     def offer_identity(seller):
+        from .offer_identity import bridge_identity
         candidates=[r for r in rules if r.get('type')=='OFFER_IDENTITY' and r.get('verified_stable') is True
                     and r.get('seller_id_field')=='seller_id' and r.get('offer_id_field')=='source_offer_id']
+        if not candidates:return bridge_identity(doc,seller)
         if len(candidates)!=1:return None
         rule=candidates[0]
         seller_id,sale_id=seller.get('seller_id'),seller.get('source_offer_id')
@@ -171,7 +180,7 @@ def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None
             condition['delivery']=dict(state='CONFIRMED',value=dict(included=True,fee_amount='0',currency='KRW',fee_basis='FREE_DELIVERY_EXPLICIT'))
         condition_hash=digest(condition)
         option_key=identity['option_key'] if identity else None
-        if identity:
+        if identity and identity['option_status']!='UNKNOWN':
             condition['option']=dict(state='CONFIRMED',value=dict(identity_status=identity['option_status'],
                 option_key=option_key,option_evidence_key=source_key))
             condition_hash=digest(condition)

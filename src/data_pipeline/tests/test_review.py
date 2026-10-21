@@ -52,6 +52,46 @@ def approved(db):
 
 
 class ReviewTests(unittest.TestCase):
+    def test_gold_only_policy_changes_do_not_invalidate_silver_mapping_inputs(self):
+        db=Ledger();category=str(uuid4())
+        db.get=lambda *a,**k:dict(code='CHAIR',active=True)
+        item=dict(id=str(uuid4()),kind='MAPPING',decision='APPROVED',payload=dict(source_code='danawa',
+            source_category_codes=['15','3647'],service_category_id=category,active=True,excluded=False))
+        body=dict(item=item,reviewed_at='2026-10-18T00:00:00.000Z',expires_at='2026-11-01T00:00:00.000Z')
+        db.events.append(dict(kind='MAPPING',review_hash=digest(body),body_json=canonical(body)))
+        before=review.export_inputs(db,[],as_of=AT)
+        policy=approved(Ledger())
+        # export_inputs reads sealed event bodies; create a separate valid
+        # POLICY decision without editing the mapping event.
+        body2=dict(item=policy['items'][0],reviewed_at=policy['reviewed_at'],expires_at=policy['expires_at'])
+        db.events.append(dict(kind='POLICY',review_hash=digest(body2),body_json=canonical(body2)))
+        after=review.export_inputs(db,[],as_of=AT)
+        self.assertEqual(before['silver'],after['silver'])
+        self.assertNotEqual(before['gold']['content_hash'],after['gold']['content_hash'])
+        body['item']['payload']['active']=False
+        db.events[0].update(body_json=canonical(body),review_hash=digest(body))
+        self.assertNotEqual(after['silver'],review.export_inputs(db,[],as_of=AT)['silver'])
+
+    def test_gold_uses_explicit_successful_silver_evaluation_not_processing_time(self):
+        from test_silver import sample,RUN,AS_OF
+        from test_silver_runtime import Sink,States
+        from product_pipeline.silver.runner import process
+        with tempfile.TemporaryDirectory() as directory:
+            raw,state=sample(directory);db=Ledger();side=review.export_inputs(db,[],as_of=AT)['silver'];sink=Sink()
+            keys=[]
+            for revision in [1,2]:
+                current=dict(state,image_state_revision=revision)
+                out=process(raw,States(current),sink,side,processing_run_id=RUN,as_of=AS_OF,bronze_version=1,bronze_path='file:///bronze')
+                keys.append(out['evaluation_key'])
+            groups=[dict(receipt=r,tables={t:[v for v in rows.values() if v['evaluation_key']==r['evaluation_key']]
+                    for t,rows in sink.data.items() if t!='pipeline_evaluations'}) for r in sink.data['pipeline_evaluations'].values()]
+            before=review.export_inputs(db,groups,as_of=AT)
+            self.assertEqual(before['gold']['evaluation_selection']['status'],'NOT_PROVIDED')
+            chosen=dict(product_key='danawa:11',raw_document_id=raw['_id'],evaluation_key=keys[1],evidence_ref='silver-completion://fixed-window')
+            after=review.export_inputs(db,groups,as_of=AT,evaluation_selection=[chosen])
+            self.assertEqual(after['gold']['evaluation_selection']['rows'][0]['evaluation_key'],keys[1])
+            with self.assertRaises(Conflict):review.export_inputs(db,groups,as_of=AT,evaluation_selection=[dict(chosen,evaluation_key='missing')])
+
     def test_draft_cannot_apply_and_expired_or_tampered_decision_is_rejected(self):
         db=Ledger();bundle=approved(db)
         draft=copy.deepcopy(bundle);draft['status']='DRAFT';draft=review.seal(draft)

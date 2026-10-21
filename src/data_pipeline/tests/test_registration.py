@@ -42,6 +42,29 @@ class DB:
         except BaseException:self.rows=before;raise
 
 class RegistrationTests(unittest.TestCase):
+    def test_observation_reuse_scope_is_bound_and_requires_valid_window(self):
+        value=request();value['input_range'].update(window_hash='c'*64,reuse_selection_hash='d'*64)
+        db=DB();first=register(db,value);self.assertEqual(register(db,value),first)
+        changed=copy.deepcopy(value);changed['input_range']['reuse_selection_hash']='e'*64
+        with self.assertRaises(Conflict):register(db,changed)
+        del changed['input_range']['window_hash']
+        with self.assertRaises(PipelineError):validate_request(changed)
+        changed=copy.deepcopy(value);changed['input_range']['reuse_selection_hash']='bad'
+        with self.assertRaises(PipelineError):validate_request(changed)
+    def test_window_hash_is_bound_to_both_stage_registrations(self):
+        for stage in ['NORMALIZATION','GOLD_BUILD']:
+            r=request(stage);r['input_range']['window_hash']='c'*64
+            db=DB();first=register(db,r);self.assertEqual(register(db,r),first)
+            bad=copy.deepcopy(r);bad['input_range']['window_hash']='bad'
+            with self.assertRaises(PipelineError):validate_request(bad)
+
+    def test_collector_normalized_binding_is_registered_and_unknown_contract_rejected(self):
+        db=DB();r=request();r['input_range']['normalized_input']='danawa_products/observation-binding-v1'
+        first=register(db,r);self.assertEqual(register(db,r),first)
+        self.assertEqual(db.rows[validate_request(r)]['input_range_json'],canonical(r['input_range']))
+        bad=copy.deepcopy(r);bad['input_range']['normalized_input']='unverified-other-input'
+        with self.assertRaises(PipelineError):validate_request(bad)
+
     def test_both_stages_export_only_real_registered_rows(self):
         for stage,validator in [('NORMALIZATION',silver_registration),('GOLD_BUILD',gold_registration)]:
             db=DB();r=request(stage)

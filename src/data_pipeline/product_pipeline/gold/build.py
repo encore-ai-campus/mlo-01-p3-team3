@@ -255,6 +255,27 @@ def build(groups, inputs, versions, *, processing_run_id, as_of, processed_at=No
                 if len(amounts)==1: representative=min(candidates,key=lambda r:r['price_observation_key'])
                 break
     if representative is None:issue('REPRESENTATIVE_PRICE_UNRESOLVED','price')
+    # Preserve real seller observations separately from regular/purchase eligibility.
+    # Aggregate prices have no offer_key and never enter this projection.
+    published={r['offer_key'] for r in tables['current_offers']}
+    observed=defaultdict(list)
+    for group in selected:
+        for row in group['tables']['price_observations']:
+            if (row.get('offer_key') in offers and row['offer_key'] not in published
+                    and row['numeric_status']=='CONFIRMED' and row['currency']=='KRW'
+                    and row['amount'] is not None and Decimal(row['amount'])>0
+                    and row.get('observed_at') and utc(row['observed_at'])<=utc(as_of)):
+                observed[row['offer_key']].append(row)
+    for key, rows in sorted(observed.items()):
+        chosen, conflicts=choose(rows,['amount','currency','condition_fingerprint'],as_of)
+        if conflicts:issue('TIMESTAMP_VALUE_CONFLICT','offer',dict(offer_key=key,times=conflicts))
+        if chosen:
+            add('current_offers',[key,'OBSERVED_UNVERIFIED'],dict(offer_key=key,
+                condition_fingerprint=chosen['condition_fingerprint'],price_kind=chosen['price_kind'],
+                amount=chosen['amount'],currency=chosen['currency'],observed_at=chosen['observed_at'],
+                raw_document_id=chosen['raw_document_id'],purchase_url=None,purchase_ready=False,
+                evidence_json=canonical(dict(price=chosen,identity=offers[key],
+                    offer_publication_status='OBSERVED_UNVERIFIED'))))
     embeddings=[r for r,ok in effective_embeddings if ok and r.get('status')=='READY'
         and r.get('embedding_usage_approved') is True and r.get('index_active') is True
         and primary and r.get('image_relation_key')==primary['image_relation_key']

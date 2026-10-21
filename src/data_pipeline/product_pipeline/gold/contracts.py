@@ -5,7 +5,7 @@ from ..contracts import digest, utc
 from ..errors import PipelineError
 from ..silver.normalize import TABLES as SILVER_TABLES
 
-VERSION = 'product-gold-1.0.0'
+VERSION = 'product-gold-1.0.1'
 INPUT_TABLES = (*SILVER_TABLES, 'pipeline_evaluations')
 TABLES = ('product_catalog', 'current_offers', 'offer_history', 'product_images',
           'product_links', 'quality_issues', 'quality_daily')

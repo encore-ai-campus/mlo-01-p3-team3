@@ -92,7 +92,7 @@ def preflight(db):
 
 
 def latest(db,kind,key):
-    return db.one('SELECT * FROM pipeline_review_events WHERE kind=%s AND subject_key=%s ORDER BY revision DESC LIMIT 1 FOR UPDATE',(kind,key))
+    return db.one('SELECT * FROM pipeline_review_events WHERE kind=%s AND subject_key=%s ORDER BY revision DESC LIMIT 1 FOR SHARE',(kind,key))
 
 
 def current(db,item,*,locking=True):
@@ -164,7 +164,7 @@ def apply(db,bundle,*,at=None):
             body=dict(item=item,bundle_id=bundle['bundle_id'],actor_ref=bundle['actor_ref'],evidence_ref=bundle['evidence_ref'],
                 criteria_ref=bundle['criteria_ref'],reviewed_at=utc(bundle['reviewed_at']),expires_at=utc(bundle['expires_at']))
             checksum=digest(body)
-            saved=db.one('SELECT review_hash,body_json FROM pipeline_review_events WHERE id=%s FOR UPDATE',(uuid_hex(item['id']),))
+            saved=db.one('SELECT review_hash,body_json FROM pipeline_review_events WHERE id=%s FOR SHARE',(uuid_hex(item['id']),))
             if saved:
                 if saved['review_hash']!=checksum or parse(saved['body_json'])!=body:raise Conflict('REVIEW_ID_REUSED_WITH_DIFFERENT_BODY')
                 reused+=1;continue
@@ -211,7 +211,7 @@ def draft(db,requests):
         actor_ref=None,evidence_ref=None,criteria_ref=None,reviewed_at=None,expires_at=None,items=items))
 
 
-def export_inputs(db,silver_groups,*,as_of):
+def export_inputs(db,silver_groups,*,as_of,evaluation_selection=None):
     """Derive mapping-version bindings from confirmed Silver, never guessed hashes."""
     from .silver.inputs import KINDS as SILVER_KINDS,input_snapshot
     from .gold.build import validate_group
@@ -260,14 +260,31 @@ def export_inputs(db,silver_groups,*,as_of):
                 price_max_age_seconds=p['price_max_age_seconds'],representative_price_kinds=p.get('representative_price_kinds',[]),bootstrap_single_gallery=True)
     silver={k:input_snapshot(k) for k in SILVER_KINDS}
     for kind,values in [('mappings',mappings),('reviews',reviews)]:
-        if values:silver[kind]=input_snapshot(kind,values,'review-ledger-v1','mysql-review://'+db.target+'/'+references)
+        # PRODUCT/POLICY decisions change Gold, not Silver normalization.
+        # Bind each Silver snapshot to its actual rows; unrelated ledger events
+        # must not invalidate all existing Silver evaluations.
+        values=sorted(values,key=canonical)
+        if values:silver[kind]=input_snapshot(kind,values,'review-ledger-v2','mysql-review://'+db.target+'/'+digest(values))
     gold={k:dict(status='NOT_PROVIDED',rows=[],evidence_ref=None) for k in ('product_states','embeddings','evaluation_selection','gallery_selection','price_confirmations')}
     if states:gold['product_states']=dict(status='PROVIDED',rows=states,evidence_ref='mysql-review://'+db.target+'/'+references)
-    selected={}
+    selected={};explicit={}
+    if evaluation_selection is not None:
+        # A <=100-product window can include more than 100 historical raw IDs.
+        if not isinstance(evaluation_selection,list) or len(evaluation_selection)>20000:raise PipelineError('REVIEW_SELECTION_LIMIT')
+        for choice in evaluation_selection:
+            raw=choice.get('raw_document_id')
+            if not raw or raw in explicit or not choice.get('evaluation_key') or not choice.get('evidence_ref'):
+                raise Conflict('REVIEW_EXPLICIT_SELECTION_INVALID')
+            matches=[c for c in candidates if c['receipt']['raw_document_id']==raw and c['receipt']['product_key']==choice.get('product_key')
+                and c['receipt']['evaluation_key']==choice['evaluation_key']]
+            if len(matches)!=1:raise Conflict('REVIEW_EXPLICIT_SELECTION_NOT_CONFIRMED')
+            explicit[raw]=matches[0]
     for candidate in candidates:
         receipt=candidate['receipt'];refs=parse(receipt['input_snapshot_refs_json'])
+        if receipt['raw_document_id'] in explicit:continue
         if not all(refs.get(k)==v['content_hash'] for k,v in silver.items()):continue
         selected.setdefault(receipt['raw_document_id'],[]).append(candidate)
+    for raw,candidate in explicit.items():selected[raw]=[candidate]
     selections=[];galleries={}
     for raw_id,values in selected.items():
         if len(values)!=1:
@@ -306,7 +323,7 @@ def approve_guard(db,group,versions,*,price_history_mode,as_of,owner_inputs):
     with db.transaction():
         from .gold.contracts import validate_inputs
         validate_inputs(owner_inputs)
-        events=db.all('SELECT review_hash FROM pipeline_review_events e WHERE kind IN (\'CATEGORY\',\'MAPPING\',\'PRODUCT\',\'IMAGE\',\'POLICY\') AND revision=(SELECT MAX(x.revision) FROM pipeline_review_events x WHERE x.kind=e.kind AND x.subject_key=e.subject_key) FOR UPDATE')
+        events=db.all('SELECT review_hash FROM pipeline_review_events e WHERE kind IN (\'CATEGORY\',\'MAPPING\',\'PRODUCT\',\'IMAGE\',\'POLICY\') AND revision=(SELECT MAX(x.revision) FROM pipeline_review_events x WHERE x.kind=e.kind AND x.subject_key=e.subject_key) FOR SHARE')
         if owner_inputs['policy'].get('review_set_hash')!=digest(sorted(r['review_hash'] for r in events)):
             raise Conflict('REVIEW_GOLD_OWNER_INPUTS_CHANGED')
         product=db.get('products',dict(product_key=key))

@@ -32,15 +32,26 @@ def validate_request(value):
         scope = value['input_range']
         if not isinstance(scope, dict) or len(canonical(scope).encode()) > 65536:
             raise ValueError()
+        fields=set(scope)
+        if 'window_hash' in fields:
+            if not isinstance(scope['window_hash'],str) or not re.fullmatch('[a-f0-9]{64}',scope['window_hash']):raise ValueError()
+            fields.remove('window_hash')
         if value['stage'] == 'NORMALIZATION':
-            if set(scope) != {'bronze_path', 'bronze_version', 'inputs_hash'}:
+            if 'reuse_selection_hash' in fields:
+                if ('window_hash' not in scope or not isinstance(scope['reuse_selection_hash'],str)
+                        or not re.fullmatch('[a-f0-9]{64}',scope['reuse_selection_hash'])):raise ValueError()
+                fields.remove('reuse_selection_hash')
+            keys={'bronze_path', 'bronze_version', 'inputs_hash'}
+            if fields!=keys and fields!=keys|{'normalized_input'}:
+                raise ValueError()
+            if 'normalized_input' in scope and scope['normalized_input']!='danawa_products/observation-binding-v1':
                 raise ValueError()
             if type(scope['bronze_version']) is not int or scope['bronze_version'] < 0:
                 raise ValueError()
             location = scope['bronze_path']
         else:
             from .gold.contracts import validate_versions
-            if set(scope) != {'silver_root', 'silver_versions', 'inputs_hash'}:
+            if fields != {'silver_root', 'silver_versions', 'inputs_hash'}:
                 raise ValueError()
             validate_versions(scope['silver_versions'])
             location = scope['silver_root']

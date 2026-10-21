@@ -86,7 +86,42 @@ def product(db,item,plan,at):
         if not created and newer:
             db.update('product_images',dict(id=link['id']),dict(image_relation_key=image['image_relation_key'],display_order=image['display_order'],
                 source_evidence_json=image['evidence_json'],gold_snapshot_ref_json=snapshot_ref(item,plan,[('product_images',image)]),updated_at=at))
+    from .runner import _links
+    _links(db,saved,item['group']['tables'],item,plan,at)
+    from .runner import _observed_offers
+    _observed_offers(db,saved,catalog,item['group']['tables'],at,item,plan)
     return saved['id']
+
+
+def reconcile_links(plan,db):
+    """Restore link observations from already committed immutable staging.
+
+No product activation, destination approval or offer is synthesized. This is
+additive recovery for older inactive publications that omitted link rows.
+"""
+    from .plan import verify_plan
+    from .runner import _links
+    from ..contracts import digest
+    verify_plan(plan)
+    if plan.get('publication_mode')!='PENDING_REVIEW' or plan['target']!=db.target:
+        raise Conflict('PUBLICATION_TARGET_MISMATCH')
+    count=0
+    with db.transaction():
+        receipt=db.get('pipeline_publications',dict(plan_id=plan['plan_id']))
+        if not receipt or receipt['status']!='COMPLETED' or receipt['plan_hash']!=digest(plan):
+            raise Conflict('PUBLICATION_PENDING_RECEIPT_CHANGED')
+        at=db.one('SELECT UTC_TIMESTAMP(3) AS stamp')['stamp']
+        for item in plan['products']:
+            staged=db.get('pipeline_publication_staging',dict(plan_id=plan['plan_id'],product_key=item['product_key']))
+            if not staged or staged['body_hash']!=digest(item) or parse(staged['body_json'])!=item:
+                raise Conflict('PUBLICATION_STAGING_CHANGED')
+            saved=db.get('products',dict(product_key=item['product_key']))
+            catalog=item['group']['tables']['product_catalog'][0]
+            if (not saved or saved['source_code']!=catalog['source_code'] or saved['source_product_id']!=catalog['source_product_id']):
+                raise Conflict('PUBLICATION_PRODUCT_STATE_CHANGED')
+            _links(db,saved,item['group']['tables'],item,plan,at)
+            count+=len(item['group']['tables']['product_links'])
+    return dict(status='LINK_OBSERVATIONS_RECONCILED',products=len(plan['products']),links=count,plan_id=plan['plan_id'])
 
 
 def audit(plan,db):
@@ -102,6 +137,11 @@ def audit(plan,db):
             raise Conflict('PUBLICATION_STAGING_CHANGED')
         saved=db.get('products',dict(product_key=item['product_key']),locking=False)
         catalog=item['group']['tables']['product_catalog'][0]
+        for expected in item['group']['tables']['product_links']:
+            linked=db.get('product_link_observations',dict(product_id=saved['id'],
+                link_observation_key=expected['link_observation_key'],gold_evaluation_key=expected['gold_evaluation_key']),locking=False)
+            if not linked or any(linked.get(k)!=expected[k] for k in ('source_url','link_kind','offer_key','usable','raw_document_id')):
+                raise Conflict('PUBLICATION_LINK_OBSERVATION_CHANGED')
         if (not saved or saved['status']!='PENDING_REVIEW' or saved['publication_status']!='PENDING_REVIEW' or
                 saved['source_code']!=catalog['source_code'] or saved['source_product_id']!=catalog['source_product_id'] or
                 any(saved[k] for k in READY_FIELDS) or saved['price_krw'] is not None or saved['comparison_url'] is not None or
