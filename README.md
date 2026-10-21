@@ -14,6 +14,9 @@
 - [PRD (Product Requirements Document)](docs/PRD_3차_초안.md)
 - [시스템 아키텍처](docs/design/00-architecture.md)
 - [데이터 파이프라인 설계](docs/design/02-data-pipeline.md)
+- [상품 파이프라인 구현·서버 실행](src/data_pipeline/README.md)
+- [파이프라인 현재 검증 결과·남은 인수](src/data_pipeline/docs/service_validation_20261018.md)
+- [MongoDB VM별 설치·Replica Set 도구](ops/mongodb/README.md)
 
 ## 협업 규칙
 - GitHub Issues를 통한 작업 관리

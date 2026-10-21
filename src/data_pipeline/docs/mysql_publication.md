@@ -1,12 +1,10 @@
 # Gold → MySQL 게시 실행·인수
 
-## 현재 게시 계약 v2
+## 현재 게시 계약과 실제 실행
 
-[Gold→MySQL 게시 필드 계약](../../../docs/design/13-gold-mysql-publication.md)을 구현한 현재 계약은 `document-publication-v2`, 게시 계획은 `contract_version=2`다. 제조사·속성·준비 상태·출처·대표 이미지·임베딩 참조·링크 관측을 포함한 13테이블·160컬럼을 검사한다. 기존 운영자 검수·활성 상태는 보존한다.
+`publication/schema.py`의 현재 계약은 document-publication-v2이며 게시 계획은 contract_version=2다. 상품 속성·제조사·준비 상태·출처·대표 이미지·임베딩 참조·링크 관측을 포함한 13테이블·160컬럼을 검사한다. [필드 계약](../../../docs/design/13-gold-mysql-publication.md)과 [스키마 반영](mysql_schema_rollout.md)을 따른다. 과거 v1 SQL은 현재 배포 기준이 아니다.
 
-고정 Gold 원문은 staging에 보존하고 각 서비스 행은 `gold_snapshot_ref_json`으로 연결한다. 읽기 전용 audit은 현재/후속 게시로 대체된 상품을 구분하며 값·관계·원문을 대조한다. 기존 DB 변경과 실제 배포는 [스키마 반영 가이드](mysql_schema_rollout.md)를 따른다. 운영 DB 적용·업무 승인 입력·추천 어댑터 인수는 별도다.
-
-초기 v1 게시 계획은 재사용하지 않고 같은 고정 Gold로 새 v2 계획을 만든다. Gold 재생성·정책 변경·임베딩/인덱스 등록·서비스 승인 원장 편집은 이번 게시 확장에 포함하지 않는다.
+업무 pj3_products에서 실제 게시·활성화를 확인했다. 최신 수치와 미완료 범위는 [검증 현황](service_validation_20261018.md), 작은 확정 배치와 검수 대기 초기 게시 경로는 [대기 적재](pending_intake.md)를 따른다. 기존 UUID·검수 원장·관측 시각을 보존하며 임베딩 생성이나 추천 실행은 수행하지 않는다. 운영 DB 스키마 변경은 런타임 게시와 분리한다.
 
 ## 책임과 입력
 
@@ -15,7 +13,7 @@
 - `publication/mysql.py`: Primary 읽기/쓰기 가능 여부, InnoDB, 타입/NULL/CHAR(32) UUID, 업무 키 UNIQUE, FK, 추가 필수 컬럼을 검증한다. 실행 중 DDL을 적용하지 않는다.
 - `publication/runner.py`: staging을 먼저 보존하고, 현재 담당 guard와 category/product/image 상태를 잠근 후 하나의 트랜잭션으로 해당 계획을 반영한다.
 
-서비스 게시 테이블은 `products`, `offers`, `offer_snapshots`, `assets`, `product_images`, `product_link_observations`다. `categories`는 읽기만 하며 `product_embeddings`/`search_index_versions`의 등록·활성화는 게시 writer가 수행하지 않는다. 명세의 상품 이미지 복합 UNIQUE는 `(product_id, source_code, source_product_id, image_variant, raw_document_id, source_version)`이다. `image_variant`에는 representative/gallery 슬롯 식별자를 보존하여 같은 파일의 여러 상품·갤러리 연결을 합치지 않는다. `offer_snapshots.pricing_terms_json`에 당시 조건을 보존한다.
+서비스 게시 테이블은 `products`, `offers`, `offer_snapshots`, `assets`, `product_images`, `product_link_observations`다. `categories`는 읽기만 하며 `product_embeddings`·`search_index_versions`의 등록·활성화는 게시 writer가 수행하지 않는다. 명세의 상품 이미지 복합 UNIQUE는 `(product_id, source_code, source_product_id, image_variant, raw_document_id, source_version)`이다. `image_variant`에는 representative/gallery 슬롯 식별자를 보존하여 같은 파일의 여러 상품·갤러리 연결을 합치지 않는다. `offer_snapshots.pricing_terms_json`에 당시 조건을 보존한다.
 
 새 `pipeline_publications`, `pipeline_publication_staging`, `pipeline_product_versions`, `pipeline_publication_guards`는 **제안 확장 계약**이다. 기존 서비스의 `pipeline_runs`/검수 테이블이 이미 있다는 가정으로 임의 쓰지 않는다. 실제 모델을 받으면 해당 담당과 이 확장을 채택하거나 어댑터를 맞춰야 한다. 런타임은 검사만 하고 자동 생성하지 않는다.
 
@@ -28,7 +26,7 @@
 - Gold의 고정 정책과 동일한 `price_history_mode` (`SNAPSHOT_V1` 또는 `PRICE_EFFECT_V2`).
 - `image_reviews[image_relation_key]`: Gold와 같은 `snapshot_hash`, 담당이 제공한 `usage_review` JSON, 기존 서비스 이미지 검수 JSON의 `current_review_hash`.
 
-계획 입력 `guard-hashes.json`은 `{product_key: SHA256(canonical guard_json)}`다. 게시 시 DB의 현재 JSON과 다시 대조한다. 읽기 전용 소유자 입력인 guard·category는 `FOR SHARE`로 잠가 트랜잭션 동안 변경을 막으며 게시 계정에 승인 원장 UPDATE 권한을 주지 않는다. 파이프라인이 갱신하는 상품·게시 원장에는 `FOR UPDATE`를 사용한다. 계획 이후 검수·분류·상품 상태가 변경되면 재계획 대상으로 차단한다. EXPIRED/INACTIVE를 ETL이 ACTIVE로 돌리지 않는다.
+계획 입력 `guard-hashes.json`은 `{product_key: SHA256(canonical guard_json)}`다. 게시 시 DB의 현재 JSON과 다시 대조한다. 읽기 전용 guard·category는 `FOR SHARE`, 게시기가 소유한 상품·게시 원장은 `FOR UPDATE`로 잠근다. 계획 이후 검수·분류·상품 상태가 변경되면 재계획 대상으로 차단한다. EXPIRED/INACTIVE를 ETL이 ACTIVE로 돌리지 않는다.
 
 기존 product UUID·asset UUID·image UUID·offer UUID를 업무 키로 재사용한다. 기존 product status/dedup, image active/usage_review, asset usage_policy는 덮어쓰지 않는다. **새 이미지 연결은 inactive**로 생성한다. 현재 연결 활성화와 검수 원장 관리는 담당의 후속 작업이며 ETL이 추천 승인을 대신하지 않는다. 기존 상품에 시각 기준 원장이 없다면 임의로 현재 값을 오래된 값으로 바꾸지 않고 `PUBLICATION_EXISTING_PRODUCT_BASELINE_REQUIRED`로 막는다.
 
@@ -40,7 +38,7 @@ python -m pip install -r requirements.lock.txt -r requirements-bronze.lock.txt -
 python -m pip install --no-deps -e .
 ```
 
-`sql/publication_reference_v2.sql`은 문서 검토·격리 시험용이다. 실제 서비스에 그대로 실행하는 설치 스크립트가 아니다. 담당 DDL과 비교하고 승인된 migration으로만 준비한다. 재생성은 `python run_publication.py reference-ddl --output NEW_FILE.sql`이다. 기존 파일을 덮어쓰지 않는다.
+`sql/publication_reference_v2.sql`은 현재 v2 계약의 검토·격리 시험용이다. 실제 서비스에 그대로 실행하는 설치 스크립트가 아니다. 담당 DDL과 비교하고 승인된 migration으로만 준비한다. 재생성은 `python run_publication.py reference-ddl --output NEW_FILE.sql`이다. 기존 파일을 덮어쓰지 않는다.
 
 `config/mysql_publication.example.json`을 Git 제외 설정으로 복사한다. `target_id`·DB 이름은 이관/재실행에서 유지하는 논리 식별자다. 접속 host·port는 환경별로 바꿀 수 있고 password/CA는 `PIPELINE_MYSQL_PASSWORD`, `PIPELINE_MYSQL_CA`로 주입한다. 실제 접속은 TLS 인증서·호스트명 검증을 켜며 root 계정은 사용하지 않는다. `--local-test`는 127.0.0.1/localhost의 3306이 아닌 격리 인스턴스에만 허용한다.
 

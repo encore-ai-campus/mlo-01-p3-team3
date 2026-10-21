@@ -1,5 +1,7 @@
 # 전체 단계 실행·대조·복구
 
+현재 서버의 작은 window·세션 공유·게시 후 활성화 경로는 [대기 적재·연속 실행](pending_intake.md), 최신 실제 결과는 [검증 현황](service_validation_20261018.md)을 따른다. 아래 일반 CLI/초기 시험 계약과 배포된 서버 coordinator를 구분한다. Kafka 보관 만료 시 [복구 절차](kafka_retention_recovery.md)를 사용한다.
+
 2026-10-18. `product_pipeline/operations/flow*.py`는 기존 각 단계 구현을 연결하는 단일 호스트 실행기다. 서버 설치·크롤러 실행·승인 생성·서비스 실행 등록 원장 편집을 수행하지 않는다. 실제 운영 연결 완료가 아니라 실행 코드와 로컬 시험을 제공한다.
 
 ## 입력·책임

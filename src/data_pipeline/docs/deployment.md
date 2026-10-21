@@ -2,15 +2,24 @@
 
 상품 파이프라인을 준비된 서버에 배치하는 절차다. 인프라 설치·서비스 승인·추천 연동은 다른 담당자 책임이다. 현재 확인된 결과와 최종 release/venv/SSH 경로는 [실서버 검증](service_validation_20261018.md)을 따른다. 운영 입력이 없는 기술 시험을 전체 운영 인수로 취급하지 않는다.
 
-## 1. 단계별 실행 가능 상태
+## 1. 현재 업무 실행과 인계
 
-| 단계 | 현재 확인 | 운영 전 남은 인수 |
-|---|---|---|
-| snapshot·이미지·Mongo·Kafka·Bronze | 실제 3상품/9이미지 관계 적재·반복·재전달 | 운영 토픽/ACL·전체 데이터·장애/부하 |
-| Silver·Gold | 실제 Mongo/Garage의 엔진·품질 대기·재사용 | 담당 등록/매핑/검수 입력과 운영 CLI |
-| MySQL 게시 | 실제 MySQL01 별도 문서 스키마에서 9개 시나리오 | 실제 서비스 DDL·baseline·guard·네트워크 TLS |
-| NiFi | 제한 SSH·실제 timer·정지 | 승인 업무 입력의 전체 FLOW·운영 일정 활성화 |
-| LIVE·상태 이관 | 파일/대역 및 VM 간 ready-last 전송 | 실제 동시 수집·외부 저장소 백업/복원·환경 이전 |
+2026-10-21 한 배치가 실제 업무 DB 게시·활성화까지 완료했다. 최신 수치·남은 인수는 [실서버 검증](service_validation_20261018.md)에만 관리한다. 전체 65,498상품 완료·NiFi 운영 일정 인수·환경 이전 완료와 구분한다.
+
+현재 작업 루트는 Spark Master의 `/var/lib/pj3/product-pipeline/spark/production-pending-20261019`이며, 공용 설정/venv 기준은 상위 `/var/lib/pj3/product-pipeline/spark`다. `run_server_pipeline.py`는 기존 Bastion Ansible 제어 모듈을 호출한다. 다른 PC에서도 Bastion alias·키·권한과 동일 저장소가 준비되면 실행할 수 있다. SSH 비밀번호만으로 제어 모듈·서버 보호 환경이 자동 생성되는 것은 아니다.
+
+배포 시 `product_pipeline/`을 작업 루트 `source/product_pipeline/`에 반영하고, `docs/server_setup/production_pending_work.py`를 작업 루트의 `production_work.py`, `production_pending_manage.py`를 기존 `production_manage.py`로 배치한다. `production_continuous_work.py`는 `continuous_work.py`, `production_downstream_work.py`는 원래 파일명 그대로 배포한다. `production_window_work.py`, `production_gold_inputs.py`, `production_activation.py`, `recover_kafka_retention.py` 등 이 실행기들이 import/호출하는 동반 모듈도 같은 작업 루트에 배포한다. Bastion의 기존 Ansible `production_manage` 모듈도 관리 소스와 대조한다. 예전 release 하나만 복사하고 작업 루트의 신규 모듈을 빠뜨리지 않는다.
+
+새 배포는 실행 중 Driver/writer가 없는 단계 경계에서 기존 파일을 백업하고 SHA256·배포 시각·테스트 결과를 기록한다. 보호 설정·원천·Delta·checkpoint·window selection·receipt·등록 ID를 덮어쓰지 않는다. 별도 PC의 `.runtime/` 도구는 인계 계약이 아니며 Git의 재사용 도구와 기존 서버 실행 환경을 사용한다. 계정 권한·TLS CA·런타임 프로필·원격 제어 설치는 아래 절을 따른다.
+
+```powershell
+python run_server_pipeline.py status
+python run_server_pipeline.py preflight
+python run_server_pipeline.py downstream
+python run_server_pipeline.py flow
+```
+
+두 시작 명령을 동시에 실행하지 않는다. `pause-after-window.json`이 남아 있으면 한 배치 뒤 정지한다. Kafka offset 범위 오류는 [고정 이벤트 재발행·체크포인트 세대 복구](kafka_retention_recovery.md), 공용 JAR·작업 디렉터리 정리는 [Garage 실행 프로필](garage_v241_profile.md), 내부 검수 정책은 [검수 절차](review_workflow.md)를 따른다. 새 설정으로 기존 커서를 지우거나 성공 상태를 직접 편집하지 않는다.
 
 ## 현재 VM의 보호 설정
 
@@ -85,7 +94,7 @@ Bronze는 [제출 형식](bronze_execution.md#설치와-실행)에 따라 Driver
 실행 코드는 구현되어 있으며 [Silver 실행 가이드](silver_execution.md)의 실제 명령·입력 형식·등록 증거·잠금·복구 절차를 따른다. 아래는 실제 서버에서 아직 수행하지 않은 **인수 순서**다. Silver는 Bronze와 같은 Spark/Delta 의존성을 사용하고 `requirements-bronze.lock.txt`로 설치할 수 있다.
 
 1. [Silver 스키마](silver_design_v1.md)의 8개 경로, input snapshot 보존 경로, 분리 checkpoint를 확정한다. 생성 권한과 단일 작성자를 확인한다.
-2. Bronze version·Raw 범위를 고정하고 NORMALIZATION run의 담당자 등록 export를 받는다. 현재 어댑터는 등록 근거를 검증·보관하며 MySQL에 직접 등록/실시간 확인하지 않는다. 최초 전체 처리와 상태 변경 재평가를 구분한다.
+2. Bronze version·Raw 범위를 고정하고 NORMALIZATION run의 담당자 등록 export를 받는다. 일반 CLI는 등록 export를 검증·보관하며, 현재 서버 coordinator는 registration 도구와 보호 계정으로 NORMALIZATION/GOLD_BUILD를 등록한 뒤 그 결과를 고정 입력으로 사용한다. 최초 전체 처리와 상태 변경 재평가를 구분한다.
 3. 매핑/검수/링크/사전·이미지 상태를 동결한다. 미제공은 NOT_PROVIDED, 연결·권한·조회 실패는 실행 실패다. 빈 입력을 승인된 설정으로 만들지 않는다.
 4. 소량 실데이터로 상품 식별·이미지 관계·가격 종류·등록월·값별 시각·결측 사유·원격 업로드 상태를 원천과 대조한다. 기존 세 상품의 이미지 관계는 4/4/1이다.
 5. 같은 입력 재실행, 일부 출력 후 중단·재개, 이미지 상태/매핑 변경 재평가를 시험한다. 동일 평가 중복 방지와 변경된 평가 이력을 확인한다.
@@ -122,19 +131,19 @@ Bronze는 `BRONZE_LEASE_MONGO_URI`의 별도 ops 계정을 추가한다. 인프�
 
 Gold 결과에는 원천/이미지 URL/객체 키/checksum/선택 근거와 확인 상태를 보존한다. 백업에는 Gold 데이터·_delta_log뿐 아니라 선택 페이지·입력/등록 export·완료 manifest와 공유 checkpoint를 포함한다. 새 스키마를 기존 root에 덮어쓰거나 Delta 로그를 삭제하지 않는다. 실제 인수 전 NiFi 일정이나 MySQL 게시에 자동 연결하지 않는다.
 
-MySQL 문서 계약 v2의 DDL preflight/staging/게시 guard/기존 UUID·검수 보존 게시기는 구현했고 실제 격리 MySQL로 검증했다. 이후 사용자가 승인한 새 `pj3_products`의 13테이블·160컬럼과 Master 전용 TLS 게시 계정을 구성하고 별도 검증 DB에서 실제 게시·재게시·audit를 확인했다. [스키마/보호 설정/검증 결과](mysql_schema_rollout.md#신규-vm-스키마와-tls-반영-결과)를 따른다. 실제 상품 guard 공급과 외부 서비스 ORM/baseline 인수는 남는다. 운영 게시 명령은 서비스 DDL을 생성하거나 검수 원장을 수정하지 않는다. [게시 실행](mysql_publication.md) 및 [요구사항 대조](issue13_acceptance.md)를 따른다.
+MySQL 문서 계약 기반 DDL preflight/staging/게시 guard/기존 UUID·검수 보존의 게시기는 구현했고 실제 격리 MySQL로 검증했다. 현재 pj3_products의 v2 스키마·TLS·업무 게시와 guard·활성화 연결을 확인했다. 기존 외부 서비스 baseline과 전체 범위 인수는 별도다. 운영 게시 명령은 서비스 DDL을 생성하거나 검수 원장을 수정하지 않는다. [게시 실행](mysql_publication.md)을 따른다. [요구사항 누락 대조](issue13_acceptance.md)에 서버 시험 외의 남은 구현을 기록했다. SSH hostname 조회 성공은 이 단계의 실제 클러스터 인수와 별개다.
 
 
 ## 게시·운영 배포 순서
 
 1. 검토한 source release를 새 목적지에 복사하고 `python run_operations.py release-verify --bundle RELEASE_DIR`로 hash를 확인한다. 이 묶음은 src/data_pipeline 기준이며 상위 docs/design·인프라 설치·수집 데이터·비밀·가상환경을 포함하지 않는다. 상위 문서는 저장소의 검토한 버전을 함께 참고한다.
 2. 대상 OS에서 새 venv를 만든다. 현재 VM은 위 3절의 서버 조합과 `requirements-spark-server.txt`를 사용한다. 원천 역할은 `requirements.lock.txt`, 게시 역할은 `requirements-publication.lock.txt`를 설치한다. Linux/VM에서 import/CLI 도움말·자동 테스트를 다시 확인한다.
-3. MySQL 담당이 문서 v2 계약과 실제 DDL을 대조하고 [스키마 반영 가이드](mysql_schema_rollout.md)를 따른다. `sql/publication_reference_v2.sql`을 서비스 DB에 무조건 실행하지 않는다. 승인된 DDL, 최소 권한 계정·현재 Primary·TLS/CA·논리 target과 담당 guard를 준비한다.
+3. MySQL 담당이 document-publication-v2 계약과 실제 DDL을 대조한다. `sql/publication_reference_v2.sql`을 서비스 DB에 무조건 실행하지 않는다. 승인된 DDL, 최소 권한 계정·현재 Primary·TLS/CA·논리 target과 담당 guard를 준비한다.
 4. `run_publication.py preflight` → 고정 Gold 계획 prepare → 소량 `publish --apply` → 동일 계획 재실행·장애 복구를 검증한다. 새 image active/서비스 검수는 담당이 관리한다. 자세한 명령은 [MySQL 게시](mysql_publication.md)를 따른다.
 5. `operations.local.json`에 단일 queue 소유 서버·영속 디스크·감사 경로·전용 handoff bucket을 설정한다. 초기에는 remote discovery를 끄고 명시 등록한 작은 작업으로 tick·실패 재시도를 검증한다.
 6. 같은 설정의 수동 실패→재시도 성공 receipt를 확인한 뒤 [NiFi REST 절차](operations_execution.md)로 STOPPED 프로세서를 생성한다. 실제 버전/bundle/실행 권한을 확인하고 명시적으로 기동한다. 현재 검증용 NiFi의 timer/정지는 실제 확인했다. 승인 입력의 전체 FLOW 및 운영 일정 활성화는 별도 인수다.
 7. VM→AWS 이전은 [이관 절차](state_migration.md)의 정지·외부 백업/복원·논리 ID/hash 대조·파일 state 복원을 먼저 수행한다. fingerprint를 임의로 바꾸거나 RUNNING/공용 lease/stream checkpoint를 지워서 재개하지 않는다.
 
-기존 queue에 FLOW를 추가했다. [전체 단계 실행](flow_execution.md)의 flow-prepare→flow-run 또는 flow_directories→tick으로 Bronze/Silver/Gold·게시 계획·SQL·고정 범위 대조를 연결한다. 실제 Driver 위치/환경·권한·NiFi 종료 정책과 전체 worker CLI의 소량/장애 인수는 필요하다. Silver/Gold 등록은 담당 export 방식 인수 또는 직접 어댑터의 계약 확정이 필요하다.
+기존 queue에 FLOW를 추가했다. [전체 단계 실행](flow_execution.md)의 flow-prepare→flow-run 또는 flow_directories→tick으로 Bronze/Silver/Gold·게시 계획·SQL·고정 범위 대조를 연결한다. 실제 Driver 위치/환경·권한·NiFi 종료 정책과 전체 worker CLI의 소량/장애 인수는 필요하다. 기존 서버 coordinator의 Silver/Gold 등록 경로는 연결됐으며, 외부 서비스의 별도 등록 인터페이스로 이전할 때는 담당 계약을 대조한다.
 
 실제 소량 기술 시험과 전체 운영 인수의 구분은 실서버 검증 문서를 따른다. 검증용 launcher·queue·시험 원장을 운영 것으로 자동 전환하지 않는다.

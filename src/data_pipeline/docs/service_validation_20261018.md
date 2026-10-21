@@ -1,8 +1,42 @@
-# 상품 파이프라인 실서버 소량 검증
+# 상품 파이프라인 실제 검증·남은 인수
 
-2026-10-18. 대상은 상품 수집 파이프라인이다. 사용자 입력·해석·추천·임베딩·UI·서비스 작업 원장 연동은 다른 담당자의 범위로 유지했다. 전체 운영 인수와 아래 기술 시험을 구분한다.
+현재 기준은 2026-10-21 마지막 확인 결과다. 파일명은 기존 링크 호환을 위해 유지한다. 아래 현재 상태와 접힌 10월 18일 시험 기록을 구분한다. 사용자 입력·해석·임베딩·추천·UI 연동은 다른 담당자의 범위다.
 
-후속 v2 반영: 사용자가 승인한 `pj3_products`와 별도 `pj3_products_validation`에 기본 10개+추가 3개 테이블을 구성했다. 실제 TLS/스키마/최소 권한 검사와 검증 DB의 합성 상품 게시·재게시·audit를 통과했다. 업무 DB의 상품·승인은 0건이다. 아래 초기 시험 기록 중 MySQL 업무 DB/접속 설정 부재는 이 후속 구성으로 보완했으며 실제 업무 승인·외부 서비스 ORM 인수는 남는다. [누락 테이블 대조·계정·보호 경로·공개 결과](mysql_schema_rollout.md#신규-vm-스키마와-tls-반영-결과)를 기준으로 한다.
+## 2026-10-21 Kafka 보관 만료 복구 추가 확인
+
+24시간 보관으로 Kafka 메시지가 삭제돼 offset 310에서 재개하지 못한 장애를 확인했다. 해당 토픽을 14일 보관으로 바꾸고, Mongo 원장의 81,882개 고정 이벤트 목록·기존 대상 ID를 유지한 새 체크포인트 세대·1,000건 queue 상한의 재발행 경로를 추가했다. 이전 체크포인트를 삭제하거나 data loss 검사를 끄지 않았다.
+
+실제 한 배치는 31분 17초에 Bronze→Silver→Gold→MySQL→활성화 평가를 완료하고 정지했다. 새 상품 25개가 게시됐고 18개 ACTIVE / 7개 품질 대기다. 현재 업무 DB는 상품 234 / ACTIVE 213 / 대기 21이며 전체 65,498개 완료가 아니다. 재발행 1,100건과 queue 상한 도달 뒤 추가 발행 0건을 확인했다. 로컬·서버 관련 자동 시험은 각각 84개다. [복구·재개 가이드](kafka_retention_recovery.md)와 [공개 결과](verification/kafka_retention_recovery_20261021.json)를 따른다. 처리 속도 병목은 별도로 남아 있다.
+
+## 현재 실행·배포 범위
+
+| 항목 | 확인한 내용 | 남은 범위 |
+|---|---|---|
+| 업무 게시 | 실제 상품 234 / ACTIVE 213 / 대기 21. 마지막 25관측 중 18 ACTIVE·7 품질 대기 | 65,498상품 전체 완주·필드/이미지 확보율 전수 확인 |
+| Bronze → MySQL | 복구 세대 한 배치 커밋 후 Silver·Gold·게시·활성화 완료 | 장기 연속 실행·실제 노드 장애·처리량 개선 |
+| 처리 경계 | Bronze 100이벤트 / 이번 downstream 25관측, 고정 선택·성공 영수증 재사용 | 규모 확대 시 처리량·자원 재측정 |
+| Spark·Delta | 클러스터 실행, 세션 공유·묶음 버전/기존 행/출력 proof 조회·고정 입력 캐시 | 전체 배치 속도 보장 없음. Bronze 14분 12초가 남은 병목 |
+| 검수·활성화 | 내부 프로젝트 정책의 별도 reviewer·감사 원장·guard, 변경 관측 중심 재평가 | 7개 품질 대기를 임의 승인하지 않음; 추천 임베딩·인덱스는 별도 |
+| Kafka 복구 | 14일·2GiB 보관, 81,882 고정 이벤트 계획 중 1,100개 재발행, 미소비 queue 1,000 상한 | 남은 80,782개 재발행·전체 재처리; 자동 보충 hook 배포 후 장기 운전 미실시 |
+| JAR·작업 폴더 | 3 Worker의 공용 원본 보존·복사본 0개, 두 실제 앱 확인·완료 앱 TTL 1시간 | 장기 디스크 점유 감시 |
+| 실행 상태 | 마지막 한 배치 후 PAUSED_AFTER_BATCH, 다음 window 미실행 | 운영자가 정지 제어 확인 후 재개; 이번 문서 작업으로 재시작하지 않음 |
+| NiFi·이관 | 기존 제한 SSH와 격리 timer, 상태 pack/restore 코드 | 업무 전체 일정 인수·외부 DB/객체/Delta 백업 복원·AWS 이전 |
+
+실제 업무 실행 경로는 Spark Master의 `/var/lib/pj3/product-pipeline/spark/production-pending-20261019`이다. 기존 release/venv를 기반으로 작업 루트의 `source/`와 실행기를 추가 배포했다. 아래 초기 release SHA만으로 최신 실행 소스가 전부 같다고 판단하지 않는다. 최신 배포 근거는 작업 루트 `kafka-recovery-20261021/deployment-final.json`, `verification-final.json`, `perf-20261020/recovery-single-batch-result.json`이며 Git 전달 이력은 [변경 이력](implementation_history.md)을 따른다. 비밀·개인 로그는 공개 저장소에 넣지 않는다.
+
+관련 Kafka 자동 시험은 로컬·서버 각각 84개, 공용 JAR·정리 관련 로컬 시험은 26개 통과했다. 부분 시험 수를 합쳐 전체 회귀 수로 보고하지 않는다. 최신 커밋 준비의 전체 로컬 회귀 결과는 변경 이력에 따로 기록한다.
+
+## 남은 인수
+
+- 전체 65,498개 상품의 end-to-end 완주·누락·품질 대기·이미지 연결 검증. 상품 수와 이미지 버전 등을 포함한 81,882개 이벤트 수는 다르다.
+- 자동 재발행 보충을 포함한 장기 연속 실행, 장기 backlog·디스크 한도·중앙 경보·처리 시간 측정.
+- NiFi의 실제 업무 일정, 수집과 동시에 진행하는 LIVE 인계, 목적 환경에서의 백업·복원·재개와 물리 장애 시험.
+- 기존 서비스 ORM/baseline과 추천 담당자 산출물 인수. ACTIVE를 임베딩/인덱스 생성 완료로 해석하지 않는다.
+
+<details>
+<summary>2026-10-18 초기 기술 시험·준비 이력 — 현재 현황 아님</summary>
+
+다음은 그 날짜의 증거·제약을 보존한 기록이다. 당시 “없음/미시작/필요” 설명을 현재 실행 상태로 사용하지 않는다. 최신 업무 게시와 복구 결과는 위 표가 우선한다.
 
 ## 결과 요약
 
@@ -15,12 +49,11 @@
 | Silver | 실제 Bronze version 1의 한 상품. 실제 Mongo 이미지 상태·MongoLease·Garage Delta 사용, 8개 테이블 저장 및 반복 재사용 |
 | Gold | 고정 Silver 8개 버전으로 한 상품·이미지 4관계 처리·반복 재사용. recommendation_ready 0 |
 | 서버 간 인계 | Master → Garage ready-last → NiFi 수신. 3상품/9이미지 관계와 snapshot/file/chunk hash 일치, 재전송 객체 추가 0 |
-| MySQL 초기 문서 계약 | 이전 v1 별도 시험 스키마에서 9개 게시·복구 시나리오 통과 후 자체 정리. 후속 v2 검증과 구분 |
-| MySQL v2·TLS | 13테이블·160컬럼과 preflight 검증, Master→MySQL01 인증서/호스트명 검증. 합성 상품 1건·이미지 연결 2건 게시, 반복 REUSED·audit VERIFIED. 3개 노드 구조/계정/복제 반영 확인 |
+| MySQL 문서 계약 | 실제 MySQL01 8.4.11의 별도 시험 스키마. 9개 게시·복구 시나리오 통과, 시험 스키마·계정 삭제 |
 | 실제 프로세스 중단·큐 복구 | 별도 프로세스 exit 130 뒤 RUNNING을 명시 복구. 실제 INGEST handler 재실행 성공·성공 receipt 보존 |
 | 제한 SSH | NiFi → Master의 고정 tick 성공. id 및 tick;id 차단. 별도 키·호스트 키 고정·포워딩 제한 |
 | 실제 NiFi | 2.12.0 인증·bundle 대조·별도 프로세서 생성·잠시 timer 실행·정지. Master 감사 기록 2→14, 최종 active thread 0/STOPPED |
-| 자동 시험 | 최신 로컬 회귀 266개/107.125초 통과. 실제 로컬 MySQL v2 migration 16·게시 12건 통과. 이전 Linux VM 운영/LIVE/전송 대역 시험 43개/1.056초와 구분 |
+| 자동 시험 | 전체 252개/116.362초 통과. Linux VM의 운영/LIVE/전송 파일·대역 시험 43개/1.056초 통과 |
 
 실제 서비스별 결과는 [1차 근거](verification/services_20261018/public-results.json), [최종 MySQL·SSH·NiFi·배포 근거](verification/services_20261018/final-public-results.json)에 있다. 원천 ID·event ID·snapshot ID·고정 버전은 결과에 보존했다. 비밀번호·개인키·토큰·보호 설정 내용은 포함하지 않는다.
 
@@ -74,15 +107,15 @@ NiFi 검증 그룹 ID는 `4e743959-01a1-1000-bc08-5f3d31a5c4bd`, processor ID는
 
 ## 보존한 검증 데이터
 
-실제 서비스 인수 시험의 계약대로 MongoDB의 검증 원천 3건·등록/이벤트 원장과 S3 표본·Delta/checkpoint는 증거로 보존했다. MongoDB는 승인된 pj3_products_raw 안의 검증 environment/topic fingerprint를 사용한다. 같은 관측을 다른 운영 fingerprint로 바로 재적재하면 충돌 차단이 정상 동작한다. 운영 전에는 이 검증 원장을 별도 보관·정리하거나 동일 논리 계약을 인수하는 절차를 정해야 하며 fingerprint를 임의로 수정하지 않는다. 실제 운영 상품 게시·65,498건 전체 적재는 시작하지 않았다. MySQL 시험 스키마와 Worker 전용 Delta prefix만 자체 정리했다.
+실제 서비스 인수 시험의 계약대로 MongoDB의 검증 원천 3건·등록/이벤트 원장과 S3 표본·Delta/checkpoint는 증거로 보존했다. MongoDB는 승인된 pj3_products_raw 안의 검증 environment/topic fingerprint를 사용한다. 같은 관측을 다른 운영 fingerprint로 바로 재적재하면 충돌 차단이 정상 동작한다. 운영 전에는 이 검증 원장을 별도 보관·정리하거나 동일 논리 계약을 인수하는 절차를 정해야 하며 fingerprint를 임의로 수정하지 않는다. 당시 실제 운영 상품 게시·65,498건 전체 적재는 시작하지 않았다. MySQL 시험 스키마와 Worker 전용 Delta prefix만 자체 정리했다.
 
 ## 실제 업무 인수 전에 필요한 정보
 
 현재 가능한 위 소량 기술 검증은 수행했다. 다음 입력 없이 운영 전체 완료로 체크하지 않는다.
 
-1. 외부 서비스 ORM과 새 문서 계약 DDL의 최종 인수, 실제 상품의 담당 publication guard. 새 업무 DB명·TLS CA·게시용 보호 접속 설정·문서 DDL은 후속 v2 구성으로 준비했다. 업무 DB는 비어 있어 기존 UUID backfill 대상이 없으며 다른 서비스 DB와 통합 시 실제 baseline을 별도로 확인한다.
+1. 실제 서비스 ORM/DDL, 게시 DB명·TLS CA·게시용 보호 접속 설정, 기존 UUID/관측 baseline, 담당 publication guard.
 2. 카테고리 매핑·이용/이미지 검수·링크 판정의 확정 버전과 NORMALIZATION/GOLD_BUILD 등록 export. 현재 없는 승인을 대신 생성하지 않는다.
-3. 위 입력을 사용한 운영 전체 FLOW·NiFi 예약 인수. 현재 운영 Kafka product.raw.collected는 만들지 않았고 격리 RF3/minISR2 토픽만 시험했다. 운영 토픽/ACL/보관 정책과 논리 환경을 확정해야 한다.
+3. 위 입력을 사용한 운영 전체 FLOW·NiFi 예약 인수. 당시 운영 Kafka product.raw.collected는 만들지 않았고 격리 RF3/minISR2 토픽만 시험했다. 운영 토픽/ACL/보관 정책과 논리 환경을 확정해야 한다.
 4. 실제 환경 이전을 시험할 목적지·외부 DB/객체/Delta 백업·복원 증거, 공유 노드 장애 시험을 위한 담당 인수. 이번에는 다른 팀 서비스를 중지하거나 AWS 자원을 만들지 않았다. 파일 이관 43개 시험과 스냅샷 VM 간 전달을 외부 DB·Kafka·Delta 전체 복원으로 확대하지 않는다.
 
 대용량 장기 적체·전체 71카테고리/65,498건 처리량, 실제 수집기와 동시 인계, 물리 노드 중지·선거·디스크 내구성은 이번 최소 소량 검증에 포함하지 않았다. 다른 담당자의 입력→해석→임베딩→추천→UI 통합도 범위 밖이다.
@@ -104,3 +137,5 @@ NiFi 검증 그룹 ID는 `4e743959-01a1-1000-bc08-5f3d31a5c4bd`, processor ID는
 - [NiFi 초기 배포](verification/runtime_20261018/nifi-deploy.json), [Master 초기 배포](verification/runtime_20261018/spark-deploy.json), [NiFi 접속](verification/runtime_20261018/nifi-connections.json), [Master 접속](verification/runtime_20261018/spark-connections.json), [운영 토픽 최초 조회](verification/runtime_20261018/kafka-topic-audit.json). 이 준비 단계 결과의 ce456c2f... release는 위 최종 128dbd37...보다 이전이다.
 
 현재 계정·보호 파일 위치는 [배포 가이드](deployment.md#현재-vm의-보호-설정), Garage 조건부 쓰기 실패와 프로필 보완의 성공/실패 근거는 [Garage 프로필](garage_v241_profile.md#인프라-가용성과-검증-근거)로 모았다. 검증 코드와 공개 JSON은 삭제하지 않았다.
+
+</details>

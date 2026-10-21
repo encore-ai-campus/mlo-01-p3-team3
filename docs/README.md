@@ -14,6 +14,7 @@
 | 실버·골드 정제 필드·준비 상태 | [Delta 필드 계약](design/data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위) | [파이프라인](design/02-data-pipeline.md#실버골드-필드-적용), [원장 대응](design/03-data-model.md#실버골드와-서비스-원장-대응) |
 | 데이터 변경 | [직접 추천 속성](design/data-dictionary/09-direct-recommendation.md) | [모델](design/03-data-model.md), [ERD](design/03-erd-full.md) |
 | Gold→MySQL 테이블 생성·필수 컬럼·게시 연결 | [게시 필드 계약](design/13-gold-mysql-publication.md) | [상품 속성](design/data-dictionary/02-products.md#gold-게시-필수-확장-컬럼), [게시 실행](../src/data_pipeline/docs/mysql_publication.md) |
+| 상품 파이프라인 실행·배포·복구 | [구현 README](../src/data_pipeline/README.md) | [현재 검증·남은 인수](../src/data_pipeline/docs/service_validation_20261018.md), [작업 이력](../src/data_pipeline/docs/implementation_history.md) |
 | 상품·링크 | [상품 연결](design/09-product-links.md) | [광고 서버](design/07-ad-server.md) |
 | 인프라·보존·복구 | [인프라](design/01-infrastructure.md) | [Kafka](design/05-kafka-jobs.md), [운영](design/06-operations-migration.md) |
 
