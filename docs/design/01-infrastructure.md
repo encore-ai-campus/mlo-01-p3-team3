@@ -1,34 +1,51 @@
 # 인프라 구성과 저장 서버
 
-VMware 기반 로컬 VM에 서비스를 배치하고 검증 후 AWS로 이전한다. 이미지 저장과 Delta 파일 저장은 별도 VM으로 분리하는 안을 기준으로 한다.
+운영 소프트웨어 인벤토리는 VMware 기반 5대 Windows 호스트의 20대 VM을 기록하며 모니터링 VM도 포함한다. 인벤토리의 `active/running` 표시는 캡처 시점의 서버 소프트웨어 상태이며 서비스 연계·전체 파이프라인 시험 완료를 뜻하지 않는다. 이미지 저장과 Delta 파일 저장은 별도 VM으로 분리한다.
 
 [문서 안내](index.md) · [전체 아키텍처](00-architecture.md) · [AWS 이전](06-operations-migration.md)
 
 ## 직접 추천의 실행 경계
 
-2026-10-15부터 신규 서비스는 이미지 생성 없이 입력 해석→코드 검증→질의 임베딩→상품 검색·scikit-learn 콘텐츠 유사도·가중합 순위를 수행한다. 기존 19대/DB 3+3·저장소 배치 후보는 유지한다. 이미지 생성 제거만으로 VM 수를 자동 축소하거나 수백 명 처리량을 보장하지 않는다. 기존 역할 그림의 생성 관련 표기는 이전 흐름이며 [현행 담당별 다이어그램](12-direct-recommendation.md#담당별-추천-흐름)을 따른다.
+2026-10-15부터 신규 서비스는 이미지 생성 없이 입력 해석→코드 검증→질의 임베딩→상품 검색·scikit-learn 콘텐츠 유사도·가중합 순위를 수행한다. 모니터링 VM을 포함한 20대/DB 3+3·저장소 배치 후보를 유지한다. 이미지 생성 제거만으로 VM 수를 자동 축소하거나 수백 명 처리량을 보장하지 않는다. 기존 역할 그림의 생성 관련 표기는 이전 흐름이며 [현행 담당별 다이어그램](12-direct-recommendation.md#담당별-추천-흐름)을 따른다.
 
 초기는 학습 없이 scikit-learn cosine_similarity·수동 가중합을 광고 서버 CPU에서 처리한다. NPY float32 mmap·청크 비교를 사용하고 카탈로그는 프로세스에서 재사용한다. 후보 수·BLAS 스레드·프로세스별 메모리 복제를 실측한다. GPU·새 추론 VM 증설을 전제하지 않고 후속 학습 배치는 실제 도입 시 자원 경쟁을 별도 관리한다.
 
 ## 기반 사양과 증설 상태
 
-현재 설계는 로컬 VM 19대이며 실제 설치·자원 검증 완료를 뜻하지 않는다. Application과 광고 서버는 분리하고 이미지·Delta 저장소도 각각 둔다. 이 문서의 서버명은 역할을 구분하기 위한 논리 이름이다. 실제 IP·서브넷·서버명과 주소의 대응표는 저장소 밖의 환경별 배포 설정에서 관리한다.
+운영 인벤토리에는 역할별 서버 20대와 Ubuntu Server 26.04·Python 3.14.4·OpenSSH Server·chrony·node_exporter 1.12.1이 기록되어 있다. node_exporter는 20대 전체에 표시된다. Application과 광고 서버는 역할상 분리하고 이미지·Delta 저장소도 각각 둔다. 이 문서의 서버명은 역할을 구분하기 위한 논리 이름이다. 실제 IP·서브넷·서버명과 주소의 대응표는 저장소 밖의 환경별 배포 설정에서 관리한다.
 
-| 영역 | 현재 역할 | VM 수 | 논리 서버명 |
+| 영역 | 논리 역할 | VM 수 | 논리 서버명 |
 |---|---|---|---|
-| 접근 관리 | Bastion·Ansible | 1 | bastion-01 |
+| 접근 관리 | Bastion·Ansible 13.1.0 / Ansible Core 2.20.1 | 1 | bastion-01 |
+| 운영 관측 | Prometheus 3.15.0·Grafana 13.2.4, 서버별 node_exporter 1.12.1 지표 수집 | 1 | pj3-monitor |
 | 사용자 서비스 | Django 웹·AI Consumer·작업 복구 | 1 | app-01 |
 | 추천 | 광고 API·상품 임베딩·FAISS | 1 | ad-01 |
 | 메시지 | Kafka Broker·KRaft Controller | 3 | kafka-01~kafka-03 |
 | 분산 처리 | Spark Master/Driver·Workers | 4 | spark-master-01, spark-worker-01~spark-worker-03 |
-| 상품 준비 | NiFi | 1 | nifi-01 |
+| 상품 준비 | NiFi 실행 조정 | 1 | nifi-01 |
 | MySQL | Primary 1대·Replica 2대 | 3 | mysql-01, mysql-02, mysql-03 |
 | MongoDB | 3노드 Replica Set | 3 | mongo-01, mongo-02, mongo-03 |
 | 파일 | 이미지용·Delta용 Object Storage | 2 | media-storage-01, lake-storage-01 |
+| **합계** |  | **20** |  |
 
 ![로컬 인프라의 역할 구성](assets/vm-role-map.svg)
 
-[PNG로 보기](assets/vm-role-map.png). 그림은 역할 개요이며 발행은 DB 커밋 후 직접 수행하고 누락은 업무 기록에서 복구한다. 현행 VM 대수·DB 복제 구성과 실행 방식은 본문 표·DB 다중화 계약 및 [Kafka 발행·복구 계약](05-kafka-jobs.md#발행과-복구)을 기준으로 한다.
+그림은 역할 개요이며 실제 VM 대수는 본문 표를 기준으로 한다. 발행은 DB 커밋 후 직접 수행하고 누락은 업무 기록에서 복구한다. 현행 DB 복제 구성과 실행 방식은 본문 표·DB 다중화 계약 및 [Kafka 발행·복구 계약](05-kafka-jobs.md#발행과-복구)을 기준으로 한다. NiFi의 제한 원격 tick 시험은 전체 업무 FLOW의 구현·연계를 뜻하지 않는다.
+
+### 서버 소프트웨어 인벤토리
+
+![PJ3 운영 소프트웨어 인벤토리](../../assets/PJ3%20운영%20소프트웨어%20스택%20대시보드.png)
+
+인벤토리는 20대 서버에 설치된 운영체제·런타임·역할별 소프트웨어와 캡처 당시 `active/running` 상태를 요약한다. 공통 기반은 Ubuntu Server 26.04·Python 3.14.4·OpenSSH Server·chrony이며 node_exporter 1.12.1은 20대에 표시된다. 지속성 Python venv는 7개다. 이 목록은 서비스 기능 시험이나 전체 연동의 증거가 아니다.
+
+| 항목 | 운영 인벤토리 | 저장소 의존성·시험 기록과 대조 |
+|---|---|---|
+| Django | WebApp VM 6.1.2, 별도 테스트 venv 5.2.18 | 저장소 앱은 `Django>=5.2,<5.3`, 고정 테스트 의존성은 5.2.18이다. 테스트 venv는 저장소 고정값과 일치하지만 VM의 6.1.2에서 현재 앱을 실행·검증했다는 근거는 없다. |
+| PyMySQL | WebApp VM 1.2.3, 파이프라인 venv 1.1.2 | 저장소 서버·게시 잠금은 1.1.2다. 역할별 venv 차이를 유지하며 하나의 버전으로 합쳐 쓰지 않는다. |
+| 파이프라인 Python/JVM | Python 3.14.4, OpenJDK 21.0.12.1, Spark 4.1.3, Hadoop 3.4.2, boto3/botocore 1.43.114, PyMySQL 1.1.2, pyspark 4.1.3 | 실서버 배포 문서는 Delta Spark 4.4.1도 기록한다. 대시보드에 없는 Delta 및 JVM connector/JAR 버전은 런타임 manifest와 함께 확인한다. |
+| 광고 서버 | 전용 VM 1대, 공통 에이전트·기본 시스템 서비스 중심 | 인벤토리는 PJ3 전용 광고 서비스를 확인하지 못했다고 표시한다. 광고 서버의 Django API·추천·링크 역할은 설계이며 VM 배포 완료를 뜻하지 않는다. |
+
+이 인벤토리는 스택 대시보드와 함께 갱신한다. 실제 IP·서브넷·인증정보는 그림과 저장소 문서에 기록하지 않는다.
 
 물리 노트북과 관리 담당자는 별도 확정한다. Kafka 3대는 서로 다른 노트북에 분산하며 아래 과거 배치표를 현재 설치 지시로 사용하지 않는다.
 
@@ -55,20 +72,21 @@ VMware 기반 로컬 VM에 서비스를 배치하고 검증 후 AWS로 이전한
 | 3 | media-storage-01 | Object Storage | Object Storage (이미지용) | 4GB부터 |
 | 3 | spark-master-01 | Spark Master | Master와 작업 제출, 필요 시 Driver | 4GB 이상 검토 |
 | 1, 재배정 검토 | ad-01 후보 | 미배정 | 광고 서버: Django API·상품 추천·링크 결정·FAISS 인덱스 관리 | 4GB부터 |
+| 미배정 | pj3-monitor | Monitoring Server | Prometheus·Grafana 대시보드, node_exporter 지표 수집 | 4GB부터 |
 | 미배정 | lake-storage-01 후보 | 추가 | Object Storage (Delta용) | 4GB부터 |
 
 
 </details>
 
-## AI API 방식과 19대 초기 구성
+## AI API 방식과 20대 초기 구성
 
-- 광고 서버의 논리 이름은 ad-01이다. MySQL 3대·MongoDB 3대와 이미지·Delta 저장 VM을 포함해 초기 운영은 19대로 계획한다.
+- 광고 서버의 논리 이름은 ad-01이다. Prometheus·Grafana 모니터링 VM, MySQL 3대·MongoDB 3대와 이미지·Delta 저장 VM을 포함해 초기 배치는 20대다.
 - 작업 상태와 오류는 MySQL 및 Django 운영 화면으로 확인하고 상세 로그는 서비스별 파일 또는 systemd·컨테이너 로그로 관리한다.
 - spark-worker-01~spark-worker-03의 Spark Worker 세 대는 유지한다. AI 전용 VM을 추가하거나 Spark VM을 AI 서버로 전환하지 않는다.
 - app-01에서 Django 웹, AI API Consumer, 작업 복구를 별도 프로세스 또는 컨테이너로 실행한다. 웹 서버 시작 훅에 Consumer를 포함하지 않는다.
 - 모델 추론은 외부 API가 수행한다. app-01에는 모델 가중치나 GPU를 배치하지 않는다. 이미지 읽기·변환에 사용하는 RAM과 동시 요청 수를 제한하고 웹 응답 지연을 측정한다.
 - Application 서버는 이미지 저장소·Kafka·MySQL과 통신하며 외부 모델 API로 나가는 HTTPS 연결이 필요하다. 웹과 Consumer는 별도로 재시작할 수 있지만 서버 장애는 공유한다.
-- AWS에서 이미지용과 Delta용 저장 VM을 S3로 대체하면 EC2는 17대다. AI API Consumer는 Django EC2 안에서 실행한다.
+- AWS에서 모니터링 VM 역할을 EC2에 유지하고 이미지용·Delta용 저장 VM 두 대를 S3로 대체하면 EC2는 18대다. AI API Consumer는 Django EC2 안에서 실행한다.
 
 ### 작업 프로세스의 자원 경계
 
@@ -107,7 +125,7 @@ Django·AI Consumer·작업 복구·광고 서버·Spark 검수 조회 및 MySQL
 
 ## 광고 서버 배치
 
-광고 서버(ad-01)는 Application(app-01)과 별도 Django API 서비스로 운영한다. 입력 해석·검증·추천 맥락 보존은 Application(app-01), 검색 임베딩·상품 추천과 다나와 연결 판단은 광고 서버(ad-01)의 책임이다. 외부 링크 요청은 Application의 인증 경로를 거쳐 내부 API로 전달한다. 초기 2 vCPU·4GB RAM·OS 디스크 30GB를 후보로 두고 인덱스 용량에 따라 데이터 디스크를 추가한다. 기존 MySQL·이미지용 Object Storage를 사용하며 벡터 생성은 외부 임베딩 API에 요청한다. 인덱스 원본은 Delta에서 발행하고 광고 서버는 로컬 디스크·메모리에서 검색한다. 멀티모달/임베딩 로컬 가중치나 GPU는 배치하지 않으며 초기에는 scikit-learn 콘텐츠 유사도·수동 가중합 코드를 CPU에서 실행한다. 학습 Pipeline artifact 로드는 후속 도입 시 검증한다.
+광고 서버(ad-01)는 설계상 Application(app-01)과 별도 Django API 서비스로 운영한다. 운영 인벤토리는 광고 서버 VM에 PJ3 전용 서비스가 확인되지 않았다고 기록하므로 실제 VM 배포 완료로 보지 않는다. 입력 해석·검증·추천 맥락 보존은 Application(app-01), 검색 임베딩·상품 추천과 다나와 연결 판단은 광고 서버(ad-01)의 목표 책임이다. 외부 링크 요청은 Application의 인증 경로를 거쳐 내부 API로 전달한다. 초기 2 vCPU·4GB RAM·OS 디스크 30GB를 후보로 두고 인덱스 용량에 따라 데이터 디스크를 추가한다. 기존 MySQL·이미지용 Object Storage를 사용하며 벡터 생성은 외부 임베딩 API에 요청한다. 인덱스 원본은 Delta에서 발행하고 광고 서버는 로컬 디스크·메모리에서 검색한다. 멀티모달/임베딩 로컬 가중치나 GPU는 배치하지 않으며 초기에는 scikit-learn 콘텐츠 유사도·수동 가중합 코드를 CPU에서 실행한다. 학습 Pipeline artifact 로드는 후속 도입 시 검증한다.
 
 Application → 광고 서버 내부 HTTP, 광고 서버 → MySQL·이미지 저장소·외부 임베딩 API, 인덱스 관리 프로세스 → Kafka·Delta용 저장소의 연결을 허용한다. Application(app-01)과 광고 서버(ad-01)는 가능하면 다른 노트북에 배치하고 인덱스 재구축이 웹·DB 자원을 독점하지 않게 제한한다. 담당자는 기존 인원 1 또는 재배정한 담당자로 확정한다. 상세 경계는 [광고 서버](07-ad-server.md)를 따른다.
 

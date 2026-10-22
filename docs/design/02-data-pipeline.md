@@ -179,7 +179,7 @@ flowchart LR
 
 ### 실행 주기와 배포 경계
 
-NiFi는 상품 수집 주기, Spark는 가공·집계 실행, 작업 관리 프로세스는 비동기 재시도를 각각 담당한다. 사용자 추천이 전체 ETL을 시작하지 않는다. AWS 저장소·실행 서버 대응은 [인프라](01-infrastructure.md)와 [운영](06-operations-migration.md)을 따른다.
+NiFi는 상품 수집 주기, Spark는 가공·집계 실행, 작업 관리 프로세스는 비동기 재시도를 각각 담당한다. 이는 목표 역할이며 업무 입력으로 7단계 FLOW를 운영하는 연결은 미완료다. 2026-10-18에는 NiFi 2.12.0 `timer → 제한 SSH → Master 검증 큐 tick`까지만 확인했고, 전체 파이프라인 통합 기술 시험은 수행하지 않았다. 사용자 추천이 전체 ETL을 시작하지 않는다. AWS 저장소·실행 서버 대응은 [인프라](01-infrastructure.md)와 [운영](06-operations-migration.md)을 따른다. 시험 범위는 [실서버 검증 기록](../../src/data_pipeline/docs/service_validation_20261018.md)을 따른다.
 
 ## 템플릿 준비와 입력 Bronze
 

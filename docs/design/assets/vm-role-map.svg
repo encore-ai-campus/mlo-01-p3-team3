@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="770" viewBox="0 0 1440 770" role="img" aria-labelledby="title desc">
 <title id="title">로컬 인프라의 역할 구성</title>
-<desc id="desc">사용자 서비스, 상품 준비와 처리, 데이터 저장, 접근 관리의 역할을 묶은 구성도입니다. VM 대수와 IP는 문서의 배치표에서 관리합니다.</desc>
+<desc id="desc">사용자 서비스, 상품 준비와 처리, 데이터 저장, 접근 관리, 모니터링 역할을 묶은 구성도입니다. VM 대수와 IP는 문서의 배치표에서 관리합니다.</desc>
 <defs>
 <style>
 text{font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif;fill:#17324b}
@@ -12,7 +12,7 @@ text{font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif;fill:#17324b}
 <rect width="1440" height="770" fill="#f6f9fc"/>
 <rect width="1440" height="9" fill="#218f83"/>
 <text class="title" x="52" y="66">로컬 인프라의 역할 구성</text>
-<text class="sub" x="53" y="103">역할별로 묶은 그림입니다. VM 대수와 IP는 문서의 배치표에서 관리합니다.</text>
+<text class="sub" x="53" y="103">모니터링 VM을 포함한 역할 구성입니다. VM 대수와 IP는 문서의 배치표에서 관리합니다.</text>
 
 <rect x="38" y="128" width="1364" height="132" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
 <rect x="55" y="144" width="7" height="28" rx="3" fill="#176b63"/>
@@ -55,10 +55,13 @@ text{font-family:"Malgun Gothic","Noto Sans KR",Arial,sans-serif;fill:#17324b}
 
 <rect x="38" y="572" width="1364" height="132" rx="20" fill="#fff" stroke="#dce5ed" stroke-width="2"/>
 <rect x="55" y="588" width="7" height="28" rx="3" fill="#69648e"/>
-<text class="lane-title" x="76" y="610">D  접근 · 구성 관리</text>
-<rect x="320" y="628" width="800" height="61" rx="13" fill="#f1eff8" stroke="#aaa1cb" stroke-width="1.5"/>
-<text class="card-title" x="340" y="654">Bastion · Ansible</text>
-<text class="card-body" x="340" y="677">관리자 접근 · 서비스 구성 배포</text>
+<text class="lane-title" x="76" y="610">D  접근 · 운영 관측</text>
+<rect x="80" y="628" width="570" height="61" rx="13" fill="#f1eff8" stroke="#aaa1cb" stroke-width="1.5"/>
+<text class="card-title" x="100" y="654">Bastion · Ansible</text>
+<text class="card-body" x="100" y="677">관리자 접근 · 서비스 구성 배포</text>
+<rect x="790" y="628" width="570" height="61" rx="13" fill="#f1eff8" stroke="#aaa1cb" stroke-width="1.5"/>
+<text class="card-title" x="810" y="654">pj3-monitor</text>
+<text class="card-body" x="810" y="677">Prometheus · Grafana 대시보드 · node_exporter 수집기</text>
 
 <text class="note" x="53" y="746">그림은 기능적 역할을 표시합니다. 실제 대수 · 실행 위치 · 물리 배치는 배치표와 검증 결과를 따릅니다.</text>
 </svg>
