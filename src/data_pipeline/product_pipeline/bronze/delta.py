@@ -129,7 +129,7 @@ class DeltaSink:
         if frames:
             combined=frames[0]
             for frame in frames[1:]:combined=combined.unionByName(frame)
-            with timed('delta_batch_lookup'):values=combined.collect()
+            with timed('delta_batch_lookup',track_max=True):values=combined.collect()
             for value in values:
                 table=value['_table'];row=parse(value['_row'])
                 for field,keys in requests[table].items():
@@ -155,7 +155,7 @@ class DeltaSink:
         if not rows:return
         for chunk in write_chunks(rows):self._append_chunk(table,chunk)
         self.lease.check(self.settings)
-        with timed('delta_storage_verification'):
+        with timed('delta_storage_verification',track_max=True),timed(f'delta_storage_verification_{table}',track_max=True):
             stored=DeltaSink._newly_stored(self,table,len(rows))
             if stored is None:stored=self.existing(table,{row[key] for row in rows})
         if any(row[key] not in stored or not same_content(table,stored[row[key]],row) for row in rows):
@@ -188,10 +188,16 @@ class DeltaSink:
 
     def _append_chunk(self, table, rows):
         from contextlib import ExitStack
-        with ExitStack() as cleanup:
-            return DeltaSink._append_staged_chunk(self,table,rows,cleanup)
+        prefix=f'delta_stage_{table}'
+        bump(prefix+'_input_rows',len(rows))
+        with timed('delta_stage_chunk',track_max=True),timed(prefix+'_chunk',track_max=True):
+            with ExitStack() as cleanup:
+                return DeltaSink._append_staged_chunk(self,table,rows,cleanup)
 
     def _append_staged_chunk(self, table, rows, cleanup):
+        return self._append_staged_chunk_inner(table,rows,cleanup)
+
+    def _append_staged_chunk_inner(self, table, rows, cleanup):
         import tempfile
         from pathlib import Path
         from uuid import uuid4
@@ -206,45 +212,62 @@ class DeltaSink:
         self.lease.check(self.settings)
         with tempfile.TemporaryDirectory(prefix='bronze-input-') as directory:
             local=Path(directory)/'rows.json'
-            with local.open('w',encoding='utf-8',newline='\n') as stream:
-                for row in rows:stream.write(canonical(row)+'\n')
+            with timed(f'delta_stage_{table}_local_serialize',track_max=True):
+                with local.open('w',encoding='utf-8',newline='\n') as stream:
+                    for row in rows:stream.write(canonical(row)+'\n')
+            size=local.stat().st_size
+            bump(f'delta_stage_{table}_input_bytes',size)
             parsed=urlsplit(self.paths[table])
             if parsed.scheme=='s3a' and os.environ.get('PIPELINE_SPARK_S3_PROFILE')=='garage_v241':
                 # S3A copyFromLocalFile's upload protocol is incompatible with
                 # this Garage deployment. Use the existing tested SDK profile.
                 from ..objects import S3Objects
-                objects=S3Objects(parsed.netloc,os.environ['PIPELINE_S3_ENDPOINT'],profile='garage_v241',
-                    credentials_file=os.environ['PIPELINE_SPARK_S3_CREDENTIALS_FILE'])
-                cleanup.callback(objects.client.close)
+                with timed(f'delta_stage_{table}_client_open',track_max=True):
+                    objects=S3Objects(parsed.netloc,os.environ['PIPELINE_S3_ENDPOINT'],profile='garage_v241',
+                        credentials_file=os.environ['PIPELINE_SPARK_S3_CREDENTIALS_FILE'])
+                def close_client():
+                    with timed(f'delta_stage_{table}_client_close',track_max=True):objects.client.close()
+                cleanup.callback(close_client)
                 object_key=urlsplit(staged.toString()).path.lstrip('/')
-                checksum=hashlib.sha256(local.read_bytes()).hexdigest();size=local.stat().st_size
-                with local.open('rb') as body:
-                    objects.client.put_object(Bucket=parsed.netloc,Key=object_key,Body=body,ContentLength=size,
-                        Metadata={'sha256':checksum},ContentType='application/x-ndjson')
-                stored=objects.client.get_object(Bucket=parsed.netloc,Key=object_key)
+                with timed(f'delta_stage_{table}_local_checksum',track_max=True):
+                    checksum=hashlib.sha256(local.read_bytes()).hexdigest()
+                with timed(f'delta_stage_{table}_put',track_max=True):
+                    with local.open('rb') as body:
+                        objects.client.put_object(Bucket=parsed.netloc,Key=object_key,Body=body,ContentLength=size,
+                            Metadata={'sha256':checksum},ContentType='application/x-ndjson')
+                with timed(f'delta_stage_{table}_get',track_max=True):
+                    stored=objects.client.get_object(Bucket=parsed.netloc,Key=object_key)
                 actual=hashlib.sha256();received=0
                 body=stored['Body']
-                try:
-                    while True:
-                        block=body.read(65536)
-                        if not block:break
-                        received+=len(block)
-                        if received>size:raise PipelineError('BRONZE_STAGED_INPUT_UNCONFIRMED')
-                        actual.update(block)
-                finally:body.close()
-                if received!=size or actual.hexdigest()!=checksum:
-                    raise PipelineError('BRONZE_STAGED_INPUT_UNCONFIRMED')
-            else:fs.copyFromLocalFile(False,False,jpath(local.as_uri()),staged)
-        frame=(self.spark.read.schema(self.schemas[table]).option('mode','FAILFAST')
-            .option('timeZone','UTC').option('timestampFormat',"yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
-            .json(staged.toString()))
+                with timed(f'delta_stage_{table}_readback_verify',track_max=True):
+                    try:
+                        while True:
+                            block=body.read(65536)
+                            if not block:break
+                            received+=len(block)
+                            if received>size:raise PipelineError('BRONZE_STAGED_INPUT_UNCONFIRMED')
+                            actual.update(block)
+                    finally:
+                        try:body.close()
+                        finally:bump(f'delta_stage_{table}_readback_bytes',received)
+                    if received!=size or actual.hexdigest()!=checksum:
+                        raise PipelineError('BRONZE_STAGED_INPUT_UNCONFIRMED')
+            else:
+                with timed(f'delta_stage_{table}_filesystem_copy',track_max=True):
+                    fs.copyFromLocalFile(False,False,jpath(local.as_uri()),staged)
+        # Spark DataFrame construction is lazy; source reads run inside the save action below.
+        with timed(f'delta_stage_{table}_spark_json_plan',track_max=True):
+            frame=(self.spark.read.schema(self.schemas[table]).option('mode','FAILFAST')
+                .option('timeZone','UTC').option('timestampFormat',"yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+                .json(staged.toString()))
         self.lease.check(self.settings)
-        with timed('delta_append'):
+        with timed('delta_append',track_max=True),timed(f'delta_append_{table}',track_max=True):
             frame.write.format('delta').mode('append').option('mergeSchema','false').save(self.paths[table])
         bump('delta_appended_rows',len(rows))
         self.lease.check(self.settings)
         # A failed/uncertain write leaves its unique input for diagnosis/replay.
         # Delete only this attempt's input after synchronous write and ownership check.
-        if objects is not None:
-            objects.client.delete_object(Bucket=parsed.netloc,Key=object_key)
-        elif not fs.delete(staged,False):raise PipelineError('BRONZE_STAGED_INPUT_CLEANUP_FAILED')
+        with timed(f'delta_stage_{table}_delete',track_max=True):
+            if objects is not None:
+                objects.client.delete_object(Bucket=parsed.netloc,Key=object_key)
+            elif not fs.delete(staged,False):raise PipelineError('BRONZE_STAGED_INPUT_CLEANUP_FAILED')

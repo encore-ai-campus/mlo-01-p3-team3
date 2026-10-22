@@ -25,7 +25,9 @@
 - `lease_acquire`, `lease_renew`, `lease_close`: MongoDB majority 잠금 왕복 비용. 잠금 유효성 검사를 생략하지 않는다.
 - `query_run`, `foreach_batch`, `query_stop`, `mongo_close`, `spark_release`: 실행·종료 경계.
 
-접미사 `_calls`는 코드 호출 수, `_ms`는 해당 구간 wall time이다. 중첩 구간과 heartbeat가 겹치므로 합계가 전체 소요 시간과 같지 않다. Spark callback·heartbeat는 다른 스레드에서 실행되므로 동일 invocation의 thread-safe profile에 연결한다. `spark_session_reused`는 그 invocation이 기존 scope의 Spark를 빌렸는지 나타낸다. 실제 최종 JVM 종료 시간은 `continuous-runtime.json.metrics.spark_shutdown_ms`에 남는다.
+`delta_stage_<table>_chunk`는 SDK 종료까지 포함한 표별 전체 청크 구간이며 `input_rows`·`input_bytes`는 청크 행 수와 직렬화한 입력 바이트다. `local_serialize`, `local_checksum`, `client_open`, `put`, `get`, `readback_verify`, `spark_json_plan`, `delete`, `client_close`로 임시 입력 경로의 단계를 나눠 기록한다. `_get`은 응답 객체 수신까지, `_readback_verify`는 응답 본문 읽기와 SHA-256 확인까지 측정하며 `_readback_bytes`는 읽은 바이트 수다. `_filesystem_copy`는 Garage S3 프로필이 아닌 경로의 파일 복사 시간이다. `delta_append_<table>`과 `delta_storage_verification_<table>`은 표별 저장 시간이다. `lease_renew_mongo_update`는 lease 검사 중 MongoDB의 각 `find_one_and_update` 호출이다.
+
+접미사 `_calls`는 코드 호출 수, `_ms`는 해당 구간 wall time, 선택적으로 기록되는 `_max_ms`는 단일 호출 중 최댓값이다. 평균 호출 시간은 `_ms / _calls`로 계산한다. Spark JSON DataFrame 생성은 지연 실행이므로 `delta_stage_<table>_spark_json_plan_ms`는 계획 생성 시간만 포함하며 실제 파일 읽기는 `delta_append_ms` 안에서 일어난다. 청크 전체·세부 단계·Delta append·lease heartbeat 측정은 서로 중첩될 수 있고 heartbeat는 다른 스레드에서 실행되므로 값을 더해 전체 소요 시간으로 해석하지 않는다. 원문·객체 키·hash·암호는 기록하지 않는다. Spark callback·heartbeat는 동일 invocation의 thread-safe profile에 연결한다. `spark_session_reused`는 그 invocation이 기존 scope의 Spark를 빌렸는지 나타낸다. 실제 최종 JVM 종료 시간은 `continuous-runtime.json.metrics.spark_shutdown_ms`에 남는다.
 
 ## 배포·중지·재개
 

@@ -13,6 +13,10 @@ class Profile:
     def __exit__(self,*args):_current.reset(self.token)
     def add(self,name,value=1):
         with self.lock:self.values[name]=self.values.get(name,0)+value
+    def add_max(self,name,value):
+        with self.lock:
+            previous=self.values.get(name)
+            self.values[name]=value if previous is None else max(previous,value)
     def snapshot(self):
         with self.lock:return dict(self.values)
 
@@ -32,9 +36,16 @@ def bump(name,value=1):
     if profile is not None:profile.add(name,value)
 
 
+def maximum(name,value):
+    profile=current()
+    if profile is not None:profile.add_max(name,value)
+
+
 @contextmanager
-def timed(name):
+def timed(name,*,track_max=False):
     started=monotonic()
     try:yield
     finally:
-        bump(name+'_calls');bump(name+'_ms',round((monotonic()-started)*1000))
+        elapsed=round((monotonic()-started)*1000)
+        bump(name+'_calls');bump(name+'_ms',elapsed)
+        if track_max:maximum(name+'_max_ms',elapsed)

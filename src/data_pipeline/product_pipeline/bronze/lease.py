@@ -104,7 +104,7 @@ class MongoLease:
 
     def check(self,settings=None):
         from .metrics import bind,timed
-        with bind(self._profile),timed('lease_renew'):
+        with bind(self._profile),timed('lease_renew',track_max=True):
             return self._check(settings)
 
     def record_owner(self,path,execution_id):
@@ -127,6 +127,7 @@ class MongoLease:
     def _check(self, settings=None):
         """Renew and verify every path using Mongo server time, never host time."""
         from pymongo import ReturnDocument
+        from .metrics import timed
         with self._lock:
             if settings is not None and settings.fingerprint != self.settings.fingerprint:
                 raise PipelineError('BRONZE_WRITER_TARGET_CONFLICT')
@@ -135,9 +136,10 @@ class MongoLease:
             started=time.monotonic();key=None
             try:
                 for key in self._claimed:
-                    found = self.collection.find_one_and_update({'_id': key, 'token': self.token,
-                        '$expr': {'$gt': ['$expires_at', '$$NOW']}}, self._update(),
-                        return_document=ReturnDocument.AFTER)
+                    with timed('lease_renew_mongo_update',track_max=True):
+                        found = self.collection.find_one_and_update({'_id': key, 'token': self.token,
+                            '$expr': {'$gt': ['$expires_at', '$$NOW']}}, self._update(),
+                            return_document=ReturnDocument.AFTER)
                     if found is None:
                         raise PipelineError('BRONZE_WRITER_LEASE_LOST')
             except Exception as exc:
