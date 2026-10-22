@@ -139,6 +139,7 @@ class LeaseTests(unittest.TestCase):
         lease.acquire()
         sink = object.__new__(DeltaSink)
         sink.settings = settings()
+        sink._prepared={}
         sink.lease, sink.spark = lease, MagicMock()
         sink.paths, sink.schemas = {'raw': 'file:///localtest/raw'}, {'raw': StructType()}
         sink.existing = lambda *args: {}
@@ -151,6 +152,7 @@ class LeaseTests(unittest.TestCase):
                 patch('pyspark.sql.functions.explode'), self.assertRaises(PipelineError):
             sink.insert('raw', [{'raw_document_id': 'a'}])
         delta.forPath.assert_not_called()
+        sink.spark.range.return_value.select.return_value.select.return_value.write.format.assert_not_called()
 
     def test_partial_overlapping_targets_block_and_do_not_delete_owner(self):
         collection = Collection()

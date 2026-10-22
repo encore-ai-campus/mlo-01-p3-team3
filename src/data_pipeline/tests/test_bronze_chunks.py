@@ -8,11 +8,11 @@ class ChunkTests(unittest.TestCase):
         import sys,types
         row=dict(event_id='event1',event_hash='h',event_json='{}',raw_document_id='raw1',document_hash='d')
         class Sink:
-            lease=MagicMock();settings=object();spark=MagicMock()
+            lease=MagicMock();settings=object();spark=MagicMock();_prepared={}
             def existing(self,table,keys):return {'event1':row}
         fake=types.ModuleType('delta.tables');fake.DeltaTable=MagicMock()
         with patch.dict(sys.modules,{'delta.tables':fake}):
-            DeltaSink._insert_chunk(Sink(),'events',[row])
+            DeltaSink.insert(Sink(),'events',[row])
         Sink.spark.range.assert_not_called()
     def test_bytes_and_count_preserve_order_without_splitting_one_document(self):
         rows=[dict(id=i,raw='가'*40) for i in range(5)]
@@ -24,14 +24,17 @@ class ChunkTests(unittest.TestCase):
     def test_partial_chunk_failure_replays_same_keys_without_marking_batch_done(self):
         committed={};armed=[True]
         class Sink:
-            def _insert_chunk(self,table,rows):
-                if rows[0]['id']==10 and armed[0]:armed[0]=False;raise OSError('injected storage failure')
-                for row in rows:committed.setdefault(row['id'],row)
-        sink=Sink();rows=[dict(id=i) for i in range(23)]
+            from unittest.mock import MagicMock
+            lease=MagicMock();settings=object();_prepared={}
+            def existing(self,table,keys):return {k:v for k,v in committed.items() if k in keys}
+            def _append_chunk(self,table,rows):
+                if rows[0]['raw_document_id']=='10' and armed[0]:armed[0]=False;raise OSError('injected storage failure')
+                for row in rows:committed.setdefault(row['raw_document_id'],row)
+        sink=Sink();rows=[dict(raw_document_id=str(i),document_hash=str(i),raw_envelope_json='{}') for i in range(23)]
         with self.assertRaises(OSError):DeltaSink.insert(sink,'raw',rows)
         self.assertEqual(len(committed),10)
         DeltaSink.insert(sink,'raw',rows)
-        self.assertEqual(list(committed),list(range(23)))
+        self.assertEqual(list(committed),[str(i) for i in range(23)])
 
 
 if __name__=='__main__':unittest.main()

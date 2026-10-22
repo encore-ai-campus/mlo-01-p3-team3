@@ -12,6 +12,24 @@ from pymongo import MongoClient
 from pymongo.read_concern import ReadConcern
 RUN='0685b031-7662-45c6-bdfe-c7b499051069'
 
+
+def shared_stage(stage,epoch,environment):
+    """Sequential stages in one owned Driver; subprocess mode remains available."""
+    previous={k:os.environ.get(k) for k in environment}
+    os.environ.update(environment)
+    try:
+        if stage=='bronze':
+            import production_work as work
+            work.run_at('bronze',epoch);return 0
+        import production_window_work as windows
+        return windows.run_at(epoch)
+    except Exception:
+        return 2  # Existing stage failure receipts contain sanitized error codes.
+    finally:
+        for k,v in previous.items():
+            if v is None:os.environ.pop(k,None)
+            else:os.environ[k]=v
+
 def child(script,args,logpath,env):
     log=logpath.open('ab');os.chmod(logpath,0o600)
     return subprocess.Popen([sys.executable,str(script),*args],cwd=ROOT,env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log)
@@ -75,9 +93,12 @@ def main():
             progress.update(stage=stage,execution_root=str(epoch),updated_at=now());atomic_json(progress_path,progress)
             succeeded=False
             for attempt in range(3):
-                worker=child(ROOT/('production_window_work.py' if stage=='windows' else 'production_work.py'),
-                    [] if stage=='windows' else [stage],epoch/(stage+'.private.log'),stage_env)
-                code=worker.wait()
+                if os.environ.get('PIPELINE_SHARED_BRONZE_SESSION')=='1':
+                    code=shared_stage(stage,epoch,stage_env)
+                else:
+                    worker=child(ROOT/('production_window_work.py' if stage=='windows' else 'production_work.py'),
+                        [] if stage=='windows' else [stage],epoch/(stage+'.private.log'),stage_env)
+                    code=worker.wait()
                 if code==75:
                     progress.update(status='PAUSED_AFTER_BATCH',updated_at=now())
                     atomic_json(progress_path,progress);return
@@ -108,10 +129,28 @@ def main():
         # Do not mark that backlog drained merely because producers finished.
         progress['last_events']=events if bronze.get('source_drained',True) and not recovery['pending'] else -1
         progress['epoch']+=1;atomic_json(progress_path,progress)
+        if os.environ.get('PIPELINE_SHARED_BRONZE_SESSION')=='1':
+            # Reuse within one complete Bronze->activation epoch only. A clean
+            # process restart releases JVM plans/Delta metadata across epochs.
+            progress.update(status='READY_TO_START',rotation_reason='COMPLETED_EPOCH',updated_at=now())
+            atomic_json(progress_path,progress);return True
 
 if __name__=='__main__':
     with lock(ROOT/'continuous.lock'):
-        try:main()
+        try:
+            from product_pipeline.spark_session import SessionScope
+            from contextlib import nullcontext
+            context=SessionScope() if os.environ.get('PIPELINE_SHARED_BRONZE_SESSION')=='1' else nullcontext()
+            try:
+                with context:rotate=main()
+            finally:
+                if isinstance(context,SessionScope):atomic_json(ROOT/'continuous-runtime.json',dict(metrics=context.metrics,finished_at=now()))
+            if rotate:
+                from product_pipeline.spark_session import retire_gateway
+                retire_gateway()
+                # exec closes non-inheritable lock descriptors; the new process
+                # re-acquires continuous.lock before reading saved checkpoints.
+                os.execv(sys.executable,[sys.executable,str(Path(__file__).resolve())])
         except Exception as exc:
             p=read_json(ROOT/'flow-progress.json') if (ROOT/'flow-progress.json').exists() else {}
             p.update(status='FAILED',error_code=getattr(exc,'code',str(exc) if isinstance(exc,RuntimeError) else type(exc).__name__),updated_at=now())

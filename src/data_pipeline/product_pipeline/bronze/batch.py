@@ -2,6 +2,7 @@
 from ..contracts import canonical
 from ..errors import PipelineError
 from .contracts import Poison, event_from, event_row, quarantine_row, raw_row, validate_raw
+from .metrics import timed
 
 
 def process_batch(messages, source, sink, batch_id, max_records=20, max_raw_bytes=32 * 1024 * 1024,
@@ -15,27 +16,42 @@ def process_batch(messages, source, sink, batch_id, max_records=20, max_raw_byte
     # Preserve deterministic first evidence for duplicates within one batch.
     inputs.sort(key=lambda m: (m.topic, m.partition, m.offset))
     pending, quarantine, raw_cache = [], {}, {}
-    raw_bytes = 0
+    parsed=[]
     for message in inputs:
+        try:parsed.append((message,event_from(message)))
+        except Poison as exc:
+            row=quarantine_row(message,exc.code);quarantine[row['quarantine_id']]=row
+    fetched=None
+    if hasattr(source,'get_many'):
+        fetched=source.get_many({e['payload']['raw_document_id'] for _,e in parsed},max_bytes=max_raw_bytes)
+    raw_bytes = 0
+    for message,event in parsed:
         try:
-            event = event_from(message)
             key = event['payload']['raw_document_id']
             if key not in raw_cache:
-                doc = source.get(key)  # Missing/majority-unconfirmed Raw is RETRY, never poison.
-                validate_raw(doc, event)
-                raw_bytes += len(canonical(doc).encode('utf-8'))
+                with timed('mongo_document_read'):
+                    doc = fetched[key] if fetched is not None else source.get(key)
+                if isinstance(doc,Poison):raise doc
+                try:raw_bytes += len(canonical(doc).encode('utf-8'))
+                except (ValueError,TypeError):raise Poison('BRONZE_RAW_CONTRACT_CONFLICT') from None
                 if raw_bytes > max_raw_bytes:
                     raise PipelineError('BRONZE_BATCH_RAW_LIMIT')
                 raw_cache[key] = doc
             doc = raw_cache[key]
-            validate_raw(doc, event)
+            with timed('raw_validation'):validate_raw(doc, event)
             pending.append((message, raw_row(doc), event_row(event, message)))
         except Poison as exc:
             row = quarantine_row(message, exc.code)
             quarantine[row['quarantine_id']] = row
-    existing_raw = sink.existing('raw', {r['raw_document_id'] for _, r, _ in pending})
-    existing_events = sink.existing('events', {e['event_id'] for _, _, e in pending})
-    observations = sink.observations({r['observation_key'] for _, r, _ in pending})
+    raw_keys={r['raw_document_id'] for _,r,_ in pending}
+    event_keys={e['event_id'] for _,_,e in pending}
+    observation_keys={r['observation_key'] for _,r,_ in pending}
+    if hasattr(sink,'batch_lookups'):
+        existing_raw,existing_events,observations=sink.batch_lookups(raw_keys,event_keys,observation_keys)
+    else:
+        existing_raw=sink.existing('raw',raw_keys)
+        existing_events=sink.existing('events',event_keys)
+        observations=sink.observations(observation_keys)
     new_raw, new_events, accepted = {}, {}, 0
     for message, raw, event in pending:
         rid, eid = raw['raw_document_id'], event['event_id']

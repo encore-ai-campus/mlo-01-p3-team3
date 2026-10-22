@@ -14,7 +14,7 @@ from ..contracts import digest,now
 from ..errors import PipelineError
 from .config import location
 
-RECOVERY_ERRORS=frozenset({'BRONZE_WRITER_LEASE_LOST','BRONZE_WRITER_ALREADY_CLAIMED',
+RECOVERY_ERRORS=frozenset({'SPARK_DRIVER_JVM_EXITED','BRONZE_WRITER_LEASE_LOST','BRONZE_WRITER_ALREADY_CLAIMED',
     'BRONZE_WRITER_LEASE_UNCONFIRMED','BRONZE_SHUTDOWN_UNCONFIRMED',
     'BRONZE_KAFKA_OFFSETS_OUT_OF_RANGE','BRONZE_KAFKA_PARTITIONS_CHANGED',
     'BRONZE_CHECKPOINT_OFFSETS_UNCONFIRMED','BRONZE_KAFKA_TOPIC_CHANGED'})
@@ -22,6 +22,8 @@ RECOVERY_ERRORS=frozenset({'BRONZE_WRITER_LEASE_LOST','BRONZE_WRITER_ALREADY_CLA
 
 class MongoLease:
     def __init__(self, settings, uri, collection=None):
+        from .metrics import current
+        self._profile=current()
         self.settings, self.token = settings, str(uuid4())
         self.client = None
         self._lock, self._stop = RLock(), Event()
@@ -100,7 +102,29 @@ class MongoLease:
             self._acquired = True
         return self
 
-    def check(self, settings=None):
+    def check(self,settings=None):
+        from .metrics import bind,timed
+        with bind(self._profile),timed('lease_renew'):
+            return self._check(settings)
+
+    def record_owner(self,path,execution_id):
+        """Private fencing evidence; never emit the token in public diagnostics."""
+        from pathlib import Path
+        import os
+        from ..files import atomic_json
+        from ..lease_recovery import identity
+        with self._lock:
+            if not self._acquired or self._lost or self._closed:raise PipelineError('BRONZE_WRITER_LEASE_LOST')
+            path=Path(path);path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            value=dict(contract_version=1,execution_id=execution_id,pid=os.getpid(),
+                target=identity(self),token=self.token,claimed=sorted(self._claimed),at=now())
+            stat=Path('/proc/self/stat')
+            if stat.exists():value['process_start']=stat.read_text().split(') ',1)[1].split()[19]
+            atomic_json(path,value);path.chmod(0o600)
+            self.owner_ref=str(path.resolve())
+            return self.owner_ref
+
+    def _check(self, settings=None):
         """Renew and verify every path using Mongo server time, never host time."""
         from pymongo import ReturnDocument
         with self._lock:

@@ -31,14 +31,46 @@ class SessionScope:
 
     def __exit__(self,kind,value,tb):
         try:
-            if self.spark is not None:
+            if self.spark is not None and not driver_exit_diagnostic():
                 if kind:self.spark.sparkContext.cancelAllJobs()
-                self.spark.stop()
+                with timed('spark_shutdown'):self.spark.stop()
         finally:
             self.cache.clear();self.bytes=0;self.disk_cache.clear();self.disk_bytes=0
             try:
                 if self.disk_root is not None:self.disk_root.cleanup()
             finally:_current.reset(self.token)
+
+
+def driver_exit_diagnostic():
+    """Only an observed local gateway process exit is evidence, never an RPC timeout."""
+    try:from pyspark import SparkContext
+    except ImportError:return None  # No JVM was started during validation-only failures.
+    process=getattr(SparkContext._gateway,'proc',None)
+    code=process.poll() if process is not None else None
+    if type(code) is int and code!=0:
+        return dict(phase='jvm',reason='PROCESS_EXITED',exception_type='JVMProcessExited',exit_code=code)
+    return None
+
+
+def stamp_driver_exit(result):
+    diagnostic=driver_exit_diagnostic()
+    if diagnostic:
+        result.update(error_code='SPARK_DRIVER_JVM_EXITED',lease_failure=diagnostic)
+        if 'status' in result:result['status']='FAILED'
+        if 'result' in result:result['result']='failed'
+    return bool(diagnostic)
+
+
+def retire_gateway():
+    """After Spark.stop at a completed epoch, close the owned JVM before exec."""
+    from pyspark import SparkContext
+    gateway=SparkContext._gateway
+    if gateway is not None:
+        process=getattr(gateway,'proc',None)
+        gateway.shutdown()
+        if process is not None:
+            if process.stdin is not None:process.stdin.close()
+            process.wait(timeout=20)
 
 
 def bump(name,amount=1):
@@ -49,6 +81,14 @@ def bump(name,amount=1):
 def metrics():
     scope=_current.get()
     return dict(scope.metrics) if scope is not None else {}
+
+
+def scope_active():return _current.get() is not None
+
+
+def has_session():
+    scope=_current.get()
+    return scope is not None and scope.spark is not None
 
 
 @contextmanager
@@ -112,10 +152,12 @@ def cache_put(namespace,key,value):
     if scope is None:return
     data=canonical(value).encode('utf-8');size=len(data)
     identity=(namespace,key)
-    if size>scope.max_cache_bytes:
+    disk_data=namespace=='delta_key_index' or (namespace in {'silver_tables','silver_append_rows'} and size>2*1024*1024)
+    if size>scope.max_cache_bytes or disk_data:
         # Only validated pinned Silver groups may spill; no credentials or
         # writer proofs enter this disposable cache. It never authorizes reuse.
-        if namespace!='silver_groups' or size>scope.max_disk_cache_bytes:return
+        if namespace not in {'silver_groups','silver_tables','silver_append_rows','delta_key_index'} or size>scope.max_disk_cache_bytes:return
+        if identity in scope.cache:scope.bytes-=scope.cache.pop(identity)[1]
         if scope.disk_root is None:scope.disk_root=tempfile.TemporaryDirectory(prefix='pipeline-silver-cache-')
         if shutil.disk_usage(scope.disk_root.name).free<size+64*1024*1024:return
         if identity in scope.disk_cache:
@@ -127,6 +169,8 @@ def cache_put(namespace,key,value):
         path.chmod(0o600);scope.disk_cache[identity]=(path,size,checksum);scope.disk_bytes+=size
         bump(namespace+'_disk_cache_writes');return
     if identity in scope.cache:scope.bytes-=scope.cache.pop(identity)[1]
+    if identity in scope.disk_cache:
+        old,old_size,_=scope.disk_cache.pop(identity);old.unlink();scope.disk_bytes-=old_size
     while scope.cache and (scope.bytes+size>scope.max_cache_bytes or len(scope.cache)>=1000):
         _,(_,old)=scope.cache.popitem(last=False);scope.bytes-=old
     scope.cache[identity]=(deepcopy(value),size);scope.bytes+=size

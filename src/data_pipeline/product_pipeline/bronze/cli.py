@@ -53,6 +53,12 @@ def env(name):
 
 
 def main(argv=None):
+    from .metrics import Profile
+    with Profile() as profile:return _main(argv,profile)
+
+
+def _main(argv,profile):
+    from .metrics import timed
     parser = argparse.ArgumentParser(description='Kafka/MongoDB -> product Bronze Delta')
     parser.add_argument('--config', required=True)
     parser.add_argument('--available-now', action='store_true', help='Drain current Kafka backlog then exit')
@@ -88,18 +94,23 @@ def main(argv=None):
             raise PipelineError('BRONZE_INVALID_SPARK_OPTIONS')
         from .lease import MongoLease
         lease = MongoLease(settings, env(settings.lease_uri_env))
-        lease.acquire()  # No Spark job, checkpoint or Delta mutation before ownership.
+        with timed('lease_acquire'):lease.acquire()  # No Spark/checkpoint/Delta mutation before ownership.
+        if result_path:
+            from pathlib import Path
+            result['lease_owner_ref']=lease.record_owner(Path(result_path).parent/'lease-owners'/(execution+'.json'),execution)
         from ..spark_storage import storage_options, bind_spark_credentials
         spark_options = storage_options(spark_options, writer=True, lease=lease)
         from pyspark.sql import SparkSession
         builder = SparkSession.builder.appName('product-bronze-' + settings.environment_id)
         for key, value in spark_options.items():
             builder = builder.config(key, value)
-        spark = (builder.config('spark.sql.session.timeZone', 'UTC')
+        builder = (builder.config('spark.sql.session.timeZone', 'UTC')
                  .config('spark.sql.extensions', 'io.delta.sql.DeltaSparkSessionExtension')
                  .config('spark.sql.catalog.spark_catalog', 'org.apache.spark.sql.delta.catalog.DeltaCatalog')
-                 .config('spark.redaction.regex', '(?i)secret|password|token|access[.]?key|connection|sasl[.]jaas')
-                 .getOrCreate())
+                 .config('spark.redaction.regex', '(?i)secret|password|token|access[.]?key|connection|sasl[.]jaas'))
+        from ..spark_session import get_or_create,has_session
+        profile.add('spark_session_reused',int(has_session()))
+        with timed('spark_connect'):spark=get_or_create(builder,spark_options)
         bind_spark_credentials(spark, writer=True, lease=lease)
         def stop_on_lease_loss():
             # Called on the heartbeat thread, including while the Driver is idle.
@@ -111,14 +122,15 @@ def main(argv=None):
                     query.stop()
         lease.start_heartbeat(stop_on_lease_loss)
         from .mongo import MongoSource
-        source = MongoSource(settings, uri)
+        with timed('mongo_connect'):source = MongoSource(settings, uri)
         window_control=dict(limit=args.max_batches,calls=0,boundary_batch_id=None)
-        query = start(spark, settings, source, kafka, available_now=args.available_now,
-                      progress=lambda value: emit({'stage': 'bronze_batch', **value}), lease=lease,window_control=window_control)
+        with timed('query_start'):
+            query = start(spark, settings, source, kafka, available_now=args.available_now,
+                          progress=lambda value: emit({'stage': 'bronze_batch', **value}), lease=lease,window_control=window_control)
         lease.check()
         emit({'result': 'started', 'execution_id': execution, 'query_id': str(query.id),
               'available_now': args.available_now})
-        window=await_window(query,lease,args.max_batches,window_control)
+        with timed('query_run'):window=await_window(query,lease,args.max_batches,window_control)
         lease.check()
         result, code = {'result': 'completed',**window}, 0
     except KeyboardInterrupt:
@@ -128,16 +140,17 @@ def main(argv=None):
         result = {'result': 'failed', 'error_code': 'BRONZE_KAFKA_OFFSETS_OUT_OF_RANGE' if gap else exc.code if isinstance(exc, PipelineError) else type(exc).__name__}
     finally:
         stopped = True
-        for resource, cleanup in ((query, lambda: query.stop() if query.isActive else None),
-                                  (source, lambda: source.close()), (spark, lambda: spark.stop())):
+        from ..spark_session import release_spark
+        for name,resource, cleanup in (('query_stop',query, lambda: query.stop() if query.isActive else None),
+                                  ('mongo_close',source, lambda: source.close()), ('spark_release',spark, lambda: release_spark(spark))):
             if resource is not None:
                 try:
-                    cleanup()
+                    with timed(name):cleanup()
                 except Exception:
                     stopped = False
         if lease is not None:
             try:
-                lease.close(release=stopped)
+                with timed('lease_close'):lease.close(release=stopped)
             except Exception:
                 stopped = False
         if not stopped:
@@ -149,7 +162,11 @@ def main(argv=None):
         if result.get('error_code') not in RECOVERY_ERRORS:
             result.update(result='failed',trigger_error_code=result.get('error_code'),error_code='BRONZE_WRITER_LEASE_LOST');code=2
     if lease is not None and getattr(lease,'loss_diagnostic',None):result['lease_failure']=lease.loss_diagnostic
-    result={**result,'execution_id':execution,'duration_ms':round((time.monotonic()-started)*1000)}
+    if lease is not None and getattr(lease,'owner_ref',None):result['lease_owner_ref']=lease.owner_ref
+    from ..spark_session import stamp_driver_exit
+    if stamp_driver_exit(result):code=2
+    result={**result,'execution_id':execution,'duration_ms':round((time.monotonic()-started)*1000),
+            'runtime_metrics':profile.snapshot()}
     if result_path:
         from ..files import atomic_json
         atomic_json(result_path,result)

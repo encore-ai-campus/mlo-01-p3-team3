@@ -9,12 +9,26 @@ from product_pipeline.files import read_json,atomic_json,lock
 from product_pipeline.windows import run_windows
 from product_pipeline.contracts import now
 from product_pipeline.spark_session import SessionScope
+from product_pipeline.spark_session import scope_active,metrics
 
 
 def main():
+    if scope_active():
+        before=metrics()
+        try:return run()
+        finally:atomic_json(ROOT/'batch-runtime.json',{k:v-before.get(k,0) for k,v in metrics().items()})
     with SessionScope() as runtime:
         try:return run()
         finally:atomic_json(ROOT/'batch-runtime.json',dict(runtime.metrics))
+
+
+def run_at(directory):
+    """Borrow the coordinator Driver only after Bronze query quiescence."""
+    global ROOT
+    previous,previous_work=ROOT,work.ROOT
+    ROOT=Path(directory);work.ROOT=ROOT
+    try:return main()
+    finally:ROOT=previous;work.ROOT=previous_work
 
 
 def run():

@@ -95,13 +95,15 @@ def start(spark, settings, source, options, available_now=False, progress=None, 
         raise PipelineError('BRONZE_WRITER_LEASE_REQUIRED')
     lease.check(settings)
     options = kafka_options(options, settings)
-    check_kafka_cluster(spark, options, settings)
+    from .metrics import current,bind,timed
+    with timed('kafka_connect_and_frontiers'):check_kafka_cluster(spark, options, settings)
     lease.check(settings)
-    bind_checkpoint(spark, settings, lease=lease)
-    sink = DeltaSink(spark, settings, lease=lease)
+    with timed('checkpoint_binding'):bind_checkpoint(spark, settings, lease=lease)
+    profile=current()
+    with timed('delta_target_open'):sink = DeltaSink(spark, settings, lease=lease)
     frame = spark.readStream.format('kafka').options(**options).load()
 
-    def batch(data, batch_id):
+    def callback(data, batch_id):
         # Fail before any I/O beyond a bounded window. Returning normally here
         # would incorrectly acknowledge offsets for data we have not stored.
         if window_control is not None and window_control['limit'] and window_control['calls']>=window_control['limit']:
@@ -150,6 +152,11 @@ def start(spark, settings, source, options, available_now=False, progress=None, 
         if progress:
             progress({**result, 'status': 'COMMITTED', 'execution_id': execution_id,
                       'duration_ms': round((time.monotonic() - started) * 1000)})
+
+    def batch(data,batch_id):
+        # Py4J invokes foreachBatch on another Python thread.
+        with bind(profile),timed('foreach_batch'):
+            return callback(data,batch_id)
 
     from .recovery import checkpoint_path
     writer = (frame.writeStream.foreachBatch(batch).option('checkpointLocation', checkpoint_path(settings))
