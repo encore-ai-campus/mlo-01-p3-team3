@@ -13,6 +13,7 @@ from ..errors import PipelineError
 from ..files import atomic_json,parse,read_json
 from ..bootstrap import required_env as _env
 from ..execution import StageResult, ignore_progress
+from ..spark_session import timed
 from .config import SilverSettings
 from .inputs import registration,validate_inputs
 
@@ -142,7 +143,8 @@ def run(args: Request, *, progress=ignore_progress):
             if args.max_observations:page=page[:args.max_observations-result['processed']]
             if args.collector_normalized:
                 proofs=[states.normalized(doc) for doc in page]
-                references=checkpoint.archive_many(proofs) if args.batch_writes else [checkpoint.archive(p) for p in proofs]
+                with timed('silver_collector_input_archive'):
+                    references=checkpoint.archive_many(proofs) if args.batch_writes else [checkpoint.archive(p) for p in proofs]
                 for doc,proof,reference in zip(page,proofs,references):
                     from ..image_waits import record_gallery_wait
                     waiting=record_gallery_wait(args.state_dir,doc,proof)

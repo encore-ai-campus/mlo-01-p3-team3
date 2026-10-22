@@ -2,7 +2,7 @@
 from decimal import Decimal
 from .errors import Conflict,PipelineError
 from .files import parse
-from .spark_session import measured,bump
+from .spark_session import measured,bump,timed
 
 
 @measured('delta_versions_many')
@@ -47,26 +47,35 @@ def _verify_rows(sink,requests,*,require_all=True,purpose='proof'):
     from pyspark.sql import functions as F
     from .bounded_read import payload_rows
     wanted={(t,v):e for t,v,e in requests};packed=None
+    bump('delta_'+purpose+'_version_requests',len(wanted))
+    bump('delta_'+purpose+'_requested_rows',sum(len(expected) for _,_,expected in requests))
     for table,version,expected in requests:
-        frame=(sink.spark.read.format('delta').option('versionAsOf',version).load(sink.paths[table])
-            .filter(F.col(sink.keys[table]).isin(sorted(expected))).limit(len(expected)+1))
-        for name in sink.times & set(frame.columns):frame=frame.withColumn(name,F.date_format(name,"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"))
-        for name in sink.decimals & set(frame.columns):frame=frame.withColumn(name,F.col(name).cast('string'))
-        part=frame.select(F.lit(table).alias('_table'),F.lit(version).alias('_version'),
-            F.to_json(F.struct('*'),{'ignoreNullFields':'false'}).alias('payload'))
-        packed=part if packed is None else packed.unionByName(part)
+        bump('delta_'+purpose+'_requested_rows_'+table,len(expected))
+    with timed('delta_'+purpose+'_read_plan'):
+        for table,version,expected in requests:
+            frame=(sink.spark.read.format('delta').option('versionAsOf',version).load(sink.paths[table])
+                .filter(F.col(sink.keys[table]).isin(sorted(expected))).limit(len(expected)+1))
+            for name in sink.times & set(frame.columns):frame=frame.withColumn(name,F.date_format(name,"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"))
+            for name in sink.decimals & set(frame.columns):frame=frame.withColumn(name,F.col(name).cast('string'))
+            part=frame.select(F.lit(table).alias('_table'),F.lit(version).alias('_version'),
+                F.to_json(F.struct('*'),{'ignoreNullFields':'false'}).alias('payload'))
+            packed=part if packed is None else packed.unionByName(part)
     try:
         seen={identity:{} for identity in wanted};bodies={identity:{} for identity in wanted}
-        for record in payload_rows(packed,max_rows=sum(len(e) for _,_,e in requests),
-                max_bytes=32*1024*1024,error_code='DELTA_PROOF_BUDGET'):
-            identity=(record['_table'],record['_version']);table=identity[0];row=parse(record['payload'])
-            for name in sink.decimals & set(row):
-                if row[name] is not None:row[name]=format(Decimal(row[name]).normalize(),'f')
-            key=row[sink.keys[table]]
-            if key in seen[identity]:raise Conflict('SILVER_DUPLICATE_KEY')
-            if row['record_hash']!=sink.hash_row(row):raise Conflict('SILVER_STORED_HASH_CONFLICT')
-            seen[identity][key]=row['record_hash']
-            bodies[identity][key]=row
+        with timed('delta_'+purpose+'_read_validate'):
+            for record in payload_rows(packed,max_rows=sum(len(e) for _,_,e in requests),
+                    max_bytes=32*1024*1024,error_code='DELTA_PROOF_BUDGET'):
+                identity=(record['_table'],record['_version']);table=identity[0];payload=record['payload']
+                bump('delta_'+purpose+'_returned_rows_'+table)
+                bump('delta_'+purpose+'_payload_chars_'+table,len(payload))
+                row=parse(payload)
+                for name in sink.decimals & set(row):
+                    if row[name] is not None:row[name]=format(Decimal(row[name]).normalize(),'f')
+                key=row[sink.keys[table]]
+                if key in seen[identity]:raise Conflict('SILVER_DUPLICATE_KEY')
+                if row['record_hash']!=sink.hash_row(row):raise Conflict('SILVER_STORED_HASH_CONFLICT')
+                seen[identity][key]=row['record_hash']
+                bodies[identity][key]=row
         if require_all:
             if any(seen[k]!=expected for k,expected in wanted.items()):raise Conflict('SILVER_OUTPUT_MISSING_OR_CHANGED')
         elif any(key not in wanted[identity] or wanted[identity][key]!=h for identity,values in seen.items() for key,h in values.items()):
@@ -80,6 +89,7 @@ def _verify_rows(sink,requests,*,require_all=True,purpose='proof'):
         return seen
     except PipelineError as exc:
         if exc.code!='DELTA_PROOF_BUDGET':raise
+        bump('delta_'+purpose+'_budget_retries')
         # No partial result is accepted. Retry bounded subrequests afresh.
         if len(requests)>1:
             half=len(requests)//2;parts=[requests[:half],requests[half:]]

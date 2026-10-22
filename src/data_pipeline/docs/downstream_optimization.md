@@ -129,6 +129,25 @@ epoch 7, window 0의 100관측·100상품을 16:06:53 KST에 업무 DB 게시·�
 새 Gold 복구 시도는 352,831ms였다. 이 안에는 Spark 시작 49,356ms, 첫 키 인덱스 구성 54,563ms, Silver 고정 입력 읽기 71,531ms가 포함된다. 51,739개 키를 색인해 부재 키 대조 3,127개를 생략했고 자기 append 8개를 반영했다. 초기 구축 비용을 포함한 복구 배치와 캐시가 유지되는 다음 전체 배치를 구분해야 한다. 아직 17분대 달성을 선언하지 않는다.
 
 캐시 누락·포화에 따른 false positive·500,000키/64MiB 조회 상한은 속도 효과를 제한할 수 있다. 이런 경우 원래 조회를 수행하며 임의로 데이터를 생략하지 않는다. 배치 규모·실제 노드 수·원천 구성·파일 누적이 다른 시험 간 시간 차이 전체를 코드 효과로 계산하지 않는다.
+
+## Silver·Gold 세부 계측 — 2026-10-22
+
+Silver는 Bronze 원문 읽기·수집본 대조·이미지 상태 읽기·정규화·입력 보존·revision 확인·기존 영수증 판정·기존/신규 출력 증명·Delta 적재·최종 입력 재확인·영수증 저장을 `runtime_metrics`에 따로 기록한다. Gold는 Silver 테이블 열기·입력 읽기와 영수증 검증·평가 결과 생성·기존/신규 출력 증명·Delta 적재·영수증 저장·게시용 품질 집계를 분리한다. 공통 Delta 지표는 대상 메타데이터 확인, 조회 계획·실행 및 행 검증, 테이블별 적재 직렬화·계획·커밋을 기록하고 테이블별 요청/반환/출력 행 수를 덧붙인다.
+
+| 구간 | 주요 지표 이름 |
+|---|---|
+| Silver 원천 읽기·수집본 대조 | `silver_bronze_*`, `silver_collector_input_*` |
+| Silver 처리 | `silver_input_*`, `silver_normalization`, `silver_*receipt*`, `silver_prior_output_proof`, `silver_new_output_proof`, `silver_output_persist` |
+| Gold의 Silver 입력 | `gold_silver_*`, 기존 `silver_union_read_ms` |
+| Gold 평가·출력·집계 | `gold_build_results`, `gold_*receipt*`, `gold_prior_output_proof`, `gold_new_output_proof`, `gold_output_persist`, `gold_export_*` |
+| 공통 Delta | `delta_metadata_read`, `delta_*_read_plan`, `delta_*_read_validate`, `delta_append_serialize*`, `delta_append_plan*`, `delta_append_commit*` |
+
+모든 `*_ms`는 실패한 호출도 포함하는 누적 경과 시간이며 함께 기록되는 `*_calls`로 코드 구간의 호출당 평균을 계산할 수 있다. 이 횟수는 Spark 작업이나 네트워크 요청 횟수가 아니다. 상위 단계 시간에는 내부 구간이 포함되므로 서로 더하지 않는다. Delta 읽기 실행 시간에는 Spark 작업 대기, 전송, Python 역직렬화·해시 확인이 함께 들어간다.
+
+`*_payload_chars_*`는 이미 받은/직렬화한 JSON 문자열의 글자 수다. `silver_bronze_selected_raw_bytes`는 기존 헤더 조회에서 구한 선택 원문의 UTF-8 길이다. 둘 다 물리 저장소 전송 바이트를 뜻하지 않는다. 요청/반환 행 수는 재시도 때 다시 센다. 물리 읽기 바이트는 별도 Spark listener 계측 없이는 알 수 없다.
+
+계측을 위해 Spark action이나 Delta 조회를 새로 추가하지 않았다. 기존 collect·bounded iterator·저장 동작에서 나온 값을 세고, 기존 실행 구간을 나눠 잰다. 관련 로컬 회귀 테스트 44개가 통과했으며, 추가 계측 테스트는 기존 읽기 횟수 유지와 실패한 증명 검증의 시간 기록도 확인한다. 이 변경은 로컬 코드에만 반영했으며 서버 배포 후 실제 배치로 시간 차이를 확인해야 한다.
+
 # 2026-10-22 배치 간 키 인덱스 재사용
 
 OOM 방지용 epoch별 JVM 교체는 유지한다. 새 `PIPELINE_DELTA_KEY_INDEX_DIR`는 Driver의 보호된 로컬 derivative 캐시이며 원천·체크포인트를 대체하지 않는다. 동일 경로·Delta table ID·정확한 버전·형식·전체 체크섬·파일 소유자/권한이 일치한 완전한 Bloom 인덱스만 다음 JVM에서 읽는다. 훼손·유실·재생성·버전 차이는 cache miss로 처리하고 원래 저장소 조회로 돌아간다. 정확한 값의 내용 검증과 실제 저장 확인은 생략하지 않는다.

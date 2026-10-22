@@ -1,7 +1,7 @@
 """Schema-driven append-only Delta storage; no stage-specific path or rules."""
 from ..contracts import canonical
 from ..errors import Conflict,PipelineError
-from ..spark_session import measured
+from ..spark_session import bump,measured,timed
 
 
 class AppendOnlyDeltaSink:
@@ -28,20 +28,22 @@ class AppendOnlyDeltaSink:
             schema=StructType([StructField(k,dtype(k),True) for k in self.schema_columns(table)])
             self.schemas[table]=schema
             lease.check(settings)
-            metadata=read_metadata(spark,path)
-            if metadata is None:
-                (DeltaTable.createIfNotExists(spark).location(path).addColumns(schema)
-                    .property('delta.appendOnly','true').property('pipeline.targetFingerprint',settings.fingerprint).execute())
+            with timed('delta_metadata_read'):
                 metadata=read_metadata(spark,path)
+            if metadata is None:
+                with timed('delta_target_create'):
+                    (DeltaTable.createIfNotExists(spark).location(path).addColumns(schema)
+                        .property('delta.appendOnly','true').property('pipeline.targetFingerprint',settings.fingerprint).execute())
+                    metadata=read_metadata(spark,path)
             lease.check(settings)
-            if (metadata is None or metadata['schema']!=schema
-                    or metadata['properties'].get('pipeline.targetFingerprint')!=settings.fingerprint
-                    or metadata['properties'].get('delta.appendOnly')!='true'):
-                raise Conflict('SILVER_DELTA_TARGET_CONFLICT')
+            with timed('delta_target_contract_check'):
+                if (metadata is None or metadata['schema']!=schema
+                        or metadata['properties'].get('pipeline.targetFingerprint')!=settings.fingerprint
+                        or metadata['properties'].get('delta.appendOnly')!='true'):
+                    raise Conflict('SILVER_DELTA_TARGET_CONFLICT')
             self.target_metadata[table]=metadata
             self._versions[table]=metadata['version']
         lease.check(settings)
-        from ..spark_session import bump
         bump('delta_metadata_read_batches');bump('delta_target_checks',len(self.paths))
 
     @measured('delta_output_read')
@@ -54,7 +56,12 @@ class AppendOnlyDeltaSink:
         for name in self.schema_columns(table):
             if name in self.times:frame=frame.withColumn(name,F.date_format(F.col(name),"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"))
         result={}
-        for row in frame.collect():
+        bump('delta_output_lookup_requested_keys',len(keys))
+        bump('delta_output_lookup_requested_keys_'+table,len(keys))
+        records=frame.collect()
+        bump('delta_output_lookup_returned_rows',len(records))
+        bump('delta_output_lookup_returned_rows_'+table,len(records))
+        for row in records:
             value=row.asDict(recursive=True)
             for name in self.decimals & set(value):
                 if value[name] is not None:value[name]=format(value[name].normalize(),'f')
@@ -85,7 +92,6 @@ class AppendOnlyDeltaSink:
         if missing:
             rows=self._read(table,missing,version);self.lease.check(self.settings)
             entry['rows'].update(rows);entry['checked'].update(missing)
-        from ..spark_session import bump
         bump('delta_batch_preflight_reused_keys',len(keys)-len(missing))
         return {k:entry['rows'][k] for k in keys if k in entry['rows']}
 
@@ -140,15 +146,18 @@ class AppendOnlyDeltaSink:
             from uuid import uuid4
             pending=dict(base=self.version(table),token='pipeline-append:'+uuid4().hex,
                 expected={r[self.keys[table]]:r['record_hash'] for r in missing})
-        frame=(self.spark.range(1).select(F.explode(F.from_json(F.lit(canonical(missing)),ArrayType(self.schemas[table]),
-            {'mode':'FAILFAST','timeZone':'UTC','timestampFormat':"yyyy-MM-dd'T'HH:mm:ss.SSSXXX"})).alias('row')).select('row.*'))
+        with timed('delta_append_serialize'),timed('delta_append_serialize_'+table):
+            payload=canonical(missing)
+        bump('delta_append_input_rows_'+table,len(missing))
+        bump('delta_append_payload_chars_'+table,len(payload))
+        with timed('delta_append_plan'),timed('delta_append_plan_'+table):
+            frame=(self.spark.range(1).select(F.explode(F.from_json(F.lit(payload),ArrayType(self.schemas[table]),
+                {'mode':'FAILFAST','timeZone':'UTC','timestampFormat':"yyyy-MM-dd'T'HH:mm:ss.SSSXXX"})).alias('row')).select('row.*'))
         self.lease.check(self.settings)
         self._versions.pop(table,None)
         if getattr(self,'_batch_reads',None) is not None:
             self._batch_reads={k:v for k,v in self._batch_reads.items() if k[0]!=table}
-        from ..spark_session import bump
-        from ..spark_session import timed
-        with timed('delta_append_commit'):
+        with timed('delta_append_commit'),timed('delta_append_commit_'+table):
             writer=frame.write.format('delta').mode('append').option('mergeSchema','false')
             if pending:
                 self._pending_appends[table]=pending;writer=writer.option('userMetadata',pending['token'])
@@ -157,6 +166,7 @@ class AppendOnlyDeltaSink:
                 if pending:self._pending_appends.pop(table,None)
                 raise
         bump('delta_append_batches');bump('delta_appended_rows',len(missing))
+        bump('delta_appended_rows_'+table,len(missing))
         self.lease.check(self.settings)
         # The stage runner verifies fixed-version and current outputs before
         # writing its receipt. Repeating that same read here doubles Spark I/O.

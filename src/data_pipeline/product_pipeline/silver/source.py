@@ -2,6 +2,7 @@
 from ..contracts import canonical,utc
 from ..errors import Conflict,PipelineError
 from ..files import parse
+from ..spark_session import bump,measured,timed
 
 
 def document(row):
@@ -14,6 +15,7 @@ def document(row):
 
 
 class BronzeSource:
+    @measured('silver_bronze_source_open')
     def __init__(self,spark,settings,version):
         if type(version) is not int or version<0:raise PipelineError('SILVER_FIXED_BRONZE_VERSION_REQUIRED')
         self.spark,self.settings,self.version=spark,settings,version
@@ -21,6 +23,7 @@ class BronzeSource:
         required={'raw_document_id','observation_key','document_hash','raw_envelope_json','payload_json','source_code','source_product_id'}
         if not required.issubset(self.frame.columns):raise PipelineError('SILVER_BRONZE_SCHEMA_INVALID')
 
+    @measured('silver_bronze_window_check')
     def restrict_window(self, window):
         from pyspark.sql import functions as F
         from ..windows import validate_window
@@ -48,24 +51,31 @@ class BronzeSource:
         old=self.spark.read.format('delta').option('versionAsOf',base_version).load(self.settings.bronze_path)
         self.frame=self.frame.join(old.select('raw_document_id'),'raw_document_id','left_anti')
 
+    @measured('silver_bronze_page')
     def page(self,after):
         from pyspark.sql import functions as F
         frame=self.frame
         if after:frame=frame.filter(F.col('observation_key')>after)
         n=self.settings.max_records
         # Read small identity/length projections before loading full payloads on Driver.
-        headers=(frame.select('observation_key','raw_document_id',F.length(F.encode('raw_envelope_json','UTF-8')).alias('bytes'))
-                 .orderBy('observation_key').limit(n+1).collect())
+        with timed('silver_bronze_header_read'):
+            headers=(frame.select('observation_key','raw_document_id',F.length(F.encode('raw_envelope_json','UTF-8')).alias('bytes'))
+                     .orderBy('observation_key').limit(n+1).collect())
+        bump('silver_bronze_header_rows',len(headers))
         selected,total=[],0
         for row in headers[:n]:
             if not row['bytes'] or row['bytes']>self.settings.max_raw_bytes:raise PipelineError('SILVER_RAW_BYTE_LIMIT')
             if selected and total+row['bytes']>self.settings.max_raw_bytes:break
             selected.append(row['raw_document_id']);total+=row['bytes']
         if not selected:return []
-        values=frame.filter(F.col('raw_document_id').isin(selected)).orderBy('observation_key').limit(len(selected)+1).collect()
+        bump('silver_bronze_selected_raw_bytes',total)
+        with timed('silver_bronze_payload_read'):
+            values=frame.filter(F.col('raw_document_id').isin(selected)).orderBy('observation_key').limit(len(selected)+1).collect()
+        bump('silver_bronze_payload_rows',len(values))
         if len(values)!=len(selected) or len({r['observation_key'] for r in values})!=len(values):
             raise Conflict('SILVER_BRONZE_DUPLICATE_IDENTITY')
-        return [document(r.asDict()) for r in values]
+        with timed('silver_bronze_payload_validation'):
+            return [document(r.asDict()) for r in values]
 
 
 class MongoStates:
@@ -81,6 +91,7 @@ class MongoStates:
         self.collection=db['ingestion_observations']
         self.database=db
 
+    @measured('silver_collector_input_lookup')
     def normalized(self, doc):
         from ..catalog_input import CatalogInputs
         return CatalogInputs(self.database['danawa_products']).get(doc)
