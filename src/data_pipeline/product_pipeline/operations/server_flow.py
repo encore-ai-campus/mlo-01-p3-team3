@@ -42,7 +42,10 @@ def decision(root, *, pid=None):
     p=root/'flow-progress.json'
     if not p.exists():return 'START'
     status=read_json(p).get('status')
-    if status=='COMPLETED':return 'COMPLETED'
+    if status=='COMPLETED':
+        maintenance=root/'incremental-last-tick.json'
+        if maintenance.exists() and read_json(maintenance).get('status')=='FAILED':return 'INCREMENTAL_RECOVERY_REQUIRED'
+        return 'MAINTENANCE_READY' if (root/'incremental-operations.json').exists() else 'COMPLETED'
     if status=='READY_TO_START':return 'START'
     return 'RECOVERY_REQUIRED'
 
@@ -52,8 +55,10 @@ def launch(root,base,python,stage,*,uid=None,gid=None,automatic=False,popen=subp
     with lock(root/'controller.lock'):
         pid=worker(root)
         recovered=None
+        maintenance=False
         if automatic:
             state=decision(root,pid=pid)
+            if state=='MAINTENANCE_READY':state='START';maintenance=True
             from ..recovery_probe import probe
             from ..lease_recovery import assert_quiet
             def live():return probe(master_url='http://192.168.0.121:8080/json/',
@@ -79,6 +84,7 @@ def launch(root,base,python,stage,*,uid=None,gid=None,automatic=False,popen=subp
             SPARK_SUBMIT_OPTS='-Djavax.net.ssl.trustStore=/etc/pj3-clients/s3/ca-truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit',
             PIPELINE_WINDOW_RECORDS=str(records),PIPELINE_SPARK_RUNTIME_FILE=runtime_path,PIPELINE_SHARED_BRONZE_SESSION='1')
         if stage=='downstream':env.update(PIPELINE_RESUME_FLOW_AFTER_DOWNSTREAM='1',PIPELINE_WINDOWED_FLOW='1')
+        if maintenance:env['PIPELINE_INCREMENTAL_ONLY']='1'
         command=[python,str(root/('continuous_work.py' if stage=='flow' else 'production_downstream_work.py'))] if stage in {'flow','downstream'} else [python,str(root/'production_work.py'),stage]
         if automatic and stage!='flow':raise PipelineError('NIFI_FLOW_ONLY')
         atomic_json(root/(stage+'-attempt.json'),dict(started_at=now()))

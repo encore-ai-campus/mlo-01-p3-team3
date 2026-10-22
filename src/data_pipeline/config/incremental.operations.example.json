@@ -1,0 +1,16 @@
+{
+  "contract_version": 1,
+  "mode": "live",
+  "logical_target": "pj3-danawa",
+  "single_owner_confirmed": true,
+  "queue_root": "/var/lib/pj3/product-pipeline/spark/production-pending-20261019/operations/queue",
+  "audit_root": "/var/lib/pj3/product-pipeline/spark/production-pending-20261019/operations/audit",
+  "max_tasks_per_tick": 1,
+  "incremental": {
+    "production_root": "/var/lib/pj3/product-pipeline/spark/production-pending-20261019",
+    "production_sha256": "replace-with-deployed-production-work-sha256",
+    "mongo_database": "pj3_products_raw",
+    "mongo_replica_set": "rs-products",
+    "state_root": "/var/lib/pj3/product-pipeline/spark/production-pending-20261019/incremental-state"
+  }
+}

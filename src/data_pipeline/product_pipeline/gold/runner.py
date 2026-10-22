@@ -5,6 +5,7 @@ from ..files import parse
 from .build import build
 from .contracts import semantic_hash
 from .storage import columns
+from .identity import binding
 
 
 def process(groups, inputs, versions, sink, *, processing_run_id, as_of, input_refs=None, hook=None):
@@ -26,7 +27,7 @@ def process(groups, inputs, versions, sink, *, processing_run_id, as_of, input_r
             expected={r['row_key']:r['record_hash'] for r in result['tables'][table]}
             if proof['records']!=expected:raise Conflict('GOLD_RECEIPT_OUTPUT_CONFLICT')
             sink.verify(table,expected,proof['version'])
-        return dict(evaluation_key=key,status=receipt['status'],reused=True)
+        return dict(evaluation_key=key,status=receipt['status'],reused=True,receipt_binding=binding(receipt,input_refs),next_due_at=result['next_due_at'])
     manifest={}
     for table,rows in result['tables'].items():
         sink.insert(table,rows)
@@ -43,4 +44,4 @@ def process(groups, inputs, versions, sink, *, processing_run_id, as_of, input_r
     if hook:hook('BEFORE_RECEIPT')
     sink.insert('pipeline_evaluations',[receipt])
     sink.verify('pipeline_evaluations',{key:receipt['record_hash']},sink.version('pipeline_evaluations'))
-    return dict(evaluation_key=key,status=result['status'],reused=False)
+    return dict(evaluation_key=key,status=result['status'],reused=False,receipt_binding=binding(receipt,input_refs),next_due_at=result['next_due_at'])

@@ -122,7 +122,7 @@ def run(args: Request, *, progress=ignore_progress):
             for key,out in zip(page,outputs):
                 result['processed']+=1;result['reused']+=out['reused'];result['quality_wait']+=out['status']=='QUALITY_WAIT'
                 emit(dict(stage='GOLD',product_key=key,**out));after=key
-                selections.append(dict(product_key=key,evaluation_key=out['evaluation_key']))
+                selections.append(dict(product_key=key,evaluation_key=out['evaluation_key'],receipt_binding=out['receipt_binding'],next_due_at=out['next_due_at']))
                 if args.max_products and result['processed']>=args.max_products:break
             selection_pages.append(checkpoint.archive(dict(selections=selections)))
             if args.max_products and result['processed']>=args.max_products:break

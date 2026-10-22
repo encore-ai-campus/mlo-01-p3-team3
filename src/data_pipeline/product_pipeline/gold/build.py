@@ -8,6 +8,7 @@ from ..errors import Conflict, PipelineError
 from ..files import parse
 from ..silver.normalize import KEYS as SILVER_KEYS, semantic_hash as silver_hash
 from .contracts import VERSION, TABLES, INPUT_TABLES, active, semantic_hash, validate_inputs, validate_versions
+from .identity import MODE, VERSION as PRODUCT_VERSION, policy_inputs
 
 
 def validate_group(group):
@@ -72,8 +73,12 @@ def build(groups, inputs, versions, *, processing_run_id, as_of, processed_at=No
         selected += candidates
     selected.sort(key=lambda g:(g['receipt']['raw_document_id'],g['receipt']['evaluation_key']))
     tables = {t:[] for t in TABLES}
-    related = dict(policy=inputs['policy'], **owner,
-                   input_statuses={k:inputs[k]['status'] for k in owner})
+    incremental = inputs['policy'].get('evaluation_identity') == MODE
+    if incremental:owner={k:sorted(v,key=canonical) for k,v in owner.items()}
+    policy = policy_inputs(inputs['policy']) if incremental else inputs['policy']
+    related = dict(policy=policy, **owner,
+                   input_statuses={k:('PROVIDED' if owner[k] else 'NOT_PROVIDED') if incremental else inputs[k]['status'] for k in owner})
+    if incremental:related['review_read_set']=inputs.get('review_read_sets',{}).get(product_key)
     # Time affects only effective semantic states, never a random execution ID.
     effective_states = [(r, active(r,as_of)) for r in owner['product_states']]
     effective_embeddings = [(r, active(r,as_of)) for r in owner['embeddings']]
@@ -91,13 +96,18 @@ def build(groups, inputs, versions, *, processing_run_id, as_of, processed_at=No
             and r.get('evidence_ref') and (not r.get('expires_at') or utc(as_of)<utc(r['expires_at']))
             and (not r.get('valid_from') or utc(r['valid_from'])<=utc(as_of)) for r in reviews)
     review_effective={r['image_relation_key']:review_active(r) for g in selected for r in g['tables']['product_images']}
-    fingerprint=digest(dict(version=VERSION,product_key=product_key,versions=versions,related=related,metric_date=utc(as_of)[:10],
+    identity=dict(version=PRODUCT_VERSION if incremental else VERSION,product_key=product_key,related=related,
         silver_receipts=sorted(g['receipt']['record_hash'] for g in selected),
         state_effective=effective_states,embedding_effective=effective_embeddings,
         price_effective=price_expiries,link_effective=link_effective,review_effective=review_effective,
-        confirmation_effective=[active(r,as_of) for r in owner['price_confirmations']]))
-    gold_key='gold-eval-v1:'+fingerprint
-    common=dict(gold_evaluation_key=gold_key,product_key=product_key,gold_policy_version=VERSION,
+        confirmation_effective=[active(r,as_of) for r in owner['price_confirmations']])
+    if incremental:
+        identity['observed_effective']={r['record_hash']:utc(r['observed_at'])<=utc(as_of)
+            for g in selected for rows in g['tables'].values() for r in rows if r.get('observed_at')}
+    else:identity.update(versions=versions,metric_date=utc(as_of)[:10])
+    fingerprint=digest(identity)
+    gold_key=('gold-eval-v2:' if incremental else 'gold-eval-v1:')+fingerprint
+    common=dict(gold_evaluation_key=gold_key,product_key=product_key,gold_policy_version=PRODUCT_VERSION if incremental else VERSION,
         processing_run_id=processing_run_id,processed_at=processed_at or now(),
         input_fingerprint=fingerprint,silver_versions_json=canonical(versions))
     reasons=[]
@@ -308,7 +318,8 @@ def build(groups, inputs, versions, *, processing_run_id, as_of, processed_at=No
     applicable=parse(next(iter(applicability))) if len(applicability)==1 else None
     if applicable is not None and (len(set(applicable))!=len(applicable) or any(k not in projection for k in applicable)):
         raise PipelineError('GOLD_APPLICABILITY_RULE_INVALID')
-    add('quality_daily',product_key,dict(metric_date=utc(as_of)[:10],service_category_id=category[0],
+    # V2 stores reusable contributions. The sealed export labels daily rollups.
+    add('quality_daily',product_key,dict(metric_date=None if incremental else utc(as_of)[:10],service_category_id=category[0],
         product_count=1,observation_count=len(by_raw),evaluation_count=len(selected),
         image_relation_count=len(image_rows),unique_file_count=len({r['image_checksum'] for r in image_rows if r['image_checksum']}),
         catalog_ready_count=int(catalog_ready),recommendation_ready_count=int(recommendation_ready),
@@ -317,5 +328,7 @@ def build(groups, inputs, versions, *, processing_run_id, as_of, processed_at=No
         applicability_status='CONFIRMED_OWNER_INPUT' if applicable is not None else 'NOT_PROVIDED',
         evidence_json=canonical(dict(raw_ids=sorted(by_raw),checksums=sorted({r['image_checksum'] for r in image_rows if r['image_checksum']}),
             source_quality_issues=[r for g in selected for r in g['tables']['quality_issues']]))))
+    from .identity import next_due
     return dict(evaluation_key=gold_key,input_fingerprint=fingerprint,tables=tables,
+                next_due_at=next_due(selected,owner,inputs['policy'],as_of),
                 status='OUTPUT_COMMITTED' if catalog_ready else 'QUALITY_WAIT',reason_codes=sorted(set(reasons)))

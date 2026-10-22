@@ -95,6 +95,16 @@ class MySQL:
         finally:self.connection.rollback()
 
     @contextmanager
+    def review_lock(self):
+        # A stable lock closes the append-only ledger's absent-row race without
+        # inventing a cross-database transaction or runtime DDL.
+        key='pipeline-review-'+self.target[:48]
+        if self.one('SELECT GET_LOCK(%s,0) AS acquired',(key,))['acquired']!=1:
+            raise PipelineError('REVIEW_OWNER_BUSY')
+        try:yield self
+        finally:self.one('SELECT RELEASE_LOCK(%s) AS released',(key,))
+
+    @contextmanager
     def transaction(self):
         self.connection.begin()
         try:yield self;self.connection.commit()

@@ -5,6 +5,7 @@ from ..files import parse
 from .build import build
 from .contracts import semantic_hash
 from .storage import columns
+from .identity import binding
 
 
 def process_many(groups,inputs,versions,sink,*,processing_run_id,as_of,input_refs=None,hook=None):
@@ -70,4 +71,6 @@ def _process_many(groups,inputs,versions,sink,*,processing_run_id,as_of,input_re
     if receipts:
         sink.insert('pipeline_evaluations',receipts)
         sink.verify('pipeline_evaluations',{r['row_key']:r['record_hash'] for r in receipts},sink.version('pipeline_evaluations'))
-    return [dict(evaluation_key=r['evaluation_key'],status=r['status'],reused=r['evaluation_key'] in existing) for r in results]
+    all_receipts={**existing,**{r['row_key']:r for r in receipts}}
+    return [dict(evaluation_key=r['evaluation_key'],status=r['status'],reused=r['evaluation_key'] in existing,
+        receipt_binding=binding(all_receipts[r['evaluation_key']],input_refs),next_due_at=r['next_due_at']) for r in results]

@@ -2,7 +2,7 @@
 
 로컬 `develop/src/data_pipeline`의 코드 변경을 위한 진입점이다. 운영 명령은 [문서 안내](README.md)의 실행·복구 가이드, 현재 서버 상태는 [실서버 검증](service_validation_20261018.md)을 따른다. 다른 작업 폴더나 협업용 문서 사본을 구현 기준으로 사용하지 않는다.
 
-2026-10-22 계층 분리는 로컬 코드 변경이다. 아래 구조의 존재를 서버 배포·전체 상품 처리 완료로 해석하지 않는다. 데이터 계약·CLI 인자·오류 코드·저장 경로·영수증 형식은 유지한다.
+2026-10-22 계층 분리는 로컬 코드 변경이다. 아래 구조의 존재를 서버 배포·전체 상품 처리 완료로 해석하지 않는다. 계층 분리 자체는 기존 계약을 유지한다. 후속 [상품 증분 처리](incremental_processing.md)는 명시적인 Gold v2 평가 식별자와 검수 읽기 집합을 추가하며 v1 호환 경로를 보존한다.
 
 ## 읽는 순서와 기준
 
@@ -17,6 +17,7 @@
 
 | 변경 목적 | 먼저 읽을 문서 | 담당 코드 | 함께 확인할 문서·테스트 |
 |---|---|---|---|
+| 상품 변경·만료·야간 대조·증분 실행 | [증분 처리·인수](incremental_processing.md) | `incremental/`, `infrastructure/incremental_state.py`, `operations/service.py` | `test_incremental.py`, `test_incremental_integration.py`, `test_gold_incremental.py` |
 | CLI 인자·JSON 출력·종료 코드 | 해당 단계 실행 가이드 | [입력 CLI](../product_pipeline/cli.py), [Bronze CLI](../product_pipeline/bronze/cli.py), [Silver CLI](../product_pipeline/silver/cli.py), [Gold CLI](../product_pipeline/gold/cli.py), [출력](../product_pipeline/console.py) | [입력 실행](execution.md), [CLI 회귀](../tests/test_cli.py), [계층 경계](../tests/test_layer_boundaries.py) |
 | 환경변수·연결 생성·자원 종료 등록 | [배포](deployment.md) | [연결 구성](../product_pipeline/bootstrap.py), [저장소 인터페이스](../product_pipeline/ports.py) | [Garage 프로필](garage_v241_profile.md), [어댑터 회귀](../tests/test_adapters.py), [SDK 계약](../tests/test_sdk_contract.py) |
 | 스냅샷·LIVE 인계 | [입력 실행](execution.md), [LIVE 계약](live_handoff_v1.md) | [스냅샷](../product_pipeline/snapshot.py), [캡처](../product_pipeline/live.py), [인계](../product_pipeline/handoff.py), [전송](../product_pipeline/transfer.py) | [LIVE 실행](live_execution.md), [스냅샷 회귀](../tests/test_snapshot.py), [LIVE 회귀](../tests/test_live.py), [전송 회귀](../tests/test_transfer.py) |
@@ -30,7 +31,7 @@
 | 게시 최신값·NULL 보호·속성/출처 유지 | [게시 필드 계약](../../../docs/design/13-gold-mysql-publication.md), [보강 계약](design_amendment_v1_1.md) | [순수 게시 정책](../product_pipeline/publication/policy.py), [경계 값 변환](../product_pipeline/publication/values.py) | [게시 회귀](../tests/test_publication.py), [속성 재평가](../tests/test_attribute_replay.py) |
 | 게시 트랜잭션·상품/이미지/판매 저장 | [MySQL 게시](mysql_publication.md) | [게시 유스케이스](../product_pipeline/publication/runner.py), [게시 저장 처리](../product_pipeline/publication/repository.py), [MySQL 어댑터](../product_pipeline/publication/mysql.py), [대기 적재](../product_pipeline/publication/pending.py) | [스키마 반영](mysql_schema_rollout.md), [대기 적재](pending_intake.md), [게시 회귀](../tests/test_publication.py), [대기 회귀](../tests/test_publication_pending.py) |
 | 게시 결과·과거 출처의 읽기 전용 감사 | [MySQL 게시](mysql_publication.md), [전체 FLOW](flow_execution.md) | [게시 감사](../product_pipeline/publication/audit.py), [단계 간 대조](../product_pipeline/operations/flow_audit.py) | [게시 회귀](../tests/test_publication.py), [FLOW 회귀](../tests/test_flow.py), [이전 출처 선택](../tests/test_gold_selection.py) |
-| 검수 원장·승인·활성화 | [검수 절차](review_workflow.md) | [검수](../product_pipeline/review.py), [승인 후 게시](../product_pipeline/publication/reviewed.py) | [검수 회귀](../tests/test_review.py), [불변 감사](../tests/test_review_append_only.py), [검수 FLOW](../tests/test_reviewed_flow.py) |
+| 검수 원장·승인·활성화 | [검수 절차](review_workflow.md) | [검수](../product_pipeline/review.py), [순수 검수 정책](../product_pipeline/review_policy.py), [검수 SQL](../product_pipeline/review_repository.py), [승인 후 게시](../product_pipeline/publication/reviewed.py) | [검수 회귀](../tests/test_review.py), [불변 감사](../tests/test_review_append_only.py), [검수 FLOW](../tests/test_reviewed_flow.py) |
 | FLOW 순서·프로세스 실행·재개 | [전체 FLOW](flow_execution.md), [운영 실행](operations_execution.md) | [단계 상태·영수증](../product_pipeline/operations/flow.py), [단계 연결·프로세스](../product_pipeline/operations/flow_runtime.py), [worker](../product_pipeline/operations/flow_worker.py), [실행 결과](../product_pipeline/execution.py) | [FLOW 회귀](../tests/test_flow.py), [서버 제어](../tests/test_server_flow.py), [계층 경계](../tests/test_layer_boundaries.py) |
 
 ## 계층과 호출 방향

@@ -78,7 +78,7 @@ def freeze_silver(work,config,target,selection):
     if not path.exists():
         db=MySQL(config)
         try:
-            with db.read_snapshot():inputs=export_inputs(db,[],as_of=now())['silver']
+            with db.read_snapshot():inputs=export_inputs(db,[],as_of=now(),product_keys=selection['product_keys'])['silver']
         finally:db.close()
         atomic_json(path,inputs)
     inputs=read_json(path)
@@ -116,7 +116,7 @@ def freeze_observation_inputs(work,config,target,selection):
     if not path.exists():
         db=MySQL(config)
         try:
-            with db.read_snapshot():inputs=export_inputs(db,[],as_of=now())['silver']
+            with db.read_snapshot():inputs=export_inputs(db,[],as_of=now(),product_keys=selection['product_keys'])['silver']
         finally:db.close()
         atomic_json(path,inputs)
 
@@ -157,6 +157,7 @@ def run(work,config,options):
             else:os.environ['PIPELINE_ACTIVATION_PARENT']=old
         if not path.exists() or read_json(path).get('status')!='COMPLETED':raise Conflict('ACTIVATION_REEVALUATION_FAILED_'+stage)
     return dict(status='COMPLETED',stage='activation',reviewed=read_json(target/'publish-result.json').get('reviewed'),
+        execution_root=str(target),
         silver_normalization_skipped=read_json(target/'silver-result.json').get('runtime_metrics',{}).get('silver_normalization_skipped',0),
         reevaluated_products=len(selection['product_keys']),
         skipped_already_activated=len(read_json(root/'selection.json')['product_keys'])-len(selection['product_keys']),

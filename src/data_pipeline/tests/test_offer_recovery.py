@@ -71,7 +71,7 @@ class OfferRecoveryTests(unittest.TestCase):
             tables = result['tables']
             catalog = tables['product_catalog'][0]
             item = dict(product_key=catalog['product_key'], group=dict(tables=tables))
-            plan = dict(plan_id='p', export_hash='h', gold_versions={}, price_history_mode='SNAPSHOT_V1')
+            plan = dict(plan_id='p', export_hash='h', gold_versions={}, price_history_mode='SNAPSHOT_V1',as_of='2026-10-19T00:00:00.000Z')
             db = Database(); product = dict(id='product')
             def run(): _observed_offers(db, product, catalog, tables, datetime(2026,10,19), item, plan)
             run(); saved = copy.deepcopy(db.rows['offers']); history = copy.deepcopy(db.rows['offer_snapshots'])

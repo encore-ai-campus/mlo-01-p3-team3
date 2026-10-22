@@ -7,10 +7,11 @@ from test_gold import group,side,ready,seal,reseal,VERSIONS,MemoryGoldSink
 from test_silver import RUN,AS_OF
 
 
-def fixture(root,target,*,name=None,stamp=None,as_of=AS_OF,price_amount=None):
+def fixture(root,target,*,name=None,stamp=None,as_of=AS_OF,price_amount=None,evaluation_identity=None):
     from pathlib import Path
     Path(root).mkdir(parents=True,exist_ok=True)
     silver=group(root);inputs=side();inputs['policy']['price_history_mode']='SNAPSHOT_V1';seal(inputs)
+    if evaluation_identity:inputs['policy']['evaluation_identity']=evaluation_identity;seal(inputs)
     image_proofs={r['image_relation_key']:parse(r['evidence_json']) for r in silver['tables']['product_images']}
     silver,inputs=ready(silver,inputs)
     for image in silver['tables']['product_images']:

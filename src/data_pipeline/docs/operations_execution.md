@@ -1,5 +1,7 @@
 # 예약 실행·재시도·NiFi 연계
 
+2026-10-22 로컬 후속 구현: [상품 증분 처리](incremental_processing.md)는 `operations/service.py`의 공용 tick과 `REEVALUATE` 작업을 기존 Master coordinator 안전 경계에 연결한다. NiFi 제한 SSH·단일 큐·정지/복구 경계를 유지한다. 전체 최초 처리 완료 후 maintenance 경로를 제공하며 서버 배포·연속 운영 검증은 별도다.
+
 ## 서로 다른 NiFi/Driver VM의 고정 tick
 2026-10-18: `nifi` CLI는 기존 `--python` 대신 `--remote-ssh-config /etc/pj3-clients/pipeline-trigger/ssh.conf --remote-target pj3-pipeline-tick`을 받을 수 있다. 두 방식은 상호 배타적이다. SSH config는 서비스 전용 키·검증한 known_hosts를 고정하고 서버는 해당 키에 tick 강제 명령을 적용한다. 임의 원격 명령·포워딩을 허용하지 않는다. 로컬 config는 실제 원격 config/수동 복구 receipt와 일치해야 한다. config/launcher/queue를 바꿀 때 수동 검증을 다시 수행한다.
 

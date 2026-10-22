@@ -29,6 +29,8 @@ def invoke(main, arguments):
     if code:
         error=PipelineError(result.get('error_code','FLOW_STAGE_COMMAND_FAILED'))
         error.stage_error=True
+        for name in ('lease_failure','lease_owner_ref'):
+            if result.get(name) is not None:setattr(error,name,result[name])
         raise error
     if result.get('status') not in {'COMPLETED','PLANS_PREPARED'} and result.get('result')!='completed':
         raise PipelineError('FLOW_COMMAND_RESULT_UNCONFIRMED')
@@ -50,6 +52,8 @@ def main():
                         'TimeoutError','AutoReconnect','NetworkTimeout','ConnectionFailure',
                         'ServerSelectionTimeoutError','OperationalError','FLOW_SILVER_PARTIAL',
                         'FLOW_GOLD_INCOMPLETE_OR_EMPTY'});code=2
+        for name in ('lease_failure','lease_owner_ref'):
+            if getattr(exc,name,None) is not None:result[name]=getattr(exc,name)
     atomic_json(args.output,seal(result));return code
 
 

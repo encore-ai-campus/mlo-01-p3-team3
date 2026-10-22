@@ -80,10 +80,10 @@ def _product(db,item,plan,at):
     guard=_check_guard(db,item,catalog,at)
     if guard['price_history_mode']!=plan['price_history_mode']:raise Conflict('PUBLICATION_PRICE_HISTORY_POLICY_CHANGED')
     key=catalog['product_key'];old=db.get('products',dict(product_key=key))
-    activating=bool(old and old['status']=='PENDING_REVIEW' and plan.get('publication_mode')=='ACTIVATE_REVIEWED')
+    activating=bool(old and old['status'] in {'PENDING_REVIEW','INACTIVE'} and plan.get('publication_mode')=='ACTIVATE_REVIEWED')
     if old and plan.get('publication_mode')=='ACTIVATE_REVIEWED':
         approval=guard.get('activation') or {}
-        if (approval.get('from_status')!=old['status'] or old['status'] not in {'PENDING_REVIEW','ACTIVE'} or approval.get('product_id')!=old['id'] or
+        if (approval.get('from_status')!=old['status'] or old['status'] not in {'PENDING_REVIEW','ACTIVE','INACTIVE'} or approval.get('product_id')!=old['id'] or
                 approval.get('current_snapshot_hash')!=digest(parse(old['gold_snapshot_ref_json'])) or not approval.get('evidence_ref')):
             raise Conflict('PUBLICATION_ACTIVATION_BASELINE_CHANGED')
     if old and ((old['status']!='ACTIVE' and not activating) or old['source_code']!=catalog['source_code'] or old['source_product_id']!=catalog['source_product_id']):

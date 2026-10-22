@@ -51,11 +51,14 @@ def execute(context):
     if result.get('context_hash') != context['content_hash']: raise PipelineError('FLOW_WORKER_CONTEXT_CHANGED')
     if code or result.get('status') != 'SUCCEEDED':
         if result.get('error_code','').endswith('SHUTDOWN_UNCONFIRMED'):
-            raise WorkerUnconfirmed('FLOW_STAGE_SHUTDOWN_UNCONFIRMED')
-        if result.get('retryable'):
+            error=WorkerUnconfirmed('FLOW_STAGE_SHUTDOWN_UNCONFIRMED')
+        elif result.get('retryable'):
             from .queue import RetryLater
-            raise RetryLater(result.get('error_code','FLOW_WORKER_RETRY_REQUIRED'))
-        raise PipelineError(result.get('error_code', 'FLOW_WORKER_FAILED'))
+            error=RetryLater(result.get('error_code','FLOW_WORKER_RETRY_REQUIRED'))
+        else:error=PipelineError(result.get('error_code', 'FLOW_WORKER_FAILED'))
+        for name in ('lease_failure','lease_owner_ref'):
+            if result.get(name) is not None:setattr(error,name,result[name])
+        raise error
     output = result['output']; output['artifacts'] = [*output.get('artifacts', []),
         dict(path=str(response), sha256=sha_file(response))]
     return output

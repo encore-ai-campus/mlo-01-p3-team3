@@ -49,6 +49,9 @@ def producer(previous,script,args,log,env,receipt,statuses):
     return child(script,args,log,env)
 
 def main():
+    from product_pipeline.incremental.runtime import boundary
+    if os.environ.get('PIPELINE_INCREMENTAL_ONLY')=='1':
+        boundary(ROOT);return False
     setup();client=MongoClient(os.environ['PIPELINE_MONGO_URI'],serverSelectionTimeoutMS=8000)
     db=client.get_database('pj3_products_raw',read_concern=ReadConcern('majority'))
     env=dict(os.environ,PIPELINE_CONTINUOUS='1')
@@ -61,6 +64,9 @@ def main():
     progress.update(status='RUNNING',stage_attempt=0,raw_relay_pid=raw.pid,image_intake_pid=images.pid)
     atomic_json(progress_path,progress)
     while True:
+        # The previous Delta stages are quiescent. The same owner services
+        # existing-product changes even when no new Kafka event has arrived.
+        boundary(ROOT)
         recovery=dict(pending=False,enabled=False)
         if (ROOT/'bronze-recovery.json').exists():
             from recover_kafka_retention import topup
@@ -152,6 +158,9 @@ if __name__=='__main__':
                 # re-acquires continuous.lock before reading saved checkpoints.
                 os.execv(sys.executable,[sys.executable,str(Path(__file__).resolve())])
         except Exception as exc:
+            if os.environ.get('PIPELINE_INCREMENTAL_ONLY')=='1':
+                atomic_json(ROOT/'incremental-last-tick.json',dict(status='FAILED',error_code=getattr(exc,'code',type(exc).__name__),at=now()))
+                raise
             p=read_json(ROOT/'flow-progress.json') if (ROOT/'flow-progress.json').exists() else {}
             p.update(status='FAILED',error_code=getattr(exc,'code',str(exc) if isinstance(exc,RuntimeError) else type(exc).__name__),updated_at=now())
             atomic_json(ROOT/'flow-progress.json',p);raise

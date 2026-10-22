@@ -143,6 +143,8 @@ class MongoLedger:
     def update(self, key, token, **fields):
         if set(fields) - {"stage", "last_error", "raw_confirmed", "event_confirmed"}:
             raise PipelineError("IMMUTABLE_FIELD_UPDATE")
+        if fields.get('raw_confirmed') or fields.get('event_confirmed'):
+            fields['incremental_change']=dict(reason='SOURCE_CONFIRMED')
         result = self.observations.update_one(self._filter(key, token), {"$set": fields})
         if result.matched_count != 1:
             raise LeaseLost()
@@ -154,6 +156,8 @@ class MongoLedger:
         fields = {"image_state_vector": vector, "image_state_fingerprint": fingerprint,
                   "image_state_revision": row["image_state_revision"] + (fingerprint != row["image_state_fingerprint"]),
                   "image_state_checked_at": now()}
+        if fingerprint != row['image_state_fingerprint']:
+            fields['incremental_change']=dict(reason='IMAGE_STATE',revision=fields['image_state_revision'],fingerprint=fingerprint)
         # Check the final operational document, not just the vector in isolation.
         validate_size({**row, **fields}, wire_document=False)
         result = self.observations.update_one(where, {"$set": fields})

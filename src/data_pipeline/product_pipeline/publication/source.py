@@ -41,6 +41,7 @@ class GoldSource:
     def __init__(self,spark,export_ref,gold_root,archive_root,*,max_group_rows=20000,max_group_bytes=32*1024*1024):
         self.spark,self.archive_root=spark,location(archive_root)
         self.max_group_rows,self.max_group_bytes=max_group_rows,max_group_bytes
+        self._verified_archive_refs=set()
         self.manifest=self.read(export_ref)
         m=self.manifest
         if (m.get('stage')!='GOLD_EXPORT' or not m.get('source_drained') or
@@ -80,6 +81,25 @@ class GoldSource:
             values.append(r)
         return values
 
+    def _check_refs(self, group, choice):
+        from ..gold.identity import VERSION
+        receipt=group['receipt'];refs=parse(receipt['input_refs_json'])
+        if receipt.get('gold_policy_version') == VERSION:
+            expected=dict(receipt_hash=receipt['record_hash'],input_fingerprint=receipt['input_fingerprint'],
+                          validated_input_refs_hash=digest(self.manifest['input_refs']))
+            if choice.get('receipt_binding')!=expected:
+                raise Conflict('PUBLISH_GOLD_REUSE_BINDING_INVALID')
+            # An identity never permits crossing data roots. Original immutable
+            # inputs/versions remain accessible and hash checked as provenance.
+            if refs.get('silver_root')!=self.manifest['input_refs'].get('silver_root'):
+                raise Conflict('PUBLISH_GOLD_INPUT_REF_CONFLICT')
+            verified=getattr(self,'_verified_archive_refs',set())
+            for name in ('inputs','versions'):
+                if refs[name] not in verified:self.read(refs[name]);verified.add(refs[name])
+            self._verified_archive_refs=verified
+        elif any(refs.get(n)!=self.manifest['input_refs'].get(n) for n in ('inputs','versions','silver_root')):
+            raise Conflict('PUBLISH_GOLD_INPUT_REF_CONFLICT')
+
     def groups(self):
         from pyspark.sql import functions as F
         seen=set()
@@ -92,9 +112,7 @@ class GoldSource:
                       for t,f in self.frames.items()}
                 if len(data['pipeline_evaluations'])!=1:raise Conflict('PUBLISH_EXPORT_RECEIPT_MISSING')
                 group=dict(receipt=data.pop('pipeline_evaluations')[0],tables=data)
-                refs=parse(group['receipt']['input_refs_json'])
-                for name in ('inputs','versions','silver_root'):
-                    if refs.get(name)!=self.manifest['input_refs'].get(name):raise Conflict('PUBLISH_GOLD_INPUT_REF_CONFLICT')
+                self._check_refs(group,choice)
                 validate_group(group,self.manifest['gold_versions']);yield group
         if len(seen)!=self.manifest['product_count']:raise Conflict('PUBLISH_EXPORT_COUNT_CHANGED')
 
@@ -120,9 +138,7 @@ class GoldSource:
                     selected={t:[r for r in rows if r['product_key']==choice['product_key'] and r['gold_evaluation_key']==choice['evaluation_key']] for t,rows in data.items()}
                     if len(selected['pipeline_evaluations'])!=1:raise Conflict('PUBLISH_EXPORT_RECEIPT_MISSING')
                     group=dict(receipt=selected.pop('pipeline_evaluations')[0],tables=selected)
-                    refs=parse(group['receipt']['input_refs_json'])
-                    if any(refs.get(n)!=self.manifest['input_refs'].get(n) for n in ('inputs','versions','silver_root')):
-                        raise Conflict('PUBLISH_GOLD_INPUT_REF_CONFLICT')
+                    self._check_refs(group,choice)
                     validate_group(group,self.manifest['gold_versions']);groups.append(group)
                 seen.update(keys);choices=choices[size:]
                 yield from groups

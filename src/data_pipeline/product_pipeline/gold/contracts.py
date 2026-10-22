@@ -13,8 +13,12 @@ KEYS = {t: 'row_key' for t in (*TABLES, 'pipeline_evaluations')}
 
 
 def semantic_hash(row):
+    from .identity import VERSION as PRODUCT_VERSION
+    excluded = {'record_hash', 'processing_run_id', 'processed_at'}
+    if row.get('gold_policy_version') == PRODUCT_VERSION and 'output_manifest_json' not in row:
+        excluded.add('silver_versions_json')
     return digest({k: v for k, v in row.items()
-                   if k not in {'record_hash', 'processing_run_id', 'processed_at'}})
+                   if k not in excluded})
 
 
 def validate_inputs(value):
@@ -25,6 +29,8 @@ def validate_inputs(value):
     if not required.issubset(value):
         raise PipelineError('GOLD_INPUTS_MUST_BE_EXPLICIT')
     policy = value['policy']
+    if policy.get('evaluation_identity') not in {None, 'PRODUCT_INPUTS_V2'}:
+        raise PipelineError('GOLD_IDENTITY_POLICY_UNSUPPORTED')
     if (not isinstance(policy, dict) or not policy.get('version') or not policy.get('evidence_ref')
             or policy.get('price_history_mode') not in {'UNRESOLVED', 'SNAPSHOT_V1', 'PRICE_EFFECT_V2'}
             or type(policy.get('price_max_age_seconds')) is not int or policy['price_max_age_seconds'] <= 0

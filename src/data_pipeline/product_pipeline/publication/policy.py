@@ -45,6 +45,7 @@ def guarded_projection(old, incoming, lineage, versions):
 def snapshot_ref(item, plan, source_rows):
     catalog = item['group']['tables']['product_catalog'][0]
     return canonical(dict(schema_version=2, plan_id=plan['plan_id'], product_key=item['product_key'],
+        publication_as_of=plan['as_of'],publication_mode=plan.get('publication_mode','STANDARD'),
         export_hash=plan['export_hash'], gold_evaluation_key=catalog['gold_evaluation_key'],
         input_fingerprint=catalog['input_fingerprint'], gold_versions=plan['gold_versions'],
         source_rows=[dict(table=table,row_key=row['row_key'],record_hash=row['record_hash'])

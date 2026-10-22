@@ -10,6 +10,7 @@
 
 | 문서 | 용도 |
 |---|---|
+| [상품 변경분 처리·서버 적용](incremental_processing.md) | 계층별 구현·세대/만료·Gold v2·서버 적용 순서·인수 기준; 로컬 구현이며 미배포 |
 | [2026-10-22 Git 전달 검증](verification/git_release_20261022.json) | 커밋 대상 격리 시험본의 전체 회귀 564개 통과·전달 범위·제외 파일 |
 | [2026-10-22 파일 정리·동등성 검증](verification/range_index_compaction_20261022.json) | 19개 Delta 테이블 정리·내용 보존·100건 범위 읽기 확인·서버 테스트 183개 |
 | [배치별 입력·처리량·시간 비교](verification/batch_input_timing_audit_20261022.json) | epoch 14·30 입력량과 12~31 시간 추이, 미계측 항목 구분 |

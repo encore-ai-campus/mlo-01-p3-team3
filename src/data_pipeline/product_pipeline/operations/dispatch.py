@@ -40,7 +40,7 @@ def reconcile(snapshot,ledger):
     return result
 
 
-def handlers(config,queue):
+def handlers(config,queue,*,incremental=None):
     bindings=config.get('path_bindings',{})
     def path(value):return resolve_path(value,bindings)
     def checked(spec,key):
@@ -132,7 +132,17 @@ def handlers(config,queue):
             raise Conflict('SCHEDULED_FLOW_TARGET_CHANGED')
         if config['mode']!='live':raise PipelineError('FLOW_LIVE_CONFIG_REQUIRED')
         return run(root)
-    return dict(INGEST=ingest,PUBLISH=publish,RECEIVE=receive,RECONCILE=audit,FLOW=flow)
+    def reevaluate(spec):
+        if config['mode']!='live' or not config.get('incremental'):raise PipelineError('INCREMENTAL_LIVE_CONFIG_REQUIRED')
+        from ..bootstrap import open_incremental
+        from ..incremental.service import execute
+        if incremental is not None:
+            state,source,backend=incremental
+            return execute(spec,state,backend)
+        with ExitStack() as stack:
+            state,source,backend=open_incremental(config,stack)
+            return execute(spec,state,backend)
+    return dict(INGEST=ingest,PUBLISH=publish,RECEIVE=receive,RECONCILE=audit,FLOW=flow,REEVALUATE=reevaluate)
 
 
 def discover_local_plans(directory,queue,config_file):

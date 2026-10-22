@@ -185,7 +185,7 @@ def main(stage):
             if path.exists():inputs=read_json(path)
             elif db.one('SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',(config['database'],'pipeline_review_events'))['n']:
                 from product_pipeline.review import export_inputs
-                with db.read_snapshot():inputs=export_inputs(db,[],as_of=now())['silver']
+                with db.read_snapshot():inputs=export_inputs(db,[],as_of=now(),product_keys=selection['product_keys'] if selection else None)['silver']
                 atomic_json(path,inputs)
             else:
                 inputs={k:input_snapshot(k) for k in KINDS}

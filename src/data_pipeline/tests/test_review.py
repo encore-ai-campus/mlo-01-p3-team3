@@ -41,6 +41,8 @@ class Ledger:
         try:yield
         except BaseException:self.events=before;self.invalidated=n;raise
     def read_snapshot(self):return self.transaction()
+    @contextmanager
+    def review_lock(self):yield self
 
 
 def approved(db):

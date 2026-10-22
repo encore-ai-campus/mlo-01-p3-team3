@@ -31,12 +31,22 @@ def publish_reviewed(source, db, output, *, progress=None):
         reason=None
         if not catalog['catalog_ready']:
             reason='GOLD_CATALOG_QUALITY_WAIT'
-        elif path.exists():
+        else:
+            from .reuse import current_publication
+            reused=current_publication(db,group,inputs,price_history_mode=source.price_history_mode,
+                price_max_age_seconds=source.price_max_age_seconds)
+            if reused:
+                counts['activated']+=1
+                record=dict(status='ACTIVATION_CONFIRMED',product_key=key,published=reused,reused=True)
+                atomic_json(output/('receipt-'+identity+'.json'),record)
+                if progress:progress(record)
+                continue
+        if reason is None and path.exists():
             plan=load_plan(path)
             if (plan['export_hash']!=source.manifest['content_hash'] or plan['target']!=db.target or
                     plan['products'][0]['group']!=group or plan.get('publication_mode')!='ACTIVATE_REVIEWED'):
                 raise Conflict('REVIEW_ACTIVATION_PLAN_CHANGED')
-        else:
+        elif reason is None:
             try:
                 guard=approve_guard(db,group,source.manifest['gold_versions'],
                     price_history_mode=source.price_history_mode,as_of=now(),owner_inputs=inputs)

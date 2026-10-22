@@ -15,6 +15,12 @@ PACKAGE = Path(__file__).resolve().parents[1] / 'product_pipeline'
 
 
 class LayerBoundaryTests(unittest.TestCase):
+    def test_review_policy_has_no_database_dependency(self):
+        tree=ast.parse((PACKAGE/'review_policy.py').read_text(encoding='utf-8'))
+        for node in ast.walk(tree):
+            if isinstance(node,ast.ImportFrom):
+                self.assertFalse({'mysql','review_repository','operations'} & set((node.module or '').split('.')))
+
     def test_internal_modules_do_not_import_commands(self):
         for path in PACKAGE.rglob('*.py'):
             if path.name == '__main__.py':
