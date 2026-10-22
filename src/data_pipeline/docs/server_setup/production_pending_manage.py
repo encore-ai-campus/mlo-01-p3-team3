@@ -31,6 +31,9 @@ def main():
         import signal,time
         command=Path(f'/proc/{pid}/cmdline').read_bytes()
         if b'continuous_work.py' not in command:m.fail_json(msg='STOP_REQUIRES_FLOW_COORDINATOR')
+        process_environment=Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+        if b'PIPELINE_SHARED_BRONZE_SESSION=1' in process_environment:
+            m.fail_json(msg='SHARED_DRIVER_REQUIRES_PAUSE_AFTER_WINDOW_NO_SIGNAL_STOP')
         children=Path(f'/proc/{pid}/task/{pid}/children').read_text().split()
         workers=[]
         for child in children:
@@ -84,25 +87,11 @@ def main():
         (ROOT/'deployment.json').write_text(json.dumps(dict(source_sha256=checksum)))
         for p in [ROOT,*ROOT.rglob('*')]:os.chown(p,u.pw_uid,u.pw_gid)
     if action=='start':
-        from datetime import datetime,timezone
-        attempt=dict(started_at=datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z'))
-        (ROOT/(stage+'-attempt.json')).write_text(json.dumps(attempt))
-        logpath=ROOT/(stage+'.private.log');log=logpath.open('ab');os.chmod(logpath,0o600)
         sys.path.insert(0,str(ROOT/'source'))
-        from product_pipeline.runtime_overrides import load
-        records,runtime_path,runtime=load(ROOT,BASE)
-        env={'PATH':'/usr/bin:/bin','HOME':str(ROOT),'JAVA_HOME':'/usr/lib/jvm/java-21-openjdk-amd64','SPARK_CONF_DIR':'/etc/pj3/spark','SPARK_LOCAL_IP':runtime['driver_host'],'PYTHONPATH':str(ROOT/'source'),'PYSPARK_PYTHON':runtime['executor_python'],'PYSPARK_DRIVER_PYTHON':PY,'LANG':'C.UTF-8',
-            'AWS_CA_BUNDLE':'/etc/pj3-clients/s3/ca.pem','AWS_DEFAULT_REGION':'us-east-1','PIPELINE_S3_ENDPOINT':'https://192.168.0.141:8443','PIPELINE_S3_CREDENTIALS_FILE':'/etc/pj3-clients/s3/spark.properties',
-            'PIPELINE_SPARK_S3_PROFILE':'garage_v241','PIPELINE_SPARK_S3_CREDENTIALS_FILE':'/etc/pj3-clients/s3/spark.properties','PIPELINE_SPARK_S3_BUCKET':'pj3-data',
-            'SPARK_SUBMIT_OPTS':'-Djavax.net.ssl.trustStore=/etc/pj3-clients/s3/ca-truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit'}
-        env.update(PIPELINE_WINDOW_RECORDS=str(records),PIPELINE_SPARK_RUNTIME_FILE=runtime_path)
-        if stage=='downstream':
-            env['PIPELINE_RESUME_FLOW_AFTER_DOWNSTREAM']='1'
-            env['PIPELINE_WINDOWED_FLOW']='1'
-        command=([PY,str(ROOT/'production_downstream_work.py')] if stage=='downstream' else
-            ([PY,str(ROOT/'continuous_work.py')] if stage=='flow' else [PY,str(ROOT/'production_work.py'),stage]))
-        p=subprocess.Popen(command,cwd=ROOT,env=env,user=u.pw_uid,group=u.pw_gid,extra_groups=[],stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
-        pidfile.write_text(str(p.pid));alive=True
+        from product_pipeline.operations.server_flow import launch
+        try:started=launch(ROOT,BASE,PY,stage,uid=u.pw_uid,gid=u.pw_gid)
+        except Exception as exc:m.fail_json(msg=getattr(exc,'code',type(exc).__name__))
+        alive=started['started']
     result={'worker_alive':alive,'stage':stage,'root':str(ROOT)}
     if (ROOT/'runtime-overrides.json').exists():result['runtime_overrides']=json.loads((ROOT/'runtime-overrides.json').read_text())
     if (ROOT/'deployment.json').exists():result['deployment']=json.loads((ROOT/'deployment.json').read_text())
