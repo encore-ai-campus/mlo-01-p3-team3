@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import time
 
-from .cli import emit
+from .console import emit
 from .contracts import digest,now
 from .errors import PipelineError
 from .files import atomic_json,read_json,parse
@@ -122,7 +122,8 @@ def main(argv=None):
                 write_new(args.output,plan);result=dict(status='GUARD_REGISTERED_ACTIVATION_PLAN_READY',plan_id=plan['plan_id'])
             else:
                 from .publication.plan import load_plan
-                from .publication.runner import publish,audit_publication
+                from .publication.runner import publish
+                from .publication.audit import audit_publication
                 review.preflight(db);plan=load_plan(args.plan)
                 if plan.get('publication_mode')!='ACTIVATE_REVIEWED':raise PipelineError('REVIEW_ACTIVATION_PLAN_REQUIRED')
                 result=publish(plan,db)

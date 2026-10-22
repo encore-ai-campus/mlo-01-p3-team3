@@ -280,8 +280,8 @@ class CliLeaseTests(unittest.TestCase):
         fake_sql = types.ModuleType('pyspark.sql')
         fake_sql.SparkSession = types.SimpleNamespace(builder=builder)
         with patch.dict('sys.modules', {'pyspark.sql': fake_sql}), \
-                patch('product_pipeline.bronze.cli.BronzeSettings.load', return_value=settings()), \
-                patch('product_pipeline.bronze.cli.env', side_effect=lambda name:
+                patch('product_pipeline.bronze.service.BronzeSettings.load', return_value=settings()), \
+                patch('product_pipeline.bronze.service.env', side_effect=lambda name:
                     '{"kafka.bootstrap.servers":"test:9092"}' if name == 'BRONZE_KAFKA_OPTIONS'
                     else '{}' if name == 'BRONZE_SPARK_OPTIONS' else 'unused'), \
                 patch('product_pipeline.bronze.lease.MongoLease', return_value=lease), \

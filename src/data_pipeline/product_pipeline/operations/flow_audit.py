@@ -1,6 +1,7 @@
 """Read-only exact-scope reconciliation. Counts alone never prove correspondence."""
 from pathlib import Path
 
+from ..publication.audit import sql_plan_audit
 from ..contracts import canonical, digest, registration_identity
 from ..errors import Conflict, PipelineError
 from ..files import atomic_json, confined, parse, read_json, rows, sha_file
@@ -47,58 +48,9 @@ def frame_audit(expected, actual, key, fields):
         (r.asDict() for r in selected.select(*names).orderBy(key).toLocalIterator()),key,fields)
 
 
-def sql_plan_audit(plan, db):
-    """Check durable SQL receipts, product identities and immutable image/price links.
-
-    Current values/approval fields may legitimately change later; do not equate
-    an old plan to the current product projection or overwrite owner decisions.
-    """
-    from ..publication.plan import verify_plan
-    verify_plan(plan)
-    receipt=db.get('pipeline_publications',dict(plan_id=plan['plan_id']))
-    if not receipt or receipt['status']!='COMPLETED' or receipt['plan_hash']!=digest(plan):
-        raise Conflict('FLOW_SQL_PUBLICATION_MISSING_OR_CHANGED')
-    images=offers=history=0
-    for item in plan['products']:
-        staged=db.get('pipeline_publication_staging',dict(plan_id=plan['plan_id'],product_key=item['product_key']))
-        if not staged or staged['body_hash']!=digest(item) or parse(staged['body_json'])!=item:
-            raise Conflict('FLOW_SQL_STAGING_MISSING_OR_CHANGED')
-        product=db.get('products',dict(product_key=item['product_key']))
-        catalog=item['group']['tables']['product_catalog'][0]
-        if not product or any(product[k]!=catalog[k] for k in ('source_code','source_product_id')):
-            raise Conflict('FLOW_SQL_PRODUCT_IDENTITY_CHANGED')
-        for image in item['group']['tables']['product_images']:
-            if not image['recommendation_approved']:continue
-            asset=db.get('assets',dict(bucket=image['bucket'],object_key=image['object_key']))
-            link=db.get('product_images',dict(product_id=product['id'],source_code=catalog['source_code'],
-                source_product_id=catalog['source_product_id'],image_variant=image['image_slot'],
-                raw_document_id=image['raw_document_id'],source_version=image['source_version']))
-            source=parse(parse(image['evidence_json'])['evidence_json'])
-            if (not asset or asset['checksum']!=image['image_checksum'] or not link or link['asset_id']!=asset['id']
-                    or link['source_url']!=image['source_url'] or link['raw_payload_hash']!=source['raw_payload_hash']):
-                raise Conflict('FLOW_SQL_IMAGE_LINK_CHANGED')
-            images+=1
-        for offer in item['group']['tables']['current_offers']:
-            saved=db.get('offers',dict(offer_key=offer['offer_key']))
-            if not saved or saved['product_id']!=product['id']:raise Conflict('FLOW_SQL_OFFER_LINK_CHANGED')
-            offers+=1
-        for row in item['group']['tables']['offer_history']:
-            if not row['eligible']:continue
-            key=row['snapshot_key'] if plan['price_history_mode']=='SNAPSHOT_V1' else row['price_effect_key']
-            saved=db.get('offer_snapshots',dict(snapshot_key=key))
-            from ..publication.runner import money
-            offer=db.get('offers',dict(offer_key=row['offer_key']))
-            if (not saved or not offer or saved['offer_id']!=offer['id']
-                    or (plan['price_history_mode']=='SNAPSHOT_V1' and saved['raw_document_id']!=row['raw_document_id'])
-                    or saved['price_amount']!=money(row['amount']) or saved['currency']!=row['currency']
-                    or parse(saved['pricing_terms_json'])!=parse(row['evidence_json'])['price_effect']):
-                raise Conflict('FLOW_SQL_PRICE_HISTORY_CHANGED')
-            history+=1
-    return dict(products=len(plan['products']),images=images,offers=offers,history=history)
-
 
 def live_audit(context, p, source, bronze, silver, gold):
-    from ..cli import _env
+    from ..bootstrap import required_env as _env
     from ..mongo import MongoLedger, wire_document
     from ..objects import S3Objects
     from ..publication.mysql import MySQL

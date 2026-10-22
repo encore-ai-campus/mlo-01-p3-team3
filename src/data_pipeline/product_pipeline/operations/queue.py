@@ -139,7 +139,7 @@ class Queue:
                     if handler is None:raise PipelineError('QUEUE_HANDLER_UNSUPPORTED')
                     result=handler(row['spec'])
                 except Exception as exc:
-                    from ..runner import retryable as transient
+                    from ..retry import retryable as transient
                     code=exc.code if isinstance(exc,PipelineError) else type(exc).__name__
                     sql_retry=False
                     provider_retry=False;retry_after=getattr(exc,'retry_after_seconds',None)

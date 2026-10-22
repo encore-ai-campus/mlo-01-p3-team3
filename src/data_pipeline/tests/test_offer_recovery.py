@@ -12,7 +12,7 @@ from product_pipeline.files import parse
 from product_pipeline.silver.offer_identity import bridge_identity
 from product_pipeline.silver.runner import process
 from product_pipeline.gold.build import build
-from product_pipeline.publication.runner import _observed_offers
+from product_pipeline.publication.repository import _observed_offers
 
 
 URL = 'https://prod.danawa.com/bridge/loadingBridge.html?pcode=11&cmpnyc=S1&link_pcode=001234&r=changing'

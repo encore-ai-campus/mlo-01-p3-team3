@@ -32,7 +32,7 @@ class GoldCliTests(unittest.TestCase):
         return code,read_json(next((root/'logs'/'runs').glob('*.json')))
 
     def test_unregistered_or_fixture_operational_run_blocks_before_spark(self):
-        with tempfile.TemporaryDirectory() as d,patch('product_pipeline.gold.cli._env',side_effect=AssertionError('must not load runtime')):
+        with tempfile.TemporaryDirectory() as d,patch('product_pipeline.gold.service._env',side_effect=AssertionError('must not load runtime')):
             code,report=self.execute(d,dict(processing_run_id=RUN,stage='GOLD_BUILD',status='FIXTURE',evidence_ref='fixture'))
             self.assertEqual(code,2);self.assertEqual(report['error_code'],'GOLD_RUN_REGISTRATION_REQUIRED')
 

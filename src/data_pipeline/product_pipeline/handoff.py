@@ -33,7 +33,7 @@ def drain_spool(spool, state, config=None, rehearse=False, progress=None):
             from .local import FileLedger, FileObjects, FilePublisher
             ledger, objects, publisher = FileLedger(state/'ledger', settings), FileObjects(state/'objects'), FilePublisher(state/'events')
         else:
-            from .cli import _live
+            from .bootstrap import open_live as _live
             ledger, objects, publisher = _live(settings, stack)
             objects.preflight()
             publisher.preflight()

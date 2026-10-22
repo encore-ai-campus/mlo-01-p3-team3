@@ -9,7 +9,8 @@ from ..errors import Conflict, PipelineError
 from ..files import atomic_json
 from ..review import approve_guard
 from .plan import make_plan, load_plan
-from .runner import publish, audit_publication
+from .runner import publish
+from .audit import audit_publication
 
 WAIT_REASONS = {'REVIEW_APPROVAL_NOT_PROVIDED', 'REVIEW_APPROVAL_MISSING_OR_EXPIRED',
                 'REVIEW_GOLD_REEVALUATION_REQUIRED', 'REVIEW_IMAGE_LINK_NOT_PRESERVED'}

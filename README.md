@@ -259,6 +259,7 @@
 - **앱:** [원본 서비스](src/demo_sketchon/README.md) · [시연 MVP](src/local_demo/README.md) · [분리·검증 기록](docs/interior-recommender/local-demo.md) · [시연 실행기](scripts/Start-LocalDemo.ps1)
 - **추천:** [워커·복구·실행 계약](docs/interior-recommender/execution.md) · [서버 카탈로그](docs/interior-recommender/server-catalog.md)
 - **파이프라인:** [실행 안내](src/data_pipeline/README.md) · [실서버 검증 기록](src/data_pipeline/docs/service_validation_20261018.md)
+- **파이프라인 코드 변경:** [책임별 코드·문서 라우팅](src/data_pipeline/docs/code-routing.md)
 - **MongoDB:** [VM별 설치·Replica Set 도구](ops/mongodb/README.md)
 - **추천 코드 구조:** [역할별 코드·문서 라우팅](docs/interior-recommender/README.md) · [호출 구조와 패키지 계층](docs/interior-recommender/call-structure.md)
 - **광고:** [실행·운영](src/ad_server/README.md) · [MySQL 연결 준비](src/ad_server/examples/MYSQL_SETUP.md)

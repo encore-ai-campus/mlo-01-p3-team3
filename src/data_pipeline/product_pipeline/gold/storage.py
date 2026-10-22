@@ -1,8 +1,6 @@
 """Gold schemas reuse the verified insert-only Delta commit implementation."""
-from types import SimpleNamespace
-
-from ..silver.delta import DeltaSink as SilverDeltaSink
-from ..silver.checkpoint import Checkpoint as SilverCheckpoint
+from ..infrastructure.delta import AppendOnlyDeltaSink
+from ..infrastructure.checkpoint import InputCheckpoint
 from .contracts import KEYS, semantic_hash
 
 COMMON = 'row_key gold_evaluation_key product_key gold_policy_version processing_run_id processed_at input_fingerprint silver_versions_json record_hash'.split()
@@ -21,7 +19,7 @@ EXTRA = {
 def columns(table): return COMMON + EXTRA[table].split()
 
 
-class DeltaSink(SilverDeltaSink):
+class DeltaSink(AppendOnlyDeltaSink):
     supports_history_bridge=False
     keys, schema_tables, schema_columns = KEYS, EXTRA, staticmethod(columns)
     arrays = {'quality_reason_codes','publication_reason_codes','reason_codes'}
@@ -34,12 +32,8 @@ class DeltaSink(SilverDeltaSink):
     hash_row = staticmethod(semantic_hash)
 
     def __init__(self,spark,settings,*,lease):
-        # Base writer's path attribute is an internal storage parameter, not a Silver write.
-        proxy=SimpleNamespace(silver_root=settings.gold_root,fingerprint=settings.fingerprint)
-        class LeaseProxy:
-            def check(self,expected=None): lease.check(settings)
-        super().__init__(spark,proxy,lease=LeaseProxy())
+        super().__init__(spark, settings, lease=lease, root=settings.gold_root)
 
 
-class Checkpoint(SilverCheckpoint):
+class Checkpoint(InputCheckpoint):
     stage, marker_name = 'GOLD', '_gold_target.json'

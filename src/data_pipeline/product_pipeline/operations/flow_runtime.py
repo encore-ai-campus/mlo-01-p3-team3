@@ -131,29 +131,28 @@ def perform(context):
         result = handlers(config, None)['INGEST'](spec)
         return dict(status='VERIFIED', ingestion=result)
     if stage in {'BRONZE', 'SILVER', 'GOLD'}:
-        from .flow_worker import invoke
         if stage == 'BRONZE':
-            from ..bronze.cli import main
-            result = invoke(main, ['--config', p['bronze_config'], '--available-now'])
+            from ..bronze.service import Request, run
+            result = run(Request(config=p['bronze_config'], available_now=True)).verified()
             paths = dict(raw=bronze.bronze_path, events=bronze.events_path, quarantine=bronze.quarantine_path)
             spark = spark_session(bronze.spark_options_env)
         elif stage == 'SILVER':
-            from ..silver.cli import main
-            result = invoke(main, ['--config', p['silver_config'], '--bronze-version',
-                str(outputs['BRONZE']['versions']['raw']), '--inputs', p['silver_inputs'],
-                '--registration', p['silver_registration'], '--state-dir', str(root/'silver'), '--scan-id',plan['content_hash']])
+            from ..silver.service import Request, run
+            result = run(Request(config=p['silver_config'], bronze_version=outputs['BRONZE']['versions']['raw'],
+                inputs=Path(p['silver_inputs']), registration=Path(p['silver_registration']),
+                state_dir=root/'silver', scan_id=plan['content_hash'])).verified()
             if result.get('source_drained') is not True: raise PipelineError('FLOW_SILVER_PARTIAL')
             from ..gold.contracts import INPUT_TABLES
             paths = {t: silver.silver_root.rstrip('/')+'/'+t for t in INPUT_TABLES}
             spark = spark_session(silver.spark_options_env)
         else:
-            from ..gold.cli import main
+            from ..gold.service import Request, run
             fixed = root/'silver-versions.json'
             expected = outputs['SILVER']['versions']
             if fixed.exists() and read_json(fixed) != expected: raise PipelineError('FLOW_FIXED_VERSIONS_CHANGED')
             if not fixed.exists(): atomic_json(fixed, expected)
-            result = invoke(main, ['--config', p['gold_config'], '--versions', str(fixed), '--inputs', p['gold_inputs'],
-                '--registration', p['gold_registration'], '--state-dir', str(root/'gold'), '--as-of', plan['as_of']])
+            result = run(Request(config=Path(p['gold_config']), versions=fixed, inputs=Path(p['gold_inputs']),
+                registration=Path(p['gold_registration']), state_dir=root/'gold', as_of=plan['as_of'])).verified()
             if result.get('source_drained') is not True or not result.get('export_manifest_ref'):
                 raise PipelineError('FLOW_GOLD_INCOMPLETE_OR_EMPTY')
             return dict(status='VERIFIED', export_manifest_ref=result['export_manifest_ref'],
@@ -163,7 +162,7 @@ def perform(context):
         return dict(status='VERIFIED', versions=pinned, stage_result=result)
     if stage == 'PREPARE':
         from ..publication.source import GoldSource
-        from ..publication.cli import prepare_from_source
+        from ..publication.preparation import prepare_from_source
         target = digest({k: read_json(p['mysql_config'])[k] for k in ('target_id', 'database')})
         directory = root/'publication-plans'; spark = spark_session('PUBLICATION_SPARK_OPTIONS')
         try:

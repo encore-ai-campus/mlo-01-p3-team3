@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import time
 
-from ..cli import emit
+from ..console import emit
 from ..contracts import digest,now
 from ..errors import PipelineError
 from ..files import atomic_json,read_json,sha_file

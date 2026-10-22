@@ -8,6 +8,7 @@
 | SketchOn SQLite 워커·동기/비동기·복구 | [실행·복구](../interior-recommender/execution.md) | [구현 라우팅](../interior-recommender/README.md), [Application](04-application-ai.md), [작업](05-kafka-jobs.md) |
 | interior_recommender 구현·호출 계층 | [역할별 구현 라우팅](../interior-recommender/README.md) | [호출 구조](../interior-recommender/call-structure.md), 아래 담당 설계 |
 | 전체 경계·변경 범위 | [직접 추천 계약](12-direct-recommendation.md) | [아키텍처](00-architecture.md) |
+| 상품 파이프라인 구현·책임 계층·호출 변경 | [책임별 코드·문서 라우팅](../../src/data_pipeline/docs/code-routing.md) | [파이프라인](02-data-pipeline.md), [보강 계약](../../src/data_pipeline/docs/design_amendment_v1_1.md), [데이터·복구 계약](../../src/data_pipeline/docs/data_contract_v1.md) |
 | AI 입력 해석·코드 검증 | [Application](04-application-ai.md) | [크기 근거](11-scale-policy.md), [작업](05-kafka-jobs.md) |
 | 상품 검색·콘텐츠 추천·후속 평가 | [광고 서버](07-ad-server.md) | [파이프라인](02-data-pipeline.md), [평가 계약](12-direct-recommendation.md#이번-scikit-learn과-후속-내재화) |
 | 데이터·ORM/DDL 계획 | [직접 추천 속성](data-dictionary/09-direct-recommendation.md) | [데이터 모델](03-data-model.md), [전체 ERD](03-erd-full.md), [간략 ERD](03-erd-summary.md) |

@@ -14,6 +14,8 @@ OOM 보완의 첫 운영 시도에서 발견한 S3A 업로드 호환 오류는 G
 
 ## 문서 읽는 순서
 
+코드 변경·리팩토링은 [책임별 코드·문서 라우팅](docs/code-routing.md)에서 시작한다. 로컬 `develop`의 코드·계약·테스트를 기준으로 하며 협업용 문서 사본을 구현 진입점으로 사용하지 않는다.
+
 1. [문서 안내](docs/README.md): 목적별 필요한 문서와 기준 우선순위.
 2. [서버 배포·인계](docs/deployment.md): 실행 위치, 현재 보호 설정 경로, 설치·권한·배포·재개.
 3. [전체 FLOW 실행](docs/flow_execution.md): INGEST → BRONZE → SILVER → GOLD → PREPARE → PUBLISH → RECONCILE.

@@ -60,7 +60,7 @@ def handlers(config,queue):
                 from ..local import FileLedger,FileObjects,FilePublisher
                 ledger=FileLedger(state/'ledger',settings);objects=FileObjects(state/'objects');publisher=FilePublisher(state/'events')
             else:
-                from ..cli import _live
+                from ..bootstrap import open_live as _live
                 ledger,objects,publisher=_live(settings,stack);objects.preflight();publisher.preflight()
             report=run(snapshot,settings,ledger,objects,publisher,state/'audit',repair_raw=spec.get('repair_raw',False))
         if report['failed'] or report['errors'] or report['raw_confirmed']!=manifest['product_count']:
@@ -83,7 +83,7 @@ def handlers(config,queue):
 
     def receive(spec):
         from ..objects import S3Objects
-        from ..cli import _env
+        from ..bootstrap import required_env as _env
         from ..transfer import receive_snapshot,CHUNK_BYTES,MAX_READY_BYTES
         conf=checked(spec,'config');settings=Settings.load(conf)
         if not settings.handoff_bucket:raise PipelineError('HANDOFF_BUCKET_REQUIRED')
@@ -109,7 +109,7 @@ def handlers(config,queue):
     def audit(spec):
         if config['mode']!='live':raise PipelineError('RECONCILE_LIVE_MONGO_REQUIRED')
         from ..mongo import MongoLedger
-        from ..cli import _env
+        from ..bootstrap import required_env as _env
         conf=checked(spec,'config');settings=Settings.load(conf)
         ledger=MongoLedger(settings,_env(settings.mongo_uri_env))
         try:report=reconcile(path(spec['snapshot']),ledger)
@@ -155,7 +155,7 @@ def discover_local_plans(directory,queue,config_file):
 def discover_remote(config,queue):
     from ..config import Settings
     from ..objects import S3Objects
-    from ..cli import _env
+    from ..bootstrap import required_env as _env
     from ..files import lock
     import re
     conf=Path(config['pipeline_config']);settings=Settings.load(conf)

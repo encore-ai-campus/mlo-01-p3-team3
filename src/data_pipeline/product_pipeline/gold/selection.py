@@ -11,7 +11,7 @@ def published_choices(db,product_keys):
     Retained scalar lineage is not an instruction to select another evaluation.
     The caller owns a consistent read snapshot; no Spark/S3 calls occur here.
     """
-    from ..publication.runner import audit_reference
+    from ..publication.audit import audit_reference
     result=[]
     for key in product_keys:
         saved=db.get('products',dict(product_key=key),locking=False)

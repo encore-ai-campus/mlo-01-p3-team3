@@ -61,11 +61,11 @@ class HistorySelectionTests(unittest.TestCase):
             evaluation_key='eval',document_hash='hash')]))
         ref=canonical(dict(plan_id='plan'))
         db=SimpleNamespace(target='target',get=lambda *a,**k:dict(gold_snapshot_ref_json=ref))
-        with patch('product_pipeline.publication.runner.audit_reference',return_value=dict(tables={'product_catalog':[catalog]})) as audit:
+        with patch('product_pipeline.publication.audit.audit_reference',return_value=dict(tables={'product_catalog':[catalog]})) as audit:
             choices=published_choices(db,['danawa:1'])
             audit.assert_called_once_with(db,ref)
             self.assertEqual(choices[0]['document_hash'],'hash')
-        with patch('product_pipeline.publication.runner.audit_reference',side_effect=Conflict('NOT_COMPLETED')):
+        with patch('product_pipeline.publication.audit.audit_reference',side_effect=Conflict('NOT_COMPLETED')):
             with self.assertRaises(Conflict):published_choices(db,['danawa:1'])
 
 

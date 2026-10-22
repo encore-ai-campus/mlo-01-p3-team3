@@ -1,46 +1,18 @@
 """CLI: prepare / plan / rehearse / preflight / ingest. No implicit live writes."""
 import argparse
 from contextlib import ExitStack
-import json
-import os
 import time
 from pathlib import Path
 
+from .bootstrap import open_live as _live, required_env as _env
+from .console import emit
 from .config import Settings
 from .errors import PipelineError
 from .files import atomic_json, lock, parse, read_json
 from .snapshot import prepare, verify
 
 
-def emit(value):
-    print(json.dumps(value, ensure_ascii=False, allow_nan=False), flush=True)
 
-
-def _env(name):
-    value = os.environ.get(name)
-    if not value:
-        raise PipelineError("REQUIRED_ENV_MISSING", name)
-    return value
-
-
-def _live(settings, stack):
-    from .mongo import MongoLedger
-    from .objects import S3Objects
-    from .publisher import KafkaPublisher
-    if any(v.startswith("replace-with-") for v in (settings.environment_id, settings.mongo_database, settings.image_bucket)):
-        raise PipelineError("EXAMPLE_CONFIG_NOT_DEPLOYABLE")
-    # Read every required configuration before opening a network connection.
-    uri = _env(settings.mongo_uri_env)
-    endpoint = _env(settings.s3_endpoint_env)
-    kafka = parse(_env(settings.kafka_config_env))
-    if endpoint != "aws" and not endpoint.startswith("https://"):
-        raise PipelineError("S3_TLS_ENDPOINT_REQUIRED")
-    ledger = MongoLedger(settings, uri)
-    stack.callback(ledger.close)
-    objects = S3Objects.from_settings(settings, endpoint)
-    publisher = KafkaPublisher(settings.kafka_topic, kafka, max_attempts=settings.max_attempts)
-    stack.callback(publisher.close)
-    return ledger, objects, publisher
 
 
 def main(argv=None):

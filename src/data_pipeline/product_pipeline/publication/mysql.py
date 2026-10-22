@@ -8,11 +8,9 @@ from uuid import uuid4
 from ..contracts import canonical, digest, utc
 from ..errors import Conflict, PipelineError
 from ..files import parse
+from .values import sql_time
 from .schema import TABLES, PRIMARY, UNIQUE, FKS, CONTRACT_HASH, validate_schema
 
-
-def sql_time(value):
-    return datetime.fromisoformat(utc(value).replace('Z','+00:00')).replace(tzinfo=None) if value else None
 
 
 class MySQL:

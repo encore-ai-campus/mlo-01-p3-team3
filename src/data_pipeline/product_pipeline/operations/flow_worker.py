@@ -43,7 +43,7 @@ def main():
         output=perform(context)
         result=dict(status='SUCCEEDED',context_hash=context['content_hash'],output=output);code=0
     except Exception as exc:
-        from ..runner import retryable
+        from ..retry import retryable
         code_name=exc.code if isinstance(exc,PipelineError) else type(exc).__name__
         result=dict(status='FAILED',context_hash=context['content_hash'],
                     error_code=code_name,retryable=retryable(exc) or code_name in {

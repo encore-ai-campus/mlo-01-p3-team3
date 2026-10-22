@@ -5,7 +5,8 @@ from ..errors import Conflict,PipelineError
 from ..files import atomic_json
 from ..files import parse
 from .plan import make_plan,load_plan
-from .runner import publish,audit_publication
+from .runner import publish
+from .audit import audit_publication
 
 
 def publish_pending(source,db,output,category_id,*,batch_size=100,progress=None):

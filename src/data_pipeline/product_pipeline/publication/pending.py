@@ -4,13 +4,13 @@ from decimal import Decimal
 from ..contracts import canonical
 from ..errors import Conflict, PipelineError
 from ..files import parse
-from .mysql import sql_time
+from .values import sql_time
 
 READY_FIELDS=('catalog_ready','recommendation_ready','comparison_link_ready','purchase_link_ready')
 
 
 def product(db,item,plan,at):
-    from .runner import uuid_hex,guarded_projection,extension_values,product_reference,snapshot_ref
+    from .policy import uuid_hex,guarded_projection,extension_values,product_reference,snapshot_ref
     catalog=item['group']['tables']['product_catalog'][0]
     category=db.get('categories',dict(id=uuid_hex(plan['pending_category_id'])))
     if (not category or category['code']!='PIPELINE_UNMAPPED' or category['active'] or category['recognition_enabled']):
@@ -86,9 +86,9 @@ def product(db,item,plan,at):
         if not created and newer:
             db.update('product_images',dict(id=link['id']),dict(image_relation_key=image['image_relation_key'],display_order=image['display_order'],
                 source_evidence_json=image['evidence_json'],gold_snapshot_ref_json=snapshot_ref(item,plan,[('product_images',image)]),updated_at=at))
-    from .runner import _links
+    from .repository import _links
     _links(db,saved,item['group']['tables'],item,plan,at)
-    from .runner import _observed_offers
+    from .repository import _observed_offers
     _observed_offers(db,saved,catalog,item['group']['tables'],at,item,plan)
     return saved['id']
 
@@ -100,7 +100,7 @@ No product activation, destination approval or offer is synthesized. This is
 additive recovery for older inactive publications that omitted link rows.
 """
     from .plan import verify_plan
-    from .runner import _links
+    from .repository import _links
     from ..contracts import digest
     verify_plan(plan)
     if plan.get('publication_mode')!='PENDING_REVIEW' or plan['target']!=db.target:
@@ -125,7 +125,8 @@ additive recovery for older inactive publications that omitted link rows.
 
 
 def audit(plan,db):
-    from .runner import audit_reference,_sources,attribute_projection,uuid_hex
+    from .audit import audit_reference, _sources
+    from .policy import attribute_projection, uuid_hex
     from ..contracts import digest
     receipt=db.get('pipeline_publications',dict(plan_id=plan['plan_id']),locking=False)
     if not receipt or receipt['status']!='COMPLETED' or receipt['plan_hash']!=digest(plan):
