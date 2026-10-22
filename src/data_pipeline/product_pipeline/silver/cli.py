@@ -86,6 +86,7 @@ def main(argv=None):
             proxy=SimpleNamespace(**{**asdict(settings),'bronze_path':settings.silver_root,
                 'events_path':settings.silver_root,'quarantine_path':settings.silver_root,'fingerprint':settings.fingerprint})
             lease=MongoLease(proxy,lease_uri);lease.acquire()
+            result['lease_owner_ref']=lease.record_owner(args.state_dir/'lease-owners'/(execution+'.json'),execution)
         from ..spark_storage import storage_options,bind_spark_credentials
         spark_options=storage_options(spark_options,writer=True,lease=lease)
         builder=SparkSession.builder.appName('product-silver-'+settings.environment_id)
@@ -137,16 +138,19 @@ def main(argv=None):
             if not page:cursor['completed']=True;checkpoint.save(cursor);break
             if args.max_observations:page=page[:args.max_observations-result['processed']]
             if args.collector_normalized:
-                for doc in page:
-                    proof=states.normalized(doc)
-                    reference=checkpoint.archive(proof)
+                proofs=[states.normalized(doc) for doc in page]
+                references=checkpoint.archive_many(proofs) if args.batch_writes else [checkpoint.archive(p) for p in proofs]
+                for doc,proof,reference in zip(page,proofs,references):
+                    from ..image_waits import record_gallery_wait
+                    waiting=record_gallery_wait(args.state_dir,doc,proof)
+                    if waiting:emit(dict(stage='source_gallery_wait',raw_document_id=doc['_id'],evidence_ref=str(waiting)))
                     emit(dict(stage='collector_normalized_input',raw_document_id=doc['_id'],
                               normalized_hash=proof['normalized_hash'],archive_ref=reference,status='VERIFIED'))
                     result['normalized_verified']=result.get('normalized_verified',0)+1
             if args.batch_writes:
                 from .batch import process_many
                 outputs=process_many(page,states,sink,inputs,processing_run_id=run_id,as_of=as_of,bronze_version=args.bronze_version,
-                    bronze_path=settings.bronze_path,archive=checkpoint.archive,reuse_choices=reuse_choices)
+                    bronze_path=settings.bronze_path,archive=checkpoint.archive,reuse_choices=reuse_choices,archive_many=checkpoint.archive_many)
             else:
                 outputs=(process(doc,states,sink,inputs,processing_run_id=run_id,as_of=as_of,bronze_version=args.bronze_version,
                     bronze_path=settings.bronze_path,progress=emit,archive=checkpoint.archive) for doc in page)
@@ -187,6 +191,8 @@ def main(argv=None):
         if previous is not None:signal.signal(signal.SIGTERM,previous)
         result['duration_ms']=round((time.monotonic()-started)*1000)
         if lease is not None and getattr(lease,'loss_diagnostic',None):result['lease_failure']=lease.loss_diagnostic
+        from ..spark_session import stamp_driver_exit
+        if stamp_driver_exit(result):code=2
         # Never write into source inputs just because a caller chose an overlapping log directory.
         state=args.state_dir.resolve()
         protected=[args.inputs.resolve(),args.registration.resolve(),*([args.image_states.resolve()] if args.image_states else [])]

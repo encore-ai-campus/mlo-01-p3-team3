@@ -30,6 +30,10 @@ def setup():
     from product_pipeline.spark_runtime import cluster_options
     profile=read_json(Path(os.environ.get('PIPELINE_SPARK_RUNTIME_FILE',str(config/'spark-runtime.json'))))
     options={**cluster_options(profile),'spark.ui.enabled':'false',
+        'spark.driver.extraJavaOptions':'-XX:+ExitOnOutOfMemoryError',
+        'spark.sql.ui.retainedExecutions':'32','spark.ui.retainedJobs':'32',
+        'spark.ui.retainedStages':'64','spark.sql.streaming.ui.retainedQueries':'4',
+        'spark.sql.streaming.numRecentProgressUpdates':'10',
         'spark.sql.maxPlanStringLength':'8192',
         'spark.jars':','.join(jars),
         'spark.sql.warehouse.dir':str(CODE_ROOT/'warehouse')}
@@ -160,9 +164,10 @@ def main(stage):
             from product_pipeline.errors import PipelineError
             failure=read_json(ROOT/'bronze-window.json') if (ROOT/'bronze-window.json').exists() else {}
             error=PipelineError(failure.get('error_code','BRONZE_FAILED'))
-            error.lease_failure=failure.get('lease_failure');raise error
+            error.lease_failure=failure.get('lease_failure');error.lease_owner_ref=failure.get('lease_owner_ref');raise error
         window=read_json(ROOT/'bronze-window.json')
-        return dict(status='COMPLETED',stage=stage,source_drained=window['source_drained'],committed_batches=window.get('committed_batches'))
+        return dict(status='COMPLETED',stage=stage,source_drained=window['source_drained'],committed_batches=window.get('committed_batches'),
+                    bronze_runtime_metrics=window.get('runtime_metrics',{}))
     if stage=='silver':
         # Existing epochs keep their pinned owner-input snapshot on resume.
         # New epochs register catalogue decisions before freezing Silver inputs.
@@ -280,7 +285,12 @@ def main(stage):
                     with timed('publication_gold_read'):source=CachedGoldSource(source)
                 def committed(value):atomic_json(ROOT/'publish-progress.json',dict(**value,updated_at=now()))
                 with timed('publication_pending_mysql'):
-                    result=publish_pending(source,db,ROOT/'pending-plans','25701b75-22f9-5fea-9148-d7a4c006a440',progress=committed)
+                    parent=os.environ.get('PIPELINE_ACTIVATION_PARENT')
+                    if parent:
+                        from production_activation import confirmed_intake
+                        result=confirmed_intake(ROOT,parent,db,source)
+                    else:
+                        result=publish_pending(source,db,ROOT/'pending-plans','25701b75-22f9-5fea-9148-d7a4c006a440',progress=committed)
                 review_count=db.one('SELECT COUNT(*) AS n FROM pipeline_review_events')['n']
                 db.connection.rollback()
                 reviewed=dict(status='WAITING_OWNER_INPUTS',activated=0,waiting=source.manifest['product_count'])
@@ -339,7 +349,7 @@ def run_at(stage, directory):
         atomic_json(ROOT/(stage+'-result.json'),result)
         return result
     except BaseException as exc:
-        atomic_json(ROOT/(stage+'-failure.json'),dict(error_code=getattr(exc,'code',type(exc).__name__),lease_failure=getattr(exc,'lease_failure',None),at=now(),duration_ms=round((time.monotonic()-started)*1000),runtime_metrics={k:v-before.get(k,0) for k,v in metrics().items()}))
+        atomic_json(ROOT/(stage+'-failure.json'),dict(error_code=getattr(exc,'code',type(exc).__name__),lease_failure=getattr(exc,'lease_failure',None),lease_owner_ref=getattr(exc,'lease_owner_ref',None),at=now(),duration_ms=round((time.monotonic()-started)*1000),runtime_metrics={k:v-before.get(k,0) for k,v in metrics().items()}))
         raise
     finally:ROOT=previous
 
@@ -349,5 +359,5 @@ if __name__=='__main__':
         result=main(stage);result.update(duration_ms=round((time.monotonic()-began)*1000),finished_at=now())
         atomic_json(ROOT/(stage+'-result.json'),result)
     except Exception as exc:
-        atomic_json(ROOT/(stage+'-failure.json'),dict(error_code=getattr(exc,'code',type(exc).__name__),lease_failure=getattr(exc,'lease_failure',None),driver_code=exc.args[0] if exc.args and isinstance(exc.args[0],int) else None,at=now()))
+        atomic_json(ROOT/(stage+'-failure.json'),dict(error_code=getattr(exc,'code',type(exc).__name__),lease_failure=getattr(exc,'lease_failure',None),lease_owner_ref=getattr(exc,'lease_owner_ref',None),driver_code=exc.args[0] if exc.args and isinstance(exc.args[0],int) else None,at=now()))
         raise

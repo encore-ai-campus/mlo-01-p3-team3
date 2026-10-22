@@ -24,7 +24,7 @@ class BatchLookupTests(unittest.TestCase):
             with self.assertRaises(OSError):insert_many(sink,{'a':[row]})
             insert_many(sink,{'a':[row]})
             self.assertEqual(read.call_count,2);self.assertEqual(durable['a'],{'x':row})
-            self.assertEqual(sink._append.call_args.args[1],[])
+            self.assertEqual(sink._append.call_count,1)
 
     def test_conflict_in_later_table_prevents_every_write(self):
         sink=self.sink()

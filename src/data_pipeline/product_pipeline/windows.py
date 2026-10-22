@@ -19,8 +19,14 @@ def checked_stage(run,args,state_dir,stage):
     if not code:return
     created=set(audits.glob('*.json'))-before
     failure=read_json(next(iter(created))) if len(created)==1 else {}
-    error=PipelineError(failure.get('error_code') or stage.upper()+'_FAILED')
-    error.lease_failure=failure.get('lease_failure');raise error
+    # Spark cancellation may surface before the heartbeat's PipelineError.
+    # Preserve the lease loss so the coordinator never retries a latched writer.
+    code=failure.get('error_code') or stage.upper()+'_FAILED'
+    diagnostic=failure.get('lease_failure') or {}
+    if diagnostic.get('phase')=='renew' and code not in {'GOLD_SHUTDOWN_UNCONFIRMED','SILVER_SHUTDOWN_UNCONFIRMED'}:
+        code='BRONZE_WRITER_LEASE_LOST'
+    error=PipelineError(code)
+    error.lease_failure=failure.get('lease_failure');error.lease_owner_ref=failure.get('lease_owner_ref');raise error
 
 
 def record_limit(value='100'):
@@ -99,7 +105,7 @@ def run_windows(root, bronze_version, execute, *, progress=None, base_version=-1
                 elif result.get('window_hash',selection['content_hash'])!=selection['content_hash']:
                     raise Conflict('PIPELINE_WINDOW_RESULT_CHANGED')
             except BaseException as exc:
-                state.update(status='INTERRUPTED',error_code=getattr(exc,'code',type(exc).__name__),lease_failure=getattr(exc,'lease_failure',None),updated_at=now());atomic_json(path,state)
+                state.update(status='INTERRUPTED',error_code=getattr(exc,'code',type(exc).__name__),lease_failure=getattr(exc,'lease_failure',None),lease_owner_ref=getattr(exc,'lease_owner_ref',None),updated_at=now());atomic_json(path,state)
                 if progress:progress(state)
                 raise
         durations={phase:read_json(cut/(phase+'-result.json')).get('duration_ms',0)

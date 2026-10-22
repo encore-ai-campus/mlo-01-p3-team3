@@ -12,7 +12,11 @@ def bind_normalized(doc, normalized):
     raw = dict(doc['collector_metadata'], payload=doc['payload'])
     _validate(raw, normalized, None)
     expected = [{k: i.get(k) for k in GALLERY_FIELDS} for i in doc['image_refs']]
-    actual = [{k: i.get(k) for k in GALLERY_FIELDS} for i in normalized.get('images', [])]
+    images=normalized.get('images')
+    if images is None:images=[]  # no-gallery observations keep their original null
+    if not isinstance(images,list) or any(not isinstance(i,dict) for i in images):
+        raise PipelineError('CATALOG_GALLERY_INVALID')
+    actual = [{k: i.get(k) for k in GALLERY_FIELDS} for i in images]
     if expected != actual:
         raise Conflict('CATALOG_GALLERY_OBSERVATION_MISMATCH')
     return dict(contract_version=1, stage='COLLECTOR_NORMALIZED_INPUT', status='VERIFIED',

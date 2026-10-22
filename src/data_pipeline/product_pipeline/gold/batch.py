@@ -8,6 +8,12 @@ from .storage import columns
 
 
 def process_many(groups,inputs,versions,sink,*,processing_run_id,as_of,input_refs=None,hook=None):
+    from contextlib import nullcontext
+    with sink.batch_scope() if hasattr(sink,'batch_scope') else nullcontext():
+        return _process_many(groups,inputs,versions,sink,processing_run_id=processing_run_id,as_of=as_of,input_refs=input_refs,hook=hook)
+
+
+def _process_many(groups,inputs,versions,sink,*,processing_run_id,as_of,input_refs=None,hook=None):
     if not 1<=len(groups)<=100:raise PipelineError('GOLD_BATCH_LIMIT')
     results=[build(g,inputs,versions,processing_run_id=processing_run_id,as_of=as_of) for g in groups]
     keys={r['evaluation_key'] for r in results}

@@ -69,6 +69,7 @@ def main(argv=None):
             proxy=SimpleNamespace(**{**asdict(settings),'bronze_path':settings.gold_root,'events_path':settings.gold_root,
                 'quarantine_path':settings.gold_root,'fingerprint':settings.fingerprint})
             lease=MongoLease(proxy,_env(settings.lease_uri_env));lease.acquire()
+            result['lease_owner_ref']=lease.record_owner(args.state_dir/'lease-owners'/(execution+'.json'),execution)
         from pyspark.sql import SparkSession
         from ..spark_storage import storage_options,bind_spark_credentials
         options=storage_options(options,writer=True,lease=lease)
@@ -141,6 +142,8 @@ def main(argv=None):
         if not stopped:result.update(status='FAILED',error_code='GOLD_SHUTDOWN_UNCONFIRMED');code=2
         result['duration_ms']=round((time.monotonic()-started)*1000)
         if lease is not None and getattr(lease,'loss_diagnostic',None):result['lease_failure']=lease.loss_diagnostic
+        from ..spark_session import stamp_driver_exit
+        if stamp_driver_exit(result):code=2
         if not any(p.is_relative_to(args.state_dir.resolve()) for p in protected):
             try:atomic_json(args.state_dir/'runs'/(execution+'.json'),result)
             except Exception:result.update(status='FAILED',error_code='GOLD_AUDIT_WRITE_FAILED');code=2

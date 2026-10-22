@@ -11,6 +11,15 @@ class SilverSource:
     def __init__(self,spark,settings,versions):
         validate_versions(versions)
         self.spark,self.settings,self.versions=spark,settings,versions
+        self.identities={}
+        from ..bronze.metadata import read_metadata
+        try:
+            for table,version in versions.items():
+                meta=read_metadata(spark,settings.silver_root.rstrip('/')+'/'+table)
+                if meta is None or meta['version']<version:break
+                self.identities[table]=meta['table_id']
+        except PipelineError:self.identities={}
+        if set(self.identities)!=set(versions):self.identities={}
         self.frames={t:spark.read.format('delta').option('versionAsOf',v).load(settings.silver_root.rstrip('/')+'/'+t)
                      for t,v in versions.items()}
 
@@ -89,7 +98,7 @@ class SilverSource:
                    self.settings.max_product_rows,self.settings.max_product_bytes)
         cached=cache_get('silver_groups',cache_key)
         if cached is not None:return cached
-        tables=self._tables_many(product_keys)
+        tables=self._tables_many(product_keys);complete=tables.copy()
         receipts=tables.pop('pipeline_evaluations')
         if len({r['evaluation_key'] for r in receipts})!=len(receipts):raise Conflict('GOLD_DUPLICATE_SILVER_RECEIPT')
         children={}
@@ -107,20 +116,24 @@ class SilverSource:
             group=dict(receipt=receipt,tables=tables);validate_group(group);output[receipt['product_key']].append(group)
         if any(not output[key] for key in product_keys):raise Conflict('GOLD_SILVER_PRODUCT_KEY_MISSING')
         result=[output[key] for key in product_keys]
+        from ..silver.append_bridge import remember
+        remember(self.settings.silver_root,product_keys,self.versions,getattr(self,'identities',{}),complete,
+            max_rows=self.settings.max_product_rows,max_bytes=self.settings.max_product_bytes)
         cache_put('silver_groups',cache_key,result)
         return result
 
     def _tables_many(self,product_keys):
-        """One bounded union read, rather than two Spark actions per table.
-
-        Persist on executor disk only; check total rows/UTF-8 bytes before
-        collecting. Version pins and exact receipt membership remain unchanged.
-        """
+        """Stream a bounded pinned union; no temporary persisted DataFrame."""
         from decimal import Decimal
         import time
-        from pyspark import StorageLevel
+        from ..bounded_read import payload_rows
         from pyspark.sql import functions as F
         from ..spark_session import bump
+        from ..silver.append_bridge import restore
+        if getattr(self,'identities',{}):
+            restored=restore(self.settings.silver_root,product_keys,self.versions,self.identities,
+                max_rows=self.settings.max_product_rows,max_bytes=self.settings.max_product_bytes)
+            if restored is not None:return restored
         packed=None
         for table,frame in self.frames.items():
             frame=frame.filter(F.col('product_key').isin(product_keys))
@@ -130,23 +143,19 @@ class SilverSource:
             part=frame.select(F.lit(table).alias('table'),
                 F.to_json(F.struct('*'),{'ignoreNullFields':'false'}).alias('payload'))
             packed=part if packed is None else packed.unionByName(part)
-        cached=packed.persist(StorageLevel.DISK_ONLY)
         started=time.monotonic()
         try:
             bump('silver_union_read_batches')
-            stats=cached.agg(F.count('*').alias('count'),
-                F.sum(F.length(F.encode('payload','UTF-8'))).alias('bytes')).first()
-            if stats['count']>self.settings.max_product_rows or (stats['bytes'] or 0)>self.settings.max_product_bytes:
-                raise PipelineError('GOLD_PRODUCT_HISTORY_LIMIT')
             output={t:[] for t in self.frames}
-            for record in cached.collect():
+            for record in payload_rows(packed,max_rows=self.settings.max_product_rows,
+                    max_bytes=self.settings.max_product_bytes,error_code='GOLD_PRODUCT_HISTORY_LIMIT'):
                 row=parse(record['payload'])
                 for name in DECIMALS & set(row):
                     if row[name] is not None:row[name]=format(Decimal(row[name]).normalize(),'f')
                 output[record['table']].append(row)
             return output
         finally:
-            cached.unpersist();bump('silver_union_read_ms',round((time.monotonic()-started)*1000))
+            bump('silver_union_read_ms',round((time.monotonic()-started)*1000))
 
 
 def iter_groups(source):

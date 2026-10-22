@@ -129,13 +129,8 @@ class GoldSource:
         if len(seen)!=self.manifest['product_count']:raise Conflict('PUBLISH_EXPORT_COUNT_CHANGED')
 
     def _tables_many(self,keys,evaluations):
-        """Read all pinned output tables in two bounded Spark actions.
-
-        A size rejection is raised before collecting rows; the caller retries
-        with a smaller product page. Exact receipt membership is checked after
-        unpacking, as in the table-by-table reader.
-        """
-        from pyspark import StorageLevel
+        """Stream pinned output rows with byte/row limits before accepting them."""
+        from ..bounded_read import payload_rows
         from pyspark.sql import functions as F
         from ..spark_session import timed,bump
         packed=None
@@ -146,17 +141,12 @@ class GoldSource:
             for name in DeltaSink.decimals & set(frame.columns):frame=frame.withColumn(name,F.col(name).cast('string'))
             part=frame.select(F.lit(table).alias('_table'),F.to_json(F.struct('*'),{'ignoreNullFields':'false'}).alias('payload'))
             packed=part if packed is None else packed.unionByName(part)
-        cached=packed.persist(StorageLevel.DISK_ONLY)
-        try:
-            with timed('publication_gold_union_read'):
-                stats=cached.agg(F.count('*').alias('count'),F.sum(F.length(F.encode('payload','UTF-8'))).alias('bytes')).first()
-                if stats['count']>self.max_group_rows or (stats['bytes'] or 0)>self.max_group_bytes:
-                    raise PipelineError('PUBLISH_PRODUCT_GROUP_LIMIT')
-                result={t:[] for t in self.frames}
-                for record in cached.collect():
-                    row=parse(record['payload'])
-                    for name in DeltaSink.decimals & set(row):
-                        if row[name] is not None:row[name]=format(Decimal(row[name]).normalize(),'f')
-                    result[record['_table']].append(row)
-                bump('publication_gold_union_batches');return result
-        finally:cached.unpersist()
+        with timed('publication_gold_union_read'):
+            result={t:[] for t in self.frames}
+            for record in payload_rows(packed,max_rows=self.max_group_rows,
+                    max_bytes=self.max_group_bytes,error_code='PUBLISH_PRODUCT_GROUP_LIMIT'):
+                row=parse(record['payload'])
+                for name in DeltaSink.decimals & set(row):
+                    if row[name] is not None:row[name]=format(Decimal(row[name]).normalize(),'f')
+                result[record['_table']].append(row)
+            bump('publication_gold_union_batches');return result

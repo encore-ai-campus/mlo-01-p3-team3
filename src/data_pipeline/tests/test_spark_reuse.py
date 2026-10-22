@@ -65,22 +65,29 @@ class DeltaProofTests(unittest.TestCase):
         from product_pipeline.silver.delta import DeltaSink
         sink=DeltaSink.__new__(DeltaSink)
         sink.lease=SimpleNamespace(check=lambda *a:None);sink.settings=object()
-        sink.version=MagicMock(return_value=current)
-        sink._read=MagicMock(return_value={'id':{'record_hash':'h'}})
+        sink.versions_many=MagicMock(return_value={'t':current})
+        sink._proofs={};sink._pending_appends={}
         return sink
 
     def test_same_fixed_and_current_version_is_read_only_once(self):
-        sink=self.sink();sink.verify('t',{'id':'h'},5)
-        self.assertEqual(sink._read.call_count,1)
-        sink.verify('t',{'id':'h'},5)
-        self.assertEqual(sink._read.call_count,1)
+        sink=self.sink()
+        with patch('product_pipeline.delta_proofs._verify_rows') as reader:
+            sink.verify('t',{'id':'h'},5)
+            reader.assert_called_once_with(sink,[('t',5,{'id':'h'})])
+            sink.verify('t',{'id':'h'},5)
+            self.assertEqual(reader.call_count,1)
+        self.assertEqual(sink.versions_many.call_count,2)
 
     def test_old_version_and_changed_current_are_both_verified(self):
-        sink=self.sink(current=6);sink.verify('t',{'id':'h'},5)
-        self.assertEqual(sink._read.call_count,2)
-        sink._read.return_value={'id':{'record_hash':'different'}}
-        sink.version.return_value=7
-        with self.assertRaises(Conflict):sink.verify('t',{'id':'h'},5)
+        sink=self.sink(current=6)
+        with patch('product_pipeline.delta_proofs._verify_rows') as reader:
+            sink.verify('t',{'id':'h'},5)
+            reader.assert_called_once_with(sink,[('t',5,{'id':'h'}),('t',6,{'id':'h'})])
+            sink.versions_many.return_value={'t':7}
+            reader.side_effect=Conflict('SILVER_OUTPUT_MISSING_OR_CHANGED')
+            with self.assertRaises(Conflict):sink.verify('t',{'id':'h'},5)
+            self.assertEqual(reader.call_args.args[1],[('t',7,{'id':'h'})])
+        self.assertNotIn(('t',7),sink._proofs)
 
 
 class ArchiveTests(unittest.TestCase):

@@ -63,3 +63,15 @@ class CatalogTests(unittest.TestCase):
                 def find(self, query): return Cursor(values)
             with self.assertRaises(PipelineError):
                 CatalogInputs(Collection()).get(self.doc)
+
+    def test_null_gallery_is_allowed_only_for_an_empty_raw_gallery_and_preserves_original(self):
+        normal=dict(self.normal,images=None);doc=dict(self.doc,image_refs=[])
+        proof=bind_normalized(doc,normal)
+        self.assertIsNone(proof['normalized_document']['images'])
+        self.assertEqual(proof['normalized_hash'],digest(normal))
+        with self.assertRaises(PipelineError):bind_normalized(self.doc,normal)
+
+    def test_malformed_gallery_is_an_explicit_contract_failure(self):
+        for images in ('invalid',{},[None]):
+            with self.assertRaisesRegex(PipelineError,'CATALOG_GALLERY_INVALID'):
+                bind_normalized(self.doc,dict(self.normal,images=images))

@@ -8,6 +8,28 @@ from product_pipeline.silver.selection import validate,seal
 from product_pipeline.spark_session import timed,bump
 
 
+def confirmed_intake(root,parent,db,source):
+    """Skip a second pending intake only after its real receipt and DB check."""
+    parent=Path(parent);root=Path(root)
+    if root.parent!=parent:raise Conflict('ACTIVATION_INTAKE_PARENT_INVALID')
+    receipt=read_json(parent/'publish-result.json')
+    if receipt.get('status')!='COMPLETED' or not receipt.get('export_hash'):
+        raise Conflict('ACTIVATION_INTAKE_UNCONFIRMED')
+    original=validate_window(read_json(parent/'selection.json'))
+    selected=validate_window(read_json(root/'selection.json'));keys=selected['product_keys']
+    if not set(keys)<=set(original['product_keys']):raise Conflict('ACTIVATION_INTAKE_SCOPE_CHANGED')
+    with db.read_snapshot():
+        rows=db.all('SELECT product_key,source_code,source_product_id FROM products WHERE product_key IN ('+
+            ','.join(['%s']*len(keys))+')',tuple(keys))
+    if (len(rows)!=len(keys) or {r['product_key'] for r in rows}!=set(keys)
+            or any(r['product_key']!=r['source_code']+':'+r['source_product_id'] for r in rows)
+            or source.manifest['product_count']!=len(keys)):
+        raise Conflict('ACTIVATION_INTAKE_PRODUCTS_MISSING')
+    bump('activation_pending_intake_skipped',len(keys))
+    return dict(status='COMPLETED',plans=0,products=0,images=0,owner_managed=len(keys),
+        export_hash=source.manifest['content_hash'],pending_intake_skipped=True)
+
+
 def time_inputs_unchanged(inputs,parent_result,at):
     """Do not reuse across an effective-date boundary, even with equal hashes."""
     from datetime import datetime,timedelta
@@ -123,7 +145,16 @@ def run(work,config,options):
     for stage in ('silver','gold','publish'):
         path=target/(stage+'-result.json')
         if path.exists() and read_json(path).get('status')=='COMPLETED':continue
-        with timed('activation_'+stage):work.run_at(stage,target)
+        # Only this post-intake path can suppress an already committed intake.
+        # The publisher separately verifies the parent receipt and current DB.
+        import os
+        old=os.environ.get('PIPELINE_ACTIVATION_PARENT')
+        try:
+            if stage=='publish':os.environ['PIPELINE_ACTIVATION_PARENT']=str(root)
+            with timed('activation_'+stage):work.run_at(stage,target)
+        finally:
+            if old is None:os.environ.pop('PIPELINE_ACTIVATION_PARENT',None)
+            else:os.environ['PIPELINE_ACTIVATION_PARENT']=old
         if not path.exists() or read_json(path).get('status')!='COMPLETED':raise Conflict('ACTIVATION_REEVALUATION_FAILED_'+stage)
     return dict(status='COMPLETED',stage='activation',reviewed=read_json(target/'publish-result.json').get('reviewed'),
         silver_normalization_skipped=read_json(target/'silver-result.json').get('runtime_metrics',{}).get('silver_normalization_skipped',0),

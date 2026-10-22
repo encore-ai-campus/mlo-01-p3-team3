@@ -36,6 +36,15 @@ class BronzeSource:
     def exclude_version(self, base_version):
         if base_version<0:return
         if type(base_version) is not int or base_version>self.version:raise PipelineError('PIPELINE_WINDOW_VERSION_CHANGED')
+        from ..delta_range import append_files
+        # Bronze's own tables are unpartitioned and use physical column names.
+        # Column mapping or an unfamiliar log operation keeps the old path.
+        if not any('delta.columnMapping.id' in f.metadata for f in self.frame.schema):
+            files=append_files(self.spark,self.settings.bronze_path,base_version,self.version)
+            if files is not None:
+                self.frame=(self.spark.read.schema(self.frame.schema).parquet(*files) if files
+                            else self.frame.limit(0))
+                return
         old=self.spark.read.format('delta').option('versionAsOf',base_version).load(self.settings.bronze_path)
         self.frame=self.frame.join(old.select('raw_document_id'),'raw_document_id','left_anti')
 

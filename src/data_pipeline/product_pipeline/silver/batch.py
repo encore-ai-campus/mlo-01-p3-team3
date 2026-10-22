@@ -7,9 +7,17 @@ from .normalize import normalize,evaluation_input,TABLES,KEYS,semantic_hash
 from .schemas import COMMON,complete
 
 
-def process_many(docs,states,sink,inputs,*,processing_run_id,as_of,bronze_version,bronze_path,archive=None,hook=None,reuse_choices=None):
+def process_many(docs,states,sink,inputs,*,processing_run_id,as_of,bronze_version,bronze_path,archive=None,hook=None,reuse_choices=None,archive_many=None):
+    from contextlib import nullcontext
+    with sink.batch_scope() if hasattr(sink,'batch_scope') else nullcontext():
+        return _process_many(docs,states,sink,inputs,processing_run_id=processing_run_id,as_of=as_of,
+            bronze_version=bronze_version,bronze_path=bronze_path,archive=archive,hook=hook,reuse_choices=reuse_choices,archive_many=archive_many)
+
+
+def _process_many(docs,states,sink,inputs,*,processing_run_id,as_of,bronze_version,bronze_path,archive=None,hook=None,reuse_choices=None,archive_many=None):
     if not 1<=len(docs)<=100:raise PipelineError('SILVER_BATCH_LIMIT')
     prepared=[];keys=set();reused=[];pending=[]
+    captured=[]
     for doc in docs:
         state=states.get(doc['_id'],doc['observation_key'])
         candidate=(reuse_choices or {}).get(doc['_id'])
@@ -24,7 +32,11 @@ def process_many(docs,states,sink,inputs,*,processing_run_id,as_of,bronze_versio
         key=result['evaluation_key']
         if key in keys:raise Conflict('SILVER_DUPLICATE_BATCH_INPUT')
         keys.add(key)
-        prepared.append((doc,result,archive(state) if archive else None))
+        captured.append(state);prepared.append((doc,result,None))
+    refs=(archive_many(captured) if archive_many else
+          [archive(state) if archive else None for state in captured])
+    if len(refs)!=len(prepared):raise PipelineError('SILVER_ARCHIVE_BATCH_INCOMPLETE')
+    prepared=[(doc,result,ref) for (doc,result,_),ref in zip(prepared,refs)]
     revisions=[(doc['_id'],r['image_state']['revision'],r['image_state']['fingerprint']) for doc,r,_ in prepared]
     if hasattr(sink,'assert_revisions'):sink.assert_revisions(revisions)
     else:

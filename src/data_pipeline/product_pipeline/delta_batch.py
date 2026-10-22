@@ -17,7 +17,10 @@ def insert_many(sink,tables,*,hook=None):
     existing=existing_hashes_many(sink,expected)
     for table,values in existing.items():
         if any(expected[table].get(k)!=h for k,h in values.items()):raise Conflict('SILVER_OUTPUT_CONFLICT')
+    from .spark_session import bump
     for table,rows in tables.items():
         sink.lease.check(sink.settings)
-        sink._append(table,[r for r in rows if r[sink.keys[table]] not in existing[table]])
+        missing=[r for r in rows if r[sink.keys[table]] not in existing[table]]
+        if missing:sink._append(table,missing)
+        else:bump('delta_unchanged_tables_skipped')
         if hook:hook(table)

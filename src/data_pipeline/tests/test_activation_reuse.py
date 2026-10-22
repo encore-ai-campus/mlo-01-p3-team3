@@ -106,3 +106,15 @@ class ActivationTests(unittest.TestCase):
         self.work.run_at=run
         result=self.helper.run(self.work,{},{});self.helper.run(self.work,{},{})
         self.assertEqual(calls,['gold','publish']);self.assertEqual(result['skipped_already_activated'],1)
+
+    def test_second_intake_requires_completed_parent_and_actual_product_rows(self):
+        selected=self.waiting();atomic_json(self.target/'selection.json',selected)
+        atomic_json(self.root/'publish-result.json',dict(status='COMPLETED',export_hash='real-parent-export'))
+        db=SimpleNamespace(read_snapshot=nullcontext,all=lambda *args:[dict(product_key='danawa:2',source_code='danawa',source_product_id='2')])
+        source=SimpleNamespace(manifest=dict(product_count=1,content_hash='new-export'))
+        result=self.helper.confirmed_intake(self.target,self.root,db,source)
+        self.assertTrue(result['pending_intake_skipped']);self.assertEqual(result['products'],0)
+        db.all=lambda *args:[]
+        with self.assertRaises(Conflict):self.helper.confirmed_intake(self.target,self.root,db,source)
+        atomic_json(self.root/'publish-result.json',dict(status='FAILED',export_hash='real-parent-export'))
+        with self.assertRaises(Conflict):self.helper.confirmed_intake(self.target,self.root,db,source)

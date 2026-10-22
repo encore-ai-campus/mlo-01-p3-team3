@@ -7,21 +7,22 @@ from ..spark_session import measured
 
 
 class DeltaSink:
+    supports_history_bridge=True
     keys, schema_tables, schema_columns = KEYS, EXTRA, staticmethod(columns)
     arrays, decimals, longs, times, booleans = ARRAYS, DECIMALS, LONGS, TIMES, set()
     hash_row = staticmethod(semantic_hash)
     @measured('delta_target_open')
     def __init__(self,spark,settings,*,lease):
         from delta.tables import DeltaTable
-        from pyspark.sql import functions as F
+        from ..bronze.metadata import read_metadata
         from pyspark.sql.types import StructType,StructField,StringType,TimestampType,LongType,DecimalType,ArrayType,BooleanType
         self.spark,self.settings,self.lease=spark,settings,lease
-        self._versions={};self._proofs={}
+        self._versions={};self._proofs={};self._batch_reads=None;self._pending_appends={}
         spark.conf.set('spark.sql.session.timeZone','UTC')
         self.paths={t:settings.silver_root.rstrip('/')+'/'+t for t in self.schema_tables}
         self.paths={t:spark._jvm.org.apache.hadoop.fs.Path(p).toString() for t,p in self.paths.items()}
         self.schemas={}
-        details=[]
+        self.target_metadata={}
         for table,path in self.paths.items():
             def dtype(k):
                 if k in self.arrays:return ArrayType(StringType())
@@ -33,23 +34,21 @@ class DeltaSink:
             schema=StructType([StructField(k,dtype(k),True) for k in self.schema_columns(table)])
             self.schemas[table]=schema
             lease.check(settings)
-            if not DeltaTable.isDeltaTable(spark,path):
+            metadata=read_metadata(spark,path)
+            if metadata is None:
                 (DeltaTable.createIfNotExists(spark).location(path).addColumns(schema)
                     .property('delta.appendOnly','true').property('pipeline.targetFingerprint',settings.fingerprint).execute())
+                metadata=read_metadata(spark,path)
             lease.check(settings)
-            stored=spark.read.format('delta').load(path).schema
-            if stored!=schema:raise Conflict('SILVER_DELTA_TARGET_CONFLICT')
-            details.append(DeltaTable.forPath(spark,path).detail().select(F.lit(table).alias('_table'),'properties'))
-        combined=details[0]
-        for frame in details[1:]:combined=combined.unionByName(frame)
-        rows=combined.collect()
-        if len(rows)!=len(self.paths) or {r['_table'] for r in rows}!=set(self.paths):raise Conflict('SILVER_DELTA_TARGET_CONFLICT')
-        if any(r['properties'].get('pipeline.targetFingerprint')!=settings.fingerprint or
-               r['properties'].get('delta.appendOnly')!='true' for r in rows):
-            raise Conflict('SILVER_DELTA_TARGET_CONFLICT')
+            if (metadata is None or metadata['schema']!=schema
+                    or metadata['properties'].get('pipeline.targetFingerprint')!=settings.fingerprint
+                    or metadata['properties'].get('delta.appendOnly')!='true'):
+                raise Conflict('SILVER_DELTA_TARGET_CONFLICT')
+            self.target_metadata[table]=metadata
+            self._versions[table]=metadata['version']
         lease.check(settings)
         from ..spark_session import bump
-        bump('delta_metadata_read_batches');bump('delta_target_checks',len(rows))
+        bump('delta_metadata_read_batches');bump('delta_target_checks',len(self.paths))
 
     @measured('delta_output_read')
     def _read(self,table,keys,version=None):
@@ -71,7 +70,30 @@ class DeltaSink:
             result[key]=value
         return result
 
-    def existing(self,table,keys):return self._read(table,keys)
+    def batch_scope(self):
+        from contextlib import contextmanager
+        @contextmanager
+        def scope():
+            if getattr(self,'_batch_reads',None) is not None:raise Conflict('DELTA_BATCH_SCOPE_NESTED')
+            self._batch_reads={}
+            try:yield
+            finally:self._batch_reads=None;self._pending_appends={};self._append_reads={}
+        return scope()
+
+    def existing(self,table,keys):
+        reads=getattr(self,'_batch_reads',None)
+        if reads is None:return self._read(table,keys)
+        self.lease.check(self.settings);version=self.version(table)
+        from ..delta_key_index import candidates
+        keys=candidates(self,table,version,keys)
+        entry=reads.setdefault((table,version),dict(checked=set(),rows={}))
+        missing=set(keys)-entry['checked']
+        if missing:
+            rows=self._read(table,missing,version);self.lease.check(self.settings)
+            entry['rows'].update(rows);entry['checked'].update(missing)
+        from ..spark_session import bump
+        bump('delta_batch_preflight_reused_keys',len(keys)-len(missing))
+        return {k:entry['rows'][k] for k in keys if k in entry['rows']}
 
     def versions_many(self,tables):
         from ..delta_proofs import versions_many
@@ -87,30 +109,11 @@ class DeltaSink:
 
     @measured('delta_version_read')
     def version(self,table):
-        from delta.tables import DeltaTable
-        from ..spark_session import bump
-        if table not in self._versions:
-            bump('delta_version_reads')
-            self._versions[table]=int(DeltaTable.forPath(self.spark,self.paths[table]).history(1).select('version').first()[0])
-        return self._versions[table]
+        return self.versions_many([table])[table]
 
     @measured('delta_output_verify')
     def verify(self,table,expected,version):
-        from ..spark_session import bump
-        self.lease.check(self.settings)
-        if not hasattr(self,'_proofs'):self._proofs={}
-        current=self.version(table)
-        # Under the exclusive writer lease these are identical snapshots when
-        # the version is equal. Historical receipts still verify both versions.
-        for v in dict.fromkeys([version,current]):
-            saved=self._proofs.get((table,v),{})
-            if all(saved.get(k)==h for k,h in expected.items()):
-                bump('delta_proof_reuses');continue
-            bump('delta_proof_reads');values=self._read(table,set(expected),v)
-            if set(values)!=set(expected) or any(values[k]['record_hash']!=checksum for k,checksum in expected.items()):
-                raise Conflict('SILVER_OUTPUT_MISSING_OR_CHANGED')
-            self._proofs.setdefault((table,v),{}).update(expected)
-            if sum(len(p) for p in self._proofs.values())>10000:self._proofs.clear()
+        self.verify_many([(table,version,expected)])
 
     def assert_revision(self,raw_id,revision,fingerprint):
         from pyspark.sql import functions as F
@@ -154,14 +157,28 @@ class DeltaSink:
         from pyspark.sql import functions as F
         from pyspark.sql.types import ArrayType
         self.lease.check(self.settings)
+        bridge=table in getattr(self,'target_metadata',{})
+        pending=None
+        if bridge:
+            from uuid import uuid4
+            pending=dict(base=self.version(table),token='pipeline-append:'+uuid4().hex,
+                expected={r[self.keys[table]]:r['record_hash'] for r in missing})
         frame=(self.spark.range(1).select(F.explode(F.from_json(F.lit(canonical(missing)),ArrayType(self.schemas[table]),
             {'mode':'FAILFAST','timeZone':'UTC','timestampFormat':"yyyy-MM-dd'T'HH:mm:ss.SSSXXX"})).alias('row')).select('row.*'))
         self.lease.check(self.settings)
         self._versions.pop(table,None)
+        if getattr(self,'_batch_reads',None) is not None:
+            self._batch_reads={k:v for k,v in self._batch_reads.items() if k[0]!=table}
         from ..spark_session import bump
         from ..spark_session import timed
         with timed('delta_append_commit'):
-            (frame.write.format('delta').mode('append').option('mergeSchema','false').save(self.paths[table]))
+            writer=frame.write.format('delta').mode('append').option('mergeSchema','false')
+            if pending:
+                self._pending_appends[table]=pending;writer=writer.option('userMetadata',pending['token'])
+            try:writer.save(self.paths[table])
+            except BaseException:
+                if pending:self._pending_appends.pop(table,None)
+                raise
         bump('delta_append_batches');bump('delta_appended_rows',len(missing))
         self.lease.check(self.settings)
         # The stage runner verifies fixed-version and current outputs before
