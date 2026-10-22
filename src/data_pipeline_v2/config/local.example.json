@@ -1,0 +1,11 @@
+{
+  "contract_version": 2,
+  "mode": "local",
+  "target": "local-direct-v2",
+  "source_file": "../data/source.json",
+  "state_root": "../data/state",
+  "lake_root": "../data/lake",
+  "publication_root": "../data/publication",
+  "policy": {"mappings": [], "rules": [], "gold": {}},
+  "limits": {"observations": 100, "pending_high": 3, "pending_low": 1}
+}

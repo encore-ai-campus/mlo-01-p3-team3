@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sketchon-data-pipeline-v2"
+version = "0.1.0"
+requires-python = ">=3.11,<3.15"
+description = "Scoped batch processing with durable Gold delivery and no activation workflow"
+dependencies = ["danawa-data-pipeline==0.1.0"]
+
+[project.scripts]
+sketchon-pipeline = "pipeline_v2.interfaces.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pipeline_v2*"]

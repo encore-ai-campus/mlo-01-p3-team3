@@ -4,6 +4,7 @@
 
 | 작업 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
+| 새 상품 실행기·승인/활성화 없는 직접 게시 | [v2 실행기](../../src/data_pipeline_v2/README.md) | [책임·처리 계약](../../src/data_pipeline_v2/docs/architecture.md), [서버 이전](../../src/data_pipeline_v2/docs/server-migration.md), [게시 계약](13-gold-mysql-publication.md) |
 | 추천 이후 선택 상품 이미지 생성 | [상품 배치 미리보기](../interior-recommender/product-preview.md) | [Application](04-application-ai.md), [직접 추천](12-direct-recommendation.md) |
 | SketchOn SQLite 워커·동기/비동기·복구 | [실행·복구](../interior-recommender/execution.md) | [구현 라우팅](../interior-recommender/README.md), [Application](04-application-ai.md), [작업](05-kafka-jobs.md) |
 | interior_recommender 구현·호출 계층 | [역할별 구현 라우팅](../interior-recommender/README.md) | [호출 구조](../interior-recommender/call-structure.md), 아래 담당 설계 |
