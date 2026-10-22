@@ -1,0 +1,61 @@
+{
+  "branch": "feature/#13",
+  "baseline_commit": "65ec434",
+  "local_full_regression": {
+    "status": "PASSED",
+    "tests": 564,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "duration_ms": 155405,
+    "scope": "Isolated HEAD plus explicit commit targets; unrelated publication test deletions and v1 DDL excluded"
+  },
+  "initial_full_regression": {
+    "tests": 564,
+    "errors": 2,
+    "reason": "Legacy Delta proof test doubles expected per-row _read/version; adapted to versions_many/_verify_rows with pinned/current checks and no cache promotion on failure"
+  },
+  "focused_spark_reuse_regression": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0
+  },
+  "server_regression_ref": "range_index_compaction_20261022.json",
+  "server_regression_tests": 183,
+  "scope": "Pipeline improvements only; no live collection data, .runtime, credentials, logs or virtual environments",
+  "excluded_unrelated_working_changes": [
+    "tests/test_publication.py",
+    "tests/smoke_publication_mysql.py",
+    "sql/publication_reference_v1.sql"
+  ],
+  "implementation_commits": [
+    {
+      "sha": "9c723b60f7672872ee917b590b277524df58afbe",
+      "title": "refactor: Bronze 묶음 조회·저장 확인과 범위 읽기 개선 (#13)",
+      "files": 17
+    },
+    {
+      "sha": "f251e891719784aecb8c01d8dbb14ff6786e2047",
+      "title": "refactor: Silver·Gold·활성화의 반복 조회와 입력 보존 비용 개선 (#13)",
+      "files": 29
+    },
+    {
+      "sha": "4c6cf2cc76e991d3b06a90a2f723ce5a155448fc",
+      "title": "fix: 소유권 기반 장애 복구와 서버 실행·TLS 점검 보강 (#13)",
+      "files": 8
+    },
+    {
+      "sha": "fd4813d5f13a4b796763f0973d9d7f028c2350b0",
+      "title": "feat: NiFi 고정 SSH 제어와 수집기 실행 연결 추가 (#13)",
+      "files": 6
+    },
+    {
+      "sha": "72e72d12d8262df7beedc3f8f347a39e38633d6b",
+      "title": "chore: 배치 경계 배포와 Delta 파일 정리 도구 추가 (#13)",
+      "files": 3
+    }
+  ],
+  "single_100_trial": "Background server task started separately; completion/time is not asserted by this release proof",
+  "batch_200": "Not applied",
+  "continuous_restart": "Not requested or performed by Git release"
+}

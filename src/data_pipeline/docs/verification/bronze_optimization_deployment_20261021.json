@@ -1,0 +1,61 @@
+{
+  "at": "2026-10-21T05:25:44.97Z",
+  "mysql": {
+    "active": 406,
+    "pending": 42,
+    "products": 448
+  },
+  "source_sha256": {
+    "continuous_work.py": "f88811bdfac85b030d1b42645d46de561833118c1f6a82c5225156b173872c5c",
+    "production_manage.py": "66618f7ea6070d8de95df1b40b43d4ab99f5478963468c310ce277e505128e8a",
+    "production_window_work.py": "82ffcbf9ef682c5ebaf3cb54e8e63721fa9edf4ddd0587b6de414a11d29af7dd",
+    "production_work.py": "798a60d32719a945cfa939b80d55df09b704a73e4f322e528ad2b8d5eab88761",
+    "source/product_pipeline/bronze/batch.py": "2fa98c0274ce9c6d6eef1e1afa021c8e40a238c71e5a603dd17909e068d43286",
+    "source/product_pipeline/bronze/cli.py": "44736ffea1c99b4a6abdf38a013589215e34c0bc330744c7dc83cb4c8d59f8fd",
+    "source/product_pipeline/bronze/delta.py": "fe794095175757cd6a841b87a1d954dfcd95cd6da1439b4b262da96392252e5f",
+    "source/product_pipeline/bronze/lease.py": "deb9ca74a887565c77e48dc67dff2a3f3e60b047c5409e0264bf7d4f35769d14",
+    "source/product_pipeline/bronze/metrics.py": "3862983eb7efa46a52e92dcae125b1bcf7277b0d4eeadd7fb906331236ca8019",
+    "source/product_pipeline/bronze/mongo.py": "d5f9005760f2dd0b8906a326daecf023b553fcd4c803616519d85e3e3c4c60e7",
+    "source/product_pipeline/bronze/stream.py": "2afc23e99af09cf50b4dd61d9b0c735839ee29c5c9138299273cd7de5f47c0f6",
+    "source/product_pipeline/spark_session.py": "fa0419512662ce29508ea28923da4cde585178a3945d63f96f2ea976ea22391e"
+  },
+  "status": "DEPLOYED_VERIFIED_STOPPED",
+  "tests": [
+    "Ran 68 tests in 1.393s"
+  ],
+  "finished_at": "2026-10-21T05:31:30.426Z",
+  "quiescence": {
+    "status": "QUIESCENT",
+    "driver_pids": [],
+    "active_applications": [],
+    "workers": [
+      {
+        "host": "192.168.0.122",
+        "state": "ALIVE",
+        "coresused": 0,
+        "memoryused": 0
+      },
+      {
+        "host": "192.168.0.123",
+        "state": "ALIVE",
+        "coresused": 0,
+        "memoryused": 0
+      },
+      {
+        "host": "192.168.0.124",
+        "state": "ALIVE",
+        "coresused": 0,
+        "memoryused": 0
+      }
+    ],
+    "at": "2026-10-21T05:31:29.617Z"
+  },
+  "production_claims_remaining": 0,
+  "pause_requested": true,
+  "production_resumed": false,
+  "local_tests": {
+    "count": 492,
+    "duration_seconds": 122.781,
+    "scope": "current worktree; existing unrelated publication test edits retained"
+  }
+}

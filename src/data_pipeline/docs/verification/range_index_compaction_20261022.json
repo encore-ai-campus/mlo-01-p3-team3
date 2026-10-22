@@ -1,0 +1,1095 @@
+{
+  "maintenance": {
+    "at": "2026-10-22T01:29:32.624Z",
+    "continuous_restart": false,
+    "pid": 471509,
+    "status": "COMPLETED_PAUSED",
+    "window_records": 100
+  },
+  "compaction": {
+    "finished_at": "2026-10-22T01:29:32.453Z",
+    "old_versions_deleted": false,
+    "range_verification": {
+      "observations": 100,
+      "raw_bodies_verified": true,
+      "status": "PASSED",
+      "window_hash": "d22d8ac0537e6e4fd72bfca5b064698a5c3265f2a191319bb9e80264760229f8"
+    },
+    "started_at": "2026-10-22T01:02:15.228Z",
+    "status": "COMPLETED",
+    "tables": [
+      {
+        "after_version": 642,
+        "before_version": 641,
+        "duration_ms": 478058,
+        "fingerprint": {
+          "rows": "3050",
+          "s0": "28553992473196181077904",
+          "s1": "28328718024179304071482",
+          "s2": "28521842354061094101874",
+          "s3": "28254727908860283167227"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 30557813.1,
+                "max": 33058042,
+                "min": 9630532,
+                "totalFiles": 10,
+                "totalSize": 305578131
+              },
+              "filesRemoved": {
+                "avg": 482439.8533541342,
+                "max": 1102042,
+                "min": 97550,
+                "totalFiles": 641,
+                "totalSize": 309243946
+              },
+              "numBatches": 1,
+              "numBins": 10,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 10,
+              "numFilesRemoved": 641,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 13,
+              "numTableColumnsWithStats": 13,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631359813,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 641,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/bronze/products"
+          }
+        ],
+        "stage": "bronze",
+        "table": "products",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 324,
+        "before_version": 323,
+        "duration_ms": 103200,
+        "fingerprint": {
+          "rows": "3050",
+          "s0": "28406406138021629064502",
+          "s1": "27941063378873432843836",
+          "s2": "28349829291015294917068",
+          "s3": "28094323941860803205968"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 1561304.0,
+                "max": 1561304,
+                "min": 1561304,
+                "totalFiles": 1,
+                "totalSize": 1561304
+              },
+              "filesRemoved": {
+                "avg": 10438.770897832817,
+                "max": 10760,
+                "min": 6412,
+                "totalFiles": 323,
+                "totalSize": 3371723
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 323,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 9,
+              "numTableColumnsWithStats": 9,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631521428,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 323,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/bronze/events"
+          }
+        ],
+        "stage": "bronze",
+        "table": "events",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 0,
+        "before_version": 0,
+        "duration_ms": 4554,
+        "fingerprint": {
+          "rows": "0",
+          "s0": "0",
+          "s1": "0",
+          "s2": "0",
+          "s3": "0"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 0.0,
+                "max": null,
+                "min": null,
+                "totalFiles": 0,
+                "totalSize": 0
+              },
+              "filesRemoved": {
+                "avg": 0.0,
+                "max": null,
+                "min": null,
+                "totalFiles": 0,
+                "totalSize": 0
+              },
+              "numBatches": 1,
+              "numBins": 0,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 0,
+              "numFilesRemoved": 0,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 5,
+              "numTableColumnsWithStats": 5,
+              "partitionsOptimized": 0,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631528833,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 0,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/bronze/quarantine"
+          }
+        ],
+        "stage": "bronze",
+        "table": "quarantine",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 91,
+        "before_version": 90,
+        "duration_ms": 46310,
+        "fingerprint": {
+          "rows": "3868",
+          "s0": "36078277781689522883180",
+          "s1": "35981130170182595822710",
+          "s2": "35581669004282783282959",
+          "s3": "35160467266473718565243"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 2319963.0,
+                "max": 2319963,
+                "min": 2319963,
+                "totalFiles": 1,
+                "totalSize": 2319963
+              },
+              "filesRemoved": {
+                "avg": 52781.4,
+                "max": 98852,
+                "min": 20851,
+                "totalFiles": 90,
+                "totalSize": 4750326
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 90,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 41,
+              "numTableColumnsWithStats": 32,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631601101,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 90,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/product_observations"
+          }
+        ],
+        "stage": "silver",
+        "table": "product_observations",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 91,
+        "before_version": 90,
+        "duration_ms": 36325,
+        "fingerprint": {
+          "rows": "14560",
+          "s0": "134811120736329475594032",
+          "s1": "134751765120083361075129",
+          "s2": "133940273596631719116288",
+          "s3": "134217441967602458328530"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 4029808.0,
+                "max": 4029808,
+                "min": 4029808,
+                "totalFiles": 1,
+                "totalSize": 4029808
+              },
+              "filesRemoved": {
+                "avg": 65682.45555555556,
+                "max": 143219,
+                "min": 15842,
+                "totalFiles": 90,
+                "totalSize": 5911421
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 90,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 36,
+              "numTableColumnsWithStats": 32,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631641894,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 90,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/product_attributes"
+          }
+        ],
+        "stage": "silver",
+        "table": "product_attributes",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 91,
+        "before_version": 90,
+        "duration_ms": 61127,
+        "fingerprint": {
+          "rows": "57088",
+          "s0": "525945621492537864110438",
+          "s1": "526967362033800245926374",
+          "s2": "525307511829584678539698",
+          "s3": "527086904054248325577423"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 27321293.0,
+                "max": 27321293,
+                "min": 27321293,
+                "totalFiles": 1,
+                "totalSize": 27321293
+              },
+              "filesRemoved": {
+                "avg": 324959.34444444446,
+                "max": 778920,
+                "min": 21030,
+                "totalFiles": 90,
+                "totalSize": 29246341
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 90,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 35,
+              "numTableColumnsWithStats": 32,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631694596,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 90,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/price_observations"
+          }
+        ],
+        "stage": "silver",
+        "table": "price_observations",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 91,
+        "before_version": 90,
+        "duration_ms": 44960,
+        "fingerprint": {
+          "rows": "8694",
+          "s0": "80311519576351870344368",
+          "s1": "79850521346354818114079",
+          "s2": "80073894681296618676336",
+          "s3": "79369979131411035024461"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 6412652.0,
+                "max": 6412652,
+                "min": 6412652,
+                "totalFiles": 1,
+                "totalSize": 6412652
+              },
+              "filesRemoved": {
+                "avg": 102899.5,
+                "max": 222492,
+                "min": 23481,
+                "totalFiles": 90,
+                "totalSize": 9260955
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 90,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 46,
+              "numTableColumnsWithStats": 32,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631743120,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 90,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/product_images"
+          }
+        ],
+        "stage": "silver",
+        "table": "product_images",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 91,
+        "before_version": 90,
+        "duration_ms": 48016,
+        "fingerprint": {
+          "rows": "32198",
+          "s0": "296449868038211230276206",
+          "s1": "298133422435336468825911",
+          "s2": "298064349155056249978800",
+          "s3": "296093647329865183147442"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 9867413.0,
+                "max": 9867413,
+                "min": 9867413,
+                "totalFiles": 1,
+                "totalSize": 9867413
+              },
+              "filesRemoved": {
+                "avg": 126943.0,
+                "max": 298095,
+                "min": 15671,
+                "totalFiles": 90,
+                "totalSize": 11424870
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 90,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 32,
+              "numTableColumnsWithStats": 32,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631793102,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 90,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/link_observations"
+          }
+        ],
+        "stage": "silver",
+        "table": "link_observations",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 91,
+        "before_version": 90,
+        "duration_ms": 50806,
+        "fingerprint": {
+          "rows": "94008",
+          "s0": "868218801082662290938378",
+          "s1": "868843315926386575684726",
+          "s2": "867316793525173955418580",
+          "s3": "867635658155146828423115"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 21764928.0,
+                "max": 21764928,
+                "min": 21764928,
+                "totalFiles": 1,
+                "totalSize": 21764928
+              },
+              "filesRemoved": {
+                "avg": 253410.43333333332,
+                "max": 770093,
+                "min": 18811,
+                "totalFiles": 90,
+                "totalSize": 22806939
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 90,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 28,
+              "numTableColumnsWithStats": 28,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631841995,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 90,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/quality_issues"
+          }
+        ],
+        "stage": "silver",
+        "table": "quality_issues",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 73,
+        "before_version": 72,
+        "duration_ms": 48262,
+        "fingerprint": {
+          "rows": "22442",
+          "s0": "207308858624765055209287",
+          "s1": "205266678324297925741589",
+          "s2": "206354627795331651318653",
+          "s3": "206431510646404866200285"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 11337429.0,
+                "max": 11337429,
+                "min": 11337429,
+                "totalFiles": 1,
+                "totalSize": 11337429
+              },
+              "filesRemoved": {
+                "avg": 172767.34722222222,
+                "max": 367572,
+                "min": 33935,
+                "totalFiles": 72,
+                "totalSize": 12439249
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 72,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 28,
+              "numTableColumnsWithStats": 28,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631885489,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 72,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/normalized_offers"
+          }
+        ],
+        "stage": "silver",
+        "table": "normalized_offers",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 91,
+        "before_version": 90,
+        "duration_ms": 71308,
+        "fingerprint": {
+          "rows": "3868",
+          "s0": "35538337485106490968142",
+          "s1": "36268108177579104353490",
+          "s2": "35575674797781028263482",
+          "s3": "35433448760119095137470"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 16569105.0,
+                "max": 31333535,
+                "min": 1804675,
+                "totalFiles": 2,
+                "totalSize": 33138210
+              },
+              "filesRemoved": {
+                "avg": 387209.3222222222,
+                "max": 914606,
+                "min": 26856,
+                "totalFiles": 90,
+                "totalSize": 34848839
+              },
+              "numBatches": 1,
+              "numBins": 2,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 2,
+              "numFilesRemoved": 90,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 28,
+              "numTableColumnsWithStats": 28,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792631959482,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 90,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/silver/pipeline_evaluations"
+          }
+        ],
+        "stage": "silver",
+        "table": "pipeline_evaluations",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 93,
+        "before_version": 92,
+        "duration_ms": 114389,
+        "fingerprint": {
+          "rows": "6490",
+          "s0": "59961410126432813637630",
+          "s1": "59465537139085854214602",
+          "s2": "59632422007537671955815",
+          "s3": "59468212551964534944222"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 13857616.0,
+                "max": 13857616,
+                "min": 13857616,
+                "totalFiles": 1,
+                "totalSize": 13857616
+              },
+              "filesRemoved": {
+                "avg": 178777.77173913043,
+                "max": 260987,
+                "min": 32466,
+                "totalFiles": 92,
+                "totalSize": 16447555
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 92,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 36,
+              "numTableColumnsWithStats": 32,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632104533,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 92,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/product_catalog"
+          }
+        ],
+        "stage": "gold",
+        "table": "product_catalog",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 85,
+        "before_version": 84,
+        "duration_ms": 65487,
+        "fingerprint": {
+          "rows": "36796",
+          "s0": "339178706093203060050725",
+          "s1": "340070493975309889501806",
+          "s2": "338878686811812509598233",
+          "s3": "338688147670224851001816"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 25871991.5,
+                "max": 31790047,
+                "min": 19953936,
+                "totalFiles": 2,
+                "totalSize": 51743983
+              },
+              "filesRemoved": {
+                "avg": 650291.0238095238,
+                "max": 1011336,
+                "min": 66638,
+                "totalFiles": 84,
+                "totalSize": 54624446
+              },
+              "numBatches": 1,
+              "numBins": 2,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 2,
+              "numFilesRemoved": 84,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 19,
+              "numTableColumnsWithStats": 19,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632162957,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 84,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/current_offers"
+          }
+        ],
+        "stage": "gold",
+        "table": "current_offers",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 85,
+        "before_version": 84,
+        "duration_ms": 70402,
+        "fingerprint": {
+          "rows": "37404",
+          "s0": "343242637355948780548956",
+          "s1": "346478480149172545318797",
+          "s2": "345541310499146372122625",
+          "s3": "345841746563641353615596"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 21485986.5,
+                "max": 29167129,
+                "min": 13804844,
+                "totalFiles": 2,
+                "totalSize": 42971973
+              },
+              "filesRemoved": {
+                "avg": 581337.8095238095,
+                "max": 938328,
+                "min": 69380,
+                "totalFiles": 84,
+                "totalSize": 48832376
+              },
+              "numBatches": 1,
+              "numBins": 2,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 2,
+              "numFilesRemoved": 84,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 20,
+              "numTableColumnsWithStats": 20,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632233539,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 84,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/offer_history"
+          }
+        ],
+        "stage": "gold",
+        "table": "offer_history",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 93,
+        "before_version": 92,
+        "duration_ms": 56206,
+        "fingerprint": {
+          "rows": "14292",
+          "s0": "132621279312780219395803",
+          "s1": "131661204782829981306111",
+          "s2": "130993154870091856693077",
+          "s3": "131719575093382019566345"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 16904221.0,
+                "max": 16904221,
+                "min": 16904221,
+                "totalFiles": 1,
+                "totalSize": 16904221
+              },
+              "filesRemoved": {
+                "avg": 207971.04347826086,
+                "max": 355750,
+                "min": 29265,
+                "totalFiles": 92,
+                "totalSize": 19133336
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 92,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 21,
+              "numTableColumnsWithStats": 21,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632297311,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 92,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/product_images"
+          }
+        ],
+        "stage": "gold",
+        "table": "product_images",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 93,
+        "before_version": 92,
+        "duration_ms": 60882,
+        "fingerprint": {
+          "rows": "54079",
+          "s0": "498310365102809886453456",
+          "s1": "499449137623881229875298",
+          "s2": "499049709678718432541741",
+          "s3": "498277541184872746664809"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 18039653.5,
+                "max": 30088707,
+                "min": 5990600,
+                "totalFiles": 2,
+                "totalSize": 36079307
+              },
+              "filesRemoved": {
+                "avg": 432436.5326086957,
+                "max": 683142,
+                "min": 54484,
+                "totalFiles": 92,
+                "totalSize": 39784161
+              },
+              "numBatches": 1,
+              "numBins": 2,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 2,
+              "numFilesRemoved": 92,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 16,
+              "numTableColumnsWithStats": 16,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632354725,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 92,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/product_links"
+          }
+        ],
+        "stage": "gold",
+        "table": "product_links",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 93,
+        "before_version": 92,
+        "duration_ms": 44864,
+        "fingerprint": {
+          "rows": "29827",
+          "s0": "275727890039249437877880",
+          "s1": "276369221014734832938803",
+          "s2": "274873698574589492032747",
+          "s3": "275104435026957259293243"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 5006788.0,
+                "max": 5006788,
+                "min": 5006788,
+                "totalFiles": 1,
+                "totalSize": 5006788
+              },
+              "filesRemoved": {
+                "avg": 61653.684782608696,
+                "max": 103087,
+                "min": 10540,
+                "totalFiles": 92,
+                "totalSize": 5672139
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 92,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 12,
+              "numTableColumnsWithStats": 12,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632405695,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 92,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/quality_issues"
+          }
+        ],
+        "stage": "gold",
+        "table": "quality_issues",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 93,
+        "before_version": 92,
+        "duration_ms": 78226,
+        "fingerprint": {
+          "rows": "6490",
+          "s0": "59103189186761416822755",
+          "s1": "59529457846864307047066",
+          "s2": "59475311600857060289525",
+          "s3": "60806346156371376331543"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 28026667.5,
+                "max": 32670509,
+                "min": 23382826,
+                "totalFiles": 2,
+                "totalSize": 56053335
+              },
+              "filesRemoved": {
+                "avg": 619666.2282608695,
+                "max": 1182992,
+                "min": 55433,
+                "totalFiles": 92,
+                "totalSize": 57009293
+              },
+              "numBatches": 1,
+              "numBins": 2,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 2,
+              "numFilesRemoved": 92,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 22,
+              "numTableColumnsWithStats": 22,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632472130,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 92,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/quality_daily"
+          }
+        ],
+        "stage": "gold",
+        "table": "quality_daily",
+        "verified_unchanged": true
+      },
+      {
+        "after_version": 93,
+        "before_version": 92,
+        "duration_ms": 61885,
+        "fingerprint": {
+          "rows": "6490",
+          "s0": "60471976598629715826022",
+          "s1": "60299650893460383504825",
+          "s2": "59359340496049461065353",
+          "s3": "59492091698860441859674"
+        },
+        "metrics": [
+          {
+            "metrics": {
+              "autoCompactParallelismStats": null,
+              "clusteringStats": null,
+              "deletionVectorStats": null,
+              "endTimeMs": 0,
+              "filesAdded": {
+                "avg": 26242295.0,
+                "max": 26242295,
+                "min": 26242295,
+                "totalFiles": 1,
+                "totalSize": 26242295
+              },
+              "filesRemoved": {
+                "avg": 295547.5326086957,
+                "max": 472149,
+                "min": 34727,
+                "totalFiles": 92,
+                "totalSize": 27190373
+              },
+              "numBatches": 1,
+              "numBins": 1,
+              "numBytesSkippedToReduceWriteAmplification": 0,
+              "numFilesAdded": 1,
+              "numFilesRemoved": 92,
+              "numFilesSkippedToReduceWriteAmplification": 0,
+              "numTableColumns": 13,
+              "numTableColumnsWithStats": 13,
+              "partitionsOptimized": 1,
+              "preserveInsertionOrder": false,
+              "startTimeMs": 1792632540685,
+              "totalClusterParallelism": 3,
+              "totalConsideredFiles": 92,
+              "totalFilesSkipped": 0,
+              "totalScheduledTasks": 0,
+              "zOrderStats": null
+            },
+            "path": "s3a://pj3-data/lake/pj3-danawa/gold/pipeline_evaluations"
+          }
+        ],
+        "stage": "gold",
+        "table": "pipeline_evaluations",
+        "verified_unchanged": true
+      }
+    ],
+    "vacuum": false
+  },
+  "server_tests": {
+    "at": "2026-10-22T01:01:10.920Z",
+    "errors": 0,
+    "failures": 0,
+    "status": "PASSED",
+    "tests": 183
+  }
+}

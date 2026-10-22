@@ -1,0 +1,37 @@
+{
+  "config": {
+    "status": "CONNECTED_STOPPED",
+    "validation": "VALID",
+    "version": "2.12.0",
+    "group_id": "5e1b2b63-01a1-1000-c17a-546dca0c0a4e",
+    "processor_id": "5e1b2b8e-01a1-1000-62c3-de018bc5fa48",
+    "launcher_enabled": false,
+    "active_threads": 0,
+    "configuration": "EXISTING_MATCH",
+    "actual_collection_started": false,
+    "schedule": "1440 min (inactive placeholder; confirm before enabling)",
+    "source_commit": "67e837db4114ef8955a12c0b466f6f4aba50bd8f",
+    "output": "/var/lib/pj3/product-pipeline/nifi/collector/runs",
+    "downstream_handoff": "existing capture/drain adapter; a new run has not been registered or ingested"
+  },
+  "state": "STOPPED",
+  "validation": "VALID",
+  "stats": {
+    "taskCount": 0,
+    "flowFilesOut": 0,
+    "activeThreadCount": 0,
+    "tasksDuration": "00:00:00.000"
+  },
+  "bulletins": [],
+  "source_archive": {
+    "commit": "67e837db4114ef8955a12c0b466f6f4aba50bd8f",
+    "sha256": "e312d1b605a5afb36f25c5e7252c9edb4bf023041b42efe9c30ef449c72f6329"
+  },
+  "local_launcher_tests": 2,
+  "server_preflight": [
+    "collector --help",
+    "pip check",
+    "launcher --check",
+    "disabled launcher refuses collection"
+  ]
+}

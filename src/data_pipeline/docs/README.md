@@ -6,7 +6,11 @@
 
 | 문서 | 용도 |
 |---|---|
+| [2026-10-22 Git 전달 검증](verification/git_release_20261022.json) | 커밋 대상 격리 시험본의 전체 회귀 564개 통과·전달 범위·제외 파일 |
+| [2026-10-22 파일 정리·동등성 검증](verification/range_index_compaction_20261022.json) | 19개 Delta 테이블 정리·내용 보존·100건 범위 읽기 확인·서버 테스트 183개 |
+| [배치별 입력·처리량·시간 비교](verification/batch_input_timing_audit_20261022.json) | epoch 14·30 입력량과 12~31 시간 추이, 미계측 항목 구분 |
 | [구현·검증 변경 이력](implementation_history.md) | 10월 19~21일 개선 순서·실제 결과·남은 작업 |
+| [Silver·Gold·활성화 비용 개선](downstream_optimization.md) | 고정 버전 검증 재사용·메타데이터·입력 묶음 보존·실제 배치 비교 |
 | [MySQL v2 스키마 반영](mysql_schema_rollout.md) | 적용/롤백·계약 검사·기존 데이터 보완 |
 | [서버 배포·인계](deployment.md) | 서버 역할·보호 설정 경로·설치·배포·초기 적재·재개 |
 | [실서버 검증·남은 인수](service_validation_20261018.md) | 현재 확인 범위·최종 release·증거·운영 전 필요한 입력 |
@@ -23,12 +27,15 @@
 | 입력 검증·snapshot·Mongo/이미지·Kafka | [입력·적재 실행](execution.md) |
 | 수집 중 확정 데이터 인계 | [LIVE 실행](live_execution.md) |
 | Kafka → Bronze | [Bronze 실행](bronze_execution.md) |
+| Bronze 묶음 조회·append·Spark 재사용·계측 | [Bronze 개선과 실제 비교](bronze_optimization.md) |
 | Kafka 보관 만료·offset 범위 이탈 | [원장 재발행·체크포인트 세대 복구](kafka_retention_recovery.md) |
 | Bronze → Silver | [Silver 실행](silver_execution.md) |
 | Silver → Gold | [Gold 실행](gold_execution.md) |
 | 고정 Gold → MySQL | [MySQL 게시](mysql_publication.md) |
 | 전체 단계 연결·완료 대조 | [FLOW 실행](flow_execution.md) |
 | queue·제한 재시도·NiFi | [운영 실행](operations_execution.md) |
+| 실제 NiFi 운영 타이머·중복 실행 방지·정지 경계 | [NiFi 운영 연결](nifi_production.md) |
+| 일시적인 Mongo 잠금 갱신 실패의 자동 복구 | [제한된 자동 장애 복구](automatic_recovery.md) |
 | 정지·백업 증거·상태 복원 | [상태 이관](state_migration.md) |
 | 현재 Garage 2.4.1의 S3·Delta 조건 | [Garage 프로필](garage_v241_profile.md) |
 

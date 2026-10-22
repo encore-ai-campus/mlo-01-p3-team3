@@ -1,10 +1,16 @@
 # 데이터 파이프라인
 
+2026-10-22 10:31 KST 전달 기준: Worker 01 Kafka TLS 누락 보완, Delta 버전 범위 읽기·새 파일 저장 확인·배치 간 키 인덱스 재사용을 배포했다. 19개 테이블의 파일 정리와 내용 불변성 검증, 기존 100건 선택·원문 동등성 검증이 완료됐다. [실제 정리 결과](docs/verification/range_index_compaction_20261022.json), [배치별 입력·시간 비교](docs/verification/batch_input_timing_audit_20261022.json)를 참고한다. 이후 **100건 한 배치만 게시·활성화까지 실행한 뒤 정지하는 시험**을 서버 백그라운드에서 시작했다. 이 문서는 해당 시험 완료나 개선 후 소요 시간을 확정하지 않는다. 200건 설정은 아직 적용하지 않았고 연속 처리 자동 재개도 하지 않는다.
+
+아래 00시대 건수·시간은 이전 시점의 이력이다.
+
 다나와 수집 결과를 받아 이미지·MongoDB → Kafka → Spark Bronze/Silver/Gold → MySQL 상품 게시로 연결한다. 완료 export와 수집 중 확정된 증분 파일을 입력으로 사용하며, 크롤러 실행·파서·이미지 다운로드는 수집기 책임이다.
 
-2026-10-21 최종 확인에서는 실제 업무 DB의 **상품 234건 / ACTIVE 213건 / PENDING_REVIEW 21건**을 확인했다. Kafka 보관 만료 복구 후 한 배치는 Bronze 100이벤트와 후속 25관측을 처리하고 MySQL 게시·활성화 평가까지 31분 17초에 완료했다. 한 배치 종료 후 `PAUSED_AFTER_BATCH` 상태이며, **전체 65,498개 상품 처리 완료나 현재 연속 실행 중이라는 의미는 아니다.** 이는 확인 시점의 기록이며 현재 상태는 서버에서 조회한다.
+2026-10-22 00:06 조회에서 **상품 1,144건 / ACTIVE 1,032건 / PENDING_REVIEW 112건**을 확인했다. 직전 epoch 12의 100건은 Bronze 시작부터 업무 DB 최초 적재 약 10분 34초, 활성화 완료까지 약 17분 28초였다. 이후 epoch 13에서 Driver 힙 부족이 발생해 중지하고, JSON 파일 전달·epoch별 JVM 교체·비정상 JVM 종료 복구를 보완하여 00:20에 연속 처리를 재개했다. 이 수치는 조회 시점 기준이며 새 배포의 전체 배치 완료·JVM 교체 실증과 실시간 건수는 후속 기록으로 확인한다. [OOM 보완 이력](docs/implementation_history.md#2026-10-22-driver-oom-중지보완연속-처리-재개), [복구](docs/automatic_recovery.md), [Silver·Gold·활성화 개선](docs/downstream_optimization.md), [NiFi 운영 연결](docs/nifi_production.md)을 참고한다. **전체 65,498개 상품 완료가 아니다.**
 
-운영 경로는 작은 확정 배치마다 Bronze → Silver → Gold → MySQL 게시 → 활성화 평가를 마친 뒤 다음 범위로 진행한다. Spark 클러스터와 단계 간 세션·고정 테이블 읽기를 재사용한다. Kafka 보관 만료는 원장의 고정 이벤트 재발행과 별도 체크포인트 세대로 복구하며, 기존 ID·체크포인트·성공 영수증은 보존한다. 처리 속도, 전체 범위 완주, NiFi 운영 일정과 환경 이전 인수는 남아 있다. [현재 상태와 검증 근거](docs/service_validation_20261018.md), [변경 이력](docs/implementation_history.md)을 따른다.
+운영 경로는 작은 확정 배치마다 Bronze → Silver → Gold → MySQL 게시 → 활성화 평가를 마친 뒤 다음 범위로 진행한다. Spark 클러스터와 단계 간 세션·고정 테이블 읽기를 재사용한다. Kafka 보관 만료는 원장의 고정 이벤트 재발행과 별도 체크포인트 세대로 복구하며, 기존 ID·체크포인트·성공 영수증은 보존한다. 처리 속도, 전체 범위 완주, NiFi 신규 수집 일정과 환경 이전 인수는 남아 있다. [현재 상태와 검증 근거](docs/service_validation_20261018.md), [변경 이력](docs/implementation_history.md)을 따른다.
+
+OOM 보완의 첫 운영 시도에서 발견한 S3A 업로드 호환 오류는 Garage SDK 업로드·실제 바이트 체크섬 재검증으로 보완했으며, 최종 재개는 2026-10-22 00:29:55 KST다. [보완 및 시험 근거](docs/verification/driver_oom_repair_20261022.json).
 
 ## 문서 읽는 순서
 

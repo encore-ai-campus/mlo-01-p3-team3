@@ -1,5 +1,7 @@
 # Kafka → 상품 Bronze Delta
 
+2026-10-21: 배치 사전 조회·테이블 단위 저장 확인, 신규 행 append, Mongo 묶음 조회와 메타데이터 통합, 구간별 계측·서버 Spark 공유 실행기를 추가했다. [변경 규칙·격리 비교·현재 정지 상태](bronze_optimization.md)를 따른다. 기존 체크포인트와 ID는 유지한다.
+
 현재 서버의 작은 window·세션 공유·게시 후 활성화 경로는 [대기 적재·연속 실행](pending_intake.md), 최신 실제 결과는 [검증 현황](service_validation_20261018.md)을 따른다. 아래 일반 CLI/초기 시험 계약과 배포된 서버 coordinator를 구분한다. Kafka 보관 만료 시 [복구 절차](kafka_retention_recovery.md)를 사용한다.
 
 2026-10-16. 수집 종료 후 원천 적재/발행과 분리된 Spark 작업이다. 수집기·이미지 다운로드·MongoDB 원천·발행 기능은 기존 그대로 사용한다. 이번 범위는 상품 Bronze이며 Silver/Gold/MySQL·NiFi 설치·LIVE 인계는 포함하지 않는다.
