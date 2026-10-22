@@ -54,6 +54,22 @@ class SparkGarageTests(unittest.TestCase):
         with self.env(),patch('product_pipeline.spark_storage.Path.is_file',return_value=False),self.assertRaisesRegex(PipelineError,'CLIENT_FILES_MISSING'):
             storage_options({})
 
+    def test_node_local_sdk_is_not_staged_per_application_and_upgrade_is_idempotent(self):
+        root='/opt/pj3/s3-clients/hadoop-3.4.2/'
+        jars=[root+'hadoop-aws-3.4.2.jar',root+'bundle-2.29.52.jar']
+        with self.env(),patch('product_pipeline.spark_storage.Path.is_file',return_value=True):
+            options=storage_options({'spark.jars':'/deps/delta.jar,'+','.join('local:'+p for p in jars),
+                                     'spark.executor.extraClassPath':'/deps/custom.jar'})
+            self.assertEqual(options['spark.jars'],'/deps/delta.jar')
+            self.assertEqual(options['spark.driver.extraClassPath'],':'.join(jars))
+            self.assertEqual(options['spark.executor.extraClassPath'],':'.join(jars+['/deps/custom.jar']))
+            self.assertEqual(storage_options(options),options)
+
+    def test_conflicting_sdk_classpath_is_rejected(self):
+        for name in ('spark.driver.extraClassPath','spark.executor.extraClassPath'):
+            with self.env(),patch('product_pipeline.spark_storage.Path.is_file',return_value=True),self.assertRaisesRegex(PipelineError,'JAR_CONFLICT'):
+                storage_options({name:'/other/bundle-2.30.jar'})
+
     def test_secret_is_bound_only_to_hadoop_configuration(self):
         spark=MagicMock()
         spark.sparkContext._jvm.java.lang.System.getProperty.return_value='/etc/pj3-clients/s3/ca-truststore.p12'

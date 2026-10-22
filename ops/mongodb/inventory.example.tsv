@@ -1,0 +1,4 @@
+# id ssh_alias advertised_dns private_ipv4
+0 pj3-mongo01 mongo01.pj3.internal 192.168.0.134
+1 pj3-mongo02 mongo02.pj3.internal 192.168.0.135
+2 pj3-mongo03 mongo03.pj3.internal 192.168.0.136

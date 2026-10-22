@@ -1,0 +1,99 @@
+{
+  "master": {
+    "contract_version": 1,
+    "at": "2026-10-21T10:31:45.370Z",
+    "scope": "NIFI_PRODUCTION_TIMER_TO_EXISTING_CONTINUOUS_FLOW",
+    "tests": 5,
+    "tests_passed": true,
+    "pid": 176146,
+    "last_tick": {
+      "at": "2026-10-21T10:30:23.456Z",
+      "duration_ms": 0,
+      "pid": 176146,
+      "started": false,
+      "status": "ALREADY_RUNNING"
+    },
+    "recent_ticks": [
+      {
+        "at": "2026-10-21T10:23:36.217Z",
+        "duration_ms": 1,
+        "pid": 176146,
+        "started": false,
+        "status": "PAUSED"
+      },
+      {
+        "at": "2026-10-21T10:23:36.443Z",
+        "duration_ms": 1,
+        "pid": 176146,
+        "started": false,
+        "status": "PAUSED"
+      },
+      {
+        "at": "2026-10-21T10:25:23.078Z",
+        "duration_ms": 1,
+        "pid": 176146,
+        "started": false,
+        "status": "ALREADY_RUNNING"
+      },
+      {
+        "at": "2026-10-21T10:30:23.456Z",
+        "duration_ms": 0,
+        "pid": 176146,
+        "started": false,
+        "status": "ALREADY_RUNNING"
+      }
+    ],
+    "pause_after_window": false,
+    "flow": {
+      "epoch": 8,
+      "stage": "windows",
+      "status": "RUNNING",
+      "updated_at": "2026-10-21T10:15:09.583Z"
+    },
+    "source_hashes": {
+      "product_pipeline/operations/server_flow.py": "19dc451e154f13602d8bb217d93f64d6d717776fe1da6423e4155f6a7b9f97e7",
+      "tests/test_server_flow.py": "a2191e9fc775c173daa7b34995a0fc81b5b337cf808f23a1742fae43590d4e94"
+    }
+  },
+  "nifi": {
+    "config": {
+      "status": "RUNNING",
+      "version": "2.12.0",
+      "group_id": "5dfe7f50-01a1-1000-f423-c433e310ab6e",
+      "processor_id": "5dfe7fcc-01a1-1000-4059-f310bcb3aa66",
+      "period": "5 min",
+      "concurrency": 1,
+      "execution_node": "PRIMARY",
+      "command": "production-tick",
+      "configuration": "EXISTING_MATCH",
+      "existing_verification_flow_preserved": true,
+      "credentials_in_repository": false,
+      "validation_status": "VALID",
+      "active_threads": 0
+    },
+    "state": "RUNNING",
+    "validation": "VALID",
+    "stats": {
+      "taskCount": 1,
+      "flowFilesOut": 0,
+      "activeThreadCount": 0,
+      "tasksDuration": "00:00:00.366"
+    },
+    "bulletins": []
+  },
+  "ssh": {
+    "checks": [
+      {
+        "command": "id",
+        "exit_code": 64,
+        "denied": true
+      },
+      {
+        "command": "production-tick;id",
+        "exit_code": 64,
+        "denied": true
+      }
+    ]
+  },
+  "scope": "existing continuous flow control; no new crawler run; no recovery takeover test"
+}

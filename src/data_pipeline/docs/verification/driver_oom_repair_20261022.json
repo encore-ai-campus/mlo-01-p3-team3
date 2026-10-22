@@ -1,0 +1,34 @@
+{
+  "status": "DEPLOYED_AND_CONTINUOUS_RESTARTED",
+  "date_kst": "2026-10-22",
+  "local_tests": 114,
+  "server_tests": 114,
+  "restart_time_kst": "2026-10-22T00:29:55+09:00",
+  "resume_epoch": 13,
+  "checkpoint_deleted": false,
+  "driver_heap": "768m",
+  "actual_jvm_exit_on_oom_verified": true,
+  "full_batch_completion_verified": false,
+  "next_epoch_jvm_rotation_verified": false,
+  "source_sha256": {
+    "product_pipeline/bronze/delta.py": "80effc24fda8056f1c781a30b4a2ee7033095c00f752b49d2f3d4614a49494f1",
+    "product_pipeline/bronze/lease.py": "444896371d5c1b24363a495c123465973a52995064313f48336d2f8d2e7df4e6",
+    "product_pipeline/bronze/cli.py": "e891e8d727989752e44202cd303a2993730866fbf15da8701d9d343c714e3669",
+    "product_pipeline/silver/cli.py": "e0208ca0ec2f19e6fa59aee4913f40a60bca89ae1e5b264d3af27f8e8333833d",
+    "product_pipeline/gold/cli.py": "3c79ca2576c484f3fc97b8339bfd651cad596fe4becfc250ce39fe5552ab4bd7",
+    "product_pipeline/spark_session.py": "d822e20b85fa0f7fb9639beaeb74fd2cab599ff7919cd29dbe63dab9e385e818",
+    "product_pipeline/operations/automatic_recovery.py": "8658302976a13952f65a7d33e520864ee7e7970e91a11d2616b9c84bbae359ba",
+    "tests/test_driver_memory.py": "e17f34c264f4c771f00b246b264feb7cf7d182f9cfb6a6894e9a22068ae27fec",
+    "tests/test_bronze_optimization.py": "b47ff01bbe862209b1c346ae29ad7ad86709cf426b2ecef8750e2a2fd3b23b1e",
+    "docs/server_setup/production_pending_work.py": "72e7df0a9b920e16446669556c8d0f6e5be5b77725234d91b46c470ad0c7c9d9",
+    "docs/server_setup/production_continuous_work.py": "ccd40e1cf975142a56389291151f3c8d318e9051e4d94bffe44b9980ce0d7825"
+  },
+  "verification_limits": [
+    "No artificial OOM injected into production",
+    "Actual full batch completion and next epoch JVM rotation still require live evidence"
+  ],
+  "actual_sdk_upload_readback_delete_verified": true,
+  "actual_file_based_bronze_append_verified": true,
+  "observed_bronze_version": 276,
+  "observed_bronze_commit_time_kst": "2026-10-22T00:31:43.210+09:00"
+}

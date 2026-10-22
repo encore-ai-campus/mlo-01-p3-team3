@@ -13,7 +13,10 @@ def kafka_options(options, settings):
             or any(k in options for k in ('kafka.group.id', 'kafka.enable.auto.commit', 'kafka.auto.offset.reset'))
             or any(not isinstance(v, str) for v in options.values())):
         raise PipelineError('BRONZE_INVALID_KAFKA_OPTIONS')
-    return {**options, 'subscribe': settings.kafka_topic, 'startingOffsets': 'earliest',
+    from .recovery import recovery
+    from ..contracts import canonical
+    value=recovery(settings)
+    return {**options, 'subscribe': settings.kafka_topic, 'startingOffsets': canonical(value['starting_offsets']) if value else 'earliest',
             'failOnDataLoss': 'true', 'maxOffsetsPerTrigger': str(settings.max_records)}
 
 
@@ -21,7 +24,8 @@ def bind_checkpoint(spark, settings, *, lease=None):
     if lease is None:
         raise PipelineError('BRONZE_WRITER_LEASE_REQUIRED')
     lease.check(settings)
-    path = spark._jvm.org.apache.hadoop.fs.Path(settings.checkpoint_path)
+    from .recovery import checkpoint_path,recovery
+    path = spark._jvm.org.apache.hadoop.fs.Path(checkpoint_path(settings))
     fs = path.getFileSystem(spark._jsc.hadoopConfiguration())
     marker = spark._jvm.org.apache.hadoop.fs.Path(path, '_pipeline_target')
     if fs.exists(marker):
@@ -45,6 +49,21 @@ def bind_checkpoint(spark, settings, *, lease=None):
         finally:
             stream.close()
         lease.check(settings)
+    value=recovery(settings)
+    if value:
+        proof=spark._jvm.org.apache.hadoop.fs.Path(path,'_pipeline_recovery')
+        if fs.exists(proof):
+            stream=fs.open(proof)
+            try:
+                if stream.readUTF()!=value['content_hash']:raise Conflict('BRONZE_RECOVERY_CHECKPOINT_CHANGED')
+            finally:stream.close()
+        else:
+            if any(p.getPath().getName()!='_pipeline_target' for p in fs.listStatus(path)):
+                raise Conflict('BRONZE_RECOVERY_CHECKPOINT_UNBOUND')
+            lease.check(settings);stream=fs.create(proof,False)
+            try:stream.writeUTF(value['content_hash']);stream.hflush()
+            finally:stream.close()
+            lease.check(settings)
 
 
 def check_kafka_cluster(spark, options, settings):
@@ -60,6 +79,8 @@ def check_kafka_cluster(spark, options, settings):
         actual = admin.describeCluster().clusterId().get(10000, spark._jvm.java.util.concurrent.TimeUnit.MILLISECONDS)
         if actual != settings.kafka_cluster_id:
             raise Conflict('BRONZE_KAFKA_CLUSTER_CONFLICT')
+        from .recovery import check_frontiers
+        check_frontiers(spark,admin,settings)
     except PipelineError:
         raise
     except Exception:
@@ -69,18 +90,26 @@ def check_kafka_cluster(spark, options, settings):
             admin.close(spark._jvm.java.time.Duration.ofSeconds(5))
 
 
-def start(spark, settings, source, options, available_now=False, progress=None, *, lease=None):
+def start(spark, settings, source, options, available_now=False, progress=None, *, lease=None,window_control=None):
     if lease is None:
         raise PipelineError('BRONZE_WRITER_LEASE_REQUIRED')
     lease.check(settings)
     options = kafka_options(options, settings)
-    check_kafka_cluster(spark, options, settings)
+    from .metrics import current,bind,timed
+    with timed('kafka_connect_and_frontiers'):check_kafka_cluster(spark, options, settings)
     lease.check(settings)
-    bind_checkpoint(spark, settings, lease=lease)
-    sink = DeltaSink(spark, settings, lease=lease)
+    with timed('checkpoint_binding'):bind_checkpoint(spark, settings, lease=lease)
+    profile=current()
+    with timed('delta_target_open'):sink = DeltaSink(spark, settings, lease=lease)
     frame = spark.readStream.format('kafka').options(**options).load()
 
-    def batch(data, batch_id):
+    def callback(data, batch_id):
+        # Fail before any I/O beyond a bounded window. Returning normally here
+        # would incorrectly acknowledge offsets for data we have not stored.
+        if window_control is not None and window_control['limit'] and window_control['calls']>=window_control['limit']:
+            window_control['boundary_batch_id']=int(batch_id)
+            if progress:progress(dict(batch_id=batch_id,status='WINDOW_BOUNDARY'))
+            raise PipelineError('BRONZE_WINDOW_BOUNDARY')
         started, execution_id = time.monotonic(), str(uuid4())
         # Executed on Driver: credentials never serialized into Executor closures.
         messages = (Message(row.topic, int(row.partition), int(row.offset),
@@ -96,15 +125,41 @@ def start(spark, settings, source, options, available_now=False, progress=None, 
         except Exception as exc:
             # Spark prints Python callback exceptions; never expose raw SDK credentials there.
             if progress:
+                # Class/condition identifiers only; SDK messages may contain
+                # source bodies or authentication details.
+                diagnostic={}
+                java=getattr(exc,'java_exception',None)
+                causes=[]
+                if java is not None:
+                    for _ in range(8):
+                        try:
+                            name=str(java.getClass().getName())
+                            condition=None
+                            try:condition=java.getErrorClass()
+                            except Exception:pass
+                            import re
+                            causes.append(dict(type=name,condition=condition if isinstance(condition,str) and re.fullmatch(r'[A-Z0-9_.]+',condition) else None))
+                            java=java.getCause()
+                            if java is None:break
+                        except Exception:break
+                    diagnostic['java_causes']=causes
                 progress({'batch_id': batch_id, 'status': 'FAILED', 'execution_id': execution_id,
                           'error_code': exc.code if isinstance(exc, PipelineError) else type(exc).__name__,
+                          **diagnostic,
                           'duration_ms': round((time.monotonic() - started) * 1000)})
             raise PipelineError(exc.code if isinstance(exc, PipelineError) else type(exc).__name__) from None
+        if window_control is not None and result.get('received',0)>0:window_control['calls']+=1
         if progress:
             progress({**result, 'status': 'COMMITTED', 'execution_id': execution_id,
                       'duration_ms': round((time.monotonic() - started) * 1000)})
 
-    writer = (frame.writeStream.foreachBatch(batch).option('checkpointLocation', settings.checkpoint_path)
+    def batch(data,batch_id):
+        # Py4J invokes foreachBatch on another Python thread.
+        with bind(profile),timed('foreach_batch'):
+            return callback(data,batch_id)
+
+    from .recovery import checkpoint_path
+    writer = (frame.writeStream.foreachBatch(batch).option('checkpointLocation', checkpoint_path(settings))
               .queryName('product-bronze-' + settings.environment_id))
     lease.check(settings)
     return writer.trigger(availableNow=True).start() if available_now else writer.trigger(

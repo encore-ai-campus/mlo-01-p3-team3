@@ -22,6 +22,7 @@ def columns(table): return COMMON + EXTRA[table].split()
 
 
 class DeltaSink(SilverDeltaSink):
+    supports_history_bridge=False
     keys, schema_tables, schema_columns = KEYS, EXTRA, staticmethod(columns)
     arrays = {'quality_reason_codes','publication_reason_codes','reason_codes'}
     decimals = {'width_mm','depth_mm','height_mm','price_krw','amount'}

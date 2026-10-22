@@ -58,6 +58,14 @@ class Collection:
 
 
 class LeaseTests(unittest.TestCase):
+    def test_renewal_failure_records_safe_first_cause_without_sdk_message(self):
+        collection=Collection();lease=self.lease(collection);lease.acquire();collection.fail=True
+        with self.assertRaises(PipelineError):lease.check()
+        proof=lease.loss_diagnostic
+        self.assertEqual(proof['phase'],'renew');self.assertEqual(proof['exception_type'],'OSError')
+        self.assertNotIn('server unavailable',str(proof));self.assertNotIn(lease.token,str(proof))
+        with self.assertRaises(PipelineError):lease.check()
+        self.assertEqual(lease.loss_diagnostic,proof)
     def lease(self, collection, target=None):
         from product_pipeline.bronze.lease import MongoLease
         return MongoLease(target or settings(), 'unused', collection=collection)
@@ -111,13 +119,15 @@ class LeaseTests(unittest.TestCase):
         from product_pipeline.bronze.lease import MongoLease
         client, collection = MagicMock(), Collection()
         client.get_database.return_value.__getitem__.return_value = collection
-        with patch('pymongo.MongoClient', return_value=client):
+        with patch('pymongo.MongoClient', return_value=client) as create:
             lease = MongoLease(settings(), 'ops-uri')
             lease.acquire()
+        self.assertEqual(create.call_args.kwargs['socketTimeoutMS'],20000)
+        self.assertFalse(create.call_args.kwargs['retryWrites'])
         args, options = client.get_database.call_args
         self.assertEqual(args, ('pipeline_ops',))
         self.assertEqual(options['read_concern'].document, {'level': 'majority'})
-        self.assertEqual(options['write_concern'].document, {'w': 'majority', 'j': True, 'wtimeout': 5000})
+        self.assertEqual(options['write_concern'].document, {'w': 'majority', 'j': True, 'wtimeout': 15000})
         self.assertEqual(options['read_preference'].name, 'Primary')
         client.get_database.return_value.__getitem__.assert_called_once_with('bronze_writer_leases')
 
@@ -129,6 +139,7 @@ class LeaseTests(unittest.TestCase):
         lease.acquire()
         sink = object.__new__(DeltaSink)
         sink.settings = settings()
+        sink._prepared={}
         sink.lease, sink.spark = lease, MagicMock()
         sink.paths, sink.schemas = {'raw': 'file:///localtest/raw'}, {'raw': StructType()}
         sink.existing = lambda *args: {}
@@ -141,6 +152,7 @@ class LeaseTests(unittest.TestCase):
                 patch('pyspark.sql.functions.explode'), self.assertRaises(PipelineError):
             sink.insert('raw', [{'raw_document_id': 'a'}])
         delta.forPath.assert_not_called()
+        sink.spark.range.return_value.select.return_value.select.return_value.write.format.assert_not_called()
 
     def test_partial_overlapping_targets_block_and_do_not_delete_owner(self):
         collection = Collection()

@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-21",
+  "scope": "local automated tests; no new server installation or business ingestion",
+  "source_commit": "44edde8",
+  "pipeline": {
+    "input": "git archive of committed src/data_pipeline in a separate directory; original v2 publication tests retained",
+    "command": "python -m unittest discover -s tests -p 'test_*.py' -q",
+    "tests": 488,
+    "duration_seconds": 128.292,
+    "result": "OK"
+  },
+  "mongodb_tools": {
+    "command": "python -m unittest discover -s ops/mongodb/tests -p 'test_*.py' -q",
+    "tests": 18,
+    "duration_seconds": 15.190,
+    "result": "OK",
+    "installation_performed": false
+  },
+  "worktree_only_pipeline_run": {
+    "tests": 479,
+    "duration_seconds": 120.450,
+    "result": "OK",
+    "note": "Pending publication test deletion edits are excluded from the commits; this count is not the committed source count."
+  },
+  "partial_test_counts_are_not_summed": true,
+  "server_current_state_evidence": "kafka_retention_recovery_20261021.json"
+}

@@ -73,6 +73,30 @@ python run_operations.py release-verify --bundle .runtime/garage-v241-release
 
 고정 S3A JAR은 hadoop-aws 3.4.2와 AWS bundle 2.29.52이며 기존 /opt/pj3/s3-clients/hadoop-3.4.2/ 배치를 사용한다. NiFi Controller Service의 키는 Python child에 자동 주입되지 않는다. Java/Python 각각 역할별 보호 파일을 메모리에서 읽어야 한다.
 
+### Worker JAR 누적 방지 (2026-10-21 적용)
+
+`spark_storage.storage_options`는 고정 S3A JAR 2개를 `spark.jars` 배포 목록에 추가하지 않는다. 기존 `local:` 항목도 제거하고 Driver/Executor의 `extraClassPath`에 동일한 `/opt/pj3/s3-clients/hadoop-3.4.2/` 원본 경로를 지정한다. 다른 Kafka/Delta JAR 배포는 유지한다. 별도 SDK 버전 충돌은 차단하며, 공유 Spark 세션의 동일성 검사에도 두 classpath 설정을 포함한다. 새 Driver JVM이 시작되기 전에 적용해야 하며 이미 시작한 JVM에 설정만 바꿔 소급 적용하지 않는다. 모든 Master/Worker에 같은 경로와 체크섬의 원본을 미리 준비한다.
+
+큰 AWS bundle은 기존 641,534,749바이트 원본을 직접 읽는다. `/opt` 원본과 원천 데이터·Delta·체크포인트는 정리 대상이 아니다. 나머지 작업별 JAR과 executor stdout/stderr는 Spark 기본 Worker 정리 기능으로 관리한다. 종료된 작업 중 보관 기준 1시간이 지난 폴더를 60초마다 정리한다. 실행 중인 작업은 대상에서 제외한다. 중앙 Driver 로그·단계별 결과와 복구 원장은 별도 경로에 유지한다. [Spark 4.1.3의 Worker 정리 설정](https://spark.apache.org/docs/4.1.3/spark-standalone.html)에 따른 정책이며 즉시 삭제나 디스크 사용량의 강제 상한은 아니다. 기본 7일 보관은 이 서버의 40GB 디스크에 길어 명시적으로 단축했다.
+
+각 Worker의 `/etc/pj3/spark/spark-env.sh`에 다음 관리 블록을 적용한다. 다른 JVM/TLS 옵션을 덮어쓰지 않는다.
+
+```bash
+export SPARK_WORKER_OPTS="${SPARK_WORKER_OPTS:-} -Dspark.worker.cleanup.enabled=true -Dspark.worker.cleanup.interval=60 -Dspark.worker.cleanup.appDataTtl=3600"
+```
+
+재현 가능한 [노드별 적용 도구](server_setup/configure_spark_worker_cleanup.py)는 기본 조회만 수행한다. 유지보수 시간에 모든 업무 Driver를 중지하고 Master UI에서 실행 중인 앱이 없음을 확인한 뒤 각 Worker에서 다음을 실행한다. 도구는 실행 중인 executor가 있으면 거절하며 설정의 기존 권한·소유자·다른 옵션을 보존한다. 백업은 고정 이름 하나로만 남기고 직접 작업 폴더를 삭제하지 않는다.
+
+```bash
+sudo python3 configure_spark_worker_cleanup.py
+sudo python3 configure_spark_worker_cleanup.py --apply
+sudo systemctl restart pj3-spark.service
+```
+
+재시작은 Worker를 한 대씩 수행하고 3대가 모두 ALIVE로 복귀했는지 확인한다. 이후 인프라 템플릿으로 `spark-env.sh`를 재배포할 때도 이 블록을 유지한다. Spark Master의 정상 보호 실행 환경에서 [읽기 전용 시험](server_setup/verify_spark_shared_jars.py)을 별도 Python 프로세스로 두 번 실행하면 공용 원본의 실제 로딩 위치·실제 Delta 입력 1행 읽기·Worker 참여를 확인할 수 있다. Worker 복사본 개수는 앱 밖에서 따로 비교한다.
+
+실제 시험 앱 `app-20261021094030-0022`(30.33초), `app-20261021094119-0023`(34.84초)에서 3개 Worker 참여, 실제 Bronze/Delta 1행 읽기, 공용 JAR 경로 로딩을 확인했다. 두 실행 후 Worker별 bundle 복사본은 모두 0개였고 원본 SHA256은 `62638f33045690c6bc5e496b54b0b2e89a9ad38cbedacdf6e017fea6bc85f55c`로 유지됐다. 3대 모두 오래된 격리 시험 폴더는 자동 삭제되고 최근 시험 폴더는 보존됐다. [실제 조회 결과](verification/spark_worker_cleanup_20261021.json)를 보존한다. 최초 시험은 시험 코드가 잘못 지정한 테이블 경로 때문에 실패했고, 실제 `/bronze/products` 경로를 확인해 수정한 뒤 위 두 시험을 통과했다. 이를 업무 전체 배치 성공으로 계산하지 않는다. 관련 로컬 자동 테스트는 26개다.
+
 초기 실패는 SDK before-send에서 If-None-Match: *의 존재를 확인했음에도 PUT 200과 다른 본문의 GET을 관측한 것이다. Caddy는 loopback reverse_proxy 구성이었고, [Garage v2.4.1 PUT 구현](https://github.com/deuxfleurs-org/garage/blob/v2.4.1/src/api/s3/put.rs)은 해당 조건을 판정하지 않는다. GET/HEAD 조건 처리와 혼동하지 않는다. 프록시 전 구간 패킷을 캡처한 시험은 아니다. 이후 버전에 대한 일반 판정도 아니다.
 
 - 초기 실패: [NiFi](verification/garage_20261018/nifi-result.json), [Spark](verification/garage_20261018/spark-result.json), [조건 헤더 진단](verification/garage_20261018/nifi-header-diagnosis.json). 시험 객체 삭제/반대 endpoint 404 확인. 실패를 성공으로 재분류하지 않는다.

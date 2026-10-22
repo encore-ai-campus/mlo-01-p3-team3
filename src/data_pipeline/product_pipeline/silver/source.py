@@ -21,6 +21,33 @@ class BronzeSource:
         required={'raw_document_id','observation_key','document_hash','raw_envelope_json','payload_json','source_code','source_product_id'}
         if not required.issubset(self.frame.columns):raise PipelineError('SILVER_BRONZE_SCHEMA_INVALID')
 
+    def restrict_window(self, window):
+        from pyspark.sql import functions as F
+        from ..windows import validate_window
+        validate_window(window)
+        if window['bronze_version']!=self.version:raise Conflict('PIPELINE_WINDOW_VERSION_CHANGED')
+        frame=self.frame.filter(F.col('observation_key').isin(window['observation_keys']))
+        rows=frame.select('observation_key','source_code','source_product_id').limit(101).collect()
+        if (sorted(r['observation_key'] for r in rows)!=window['observation_keys'] or
+            sorted({r['source_code']+':'+r['source_product_id'] for r in rows})!=window['product_keys']):
+            raise Conflict('PIPELINE_WINDOW_SOURCE_CHANGED')
+        self.frame=frame
+
+    def exclude_version(self, base_version):
+        if base_version<0:return
+        if type(base_version) is not int or base_version>self.version:raise PipelineError('PIPELINE_WINDOW_VERSION_CHANGED')
+        from ..delta_range import append_files
+        # Bronze's own tables are unpartitioned and use physical column names.
+        # Column mapping or an unfamiliar log operation keeps the old path.
+        if not any('delta.columnMapping.id' in f.metadata for f in self.frame.schema):
+            files=append_files(self.spark,self.settings.bronze_path,base_version,self.version)
+            if files is not None:
+                self.frame=(self.spark.read.schema(self.frame.schema).parquet(*files) if files
+                            else self.frame.limit(0))
+                return
+        old=self.spark.read.format('delta').option('versionAsOf',base_version).load(self.settings.bronze_path)
+        self.frame=self.frame.join(old.select('raw_document_id'),'raw_document_id','left_anti')
+
     def page(self,after):
         from pyspark.sql import functions as F
         frame=self.frame
@@ -52,6 +79,11 @@ class MongoStates:
             self.client.close();raise PipelineError('SILVER_REPLICA_SET_REQUIRED')
         db=self.client.get_database(settings.mongo_database,read_preference=ReadPreference.PRIMARY,read_concern=ReadConcern('majority'))
         self.collection=db['ingestion_observations']
+        self.database=db
+
+    def normalized(self, doc):
+        from ..catalog_input import CatalogInputs
+        return CatalogInputs(self.database['danawa_products']).get(doc)
 
     def get(self,raw_id,observation):
         value=self.collection.find_one({'observation_key':observation,'document._id':raw_id},

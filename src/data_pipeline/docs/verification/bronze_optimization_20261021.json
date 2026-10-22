@@ -1,0 +1,105 @@
+{
+  "at": "2026-10-21T05:24:27.787Z",
+  "count": 12,
+  "finished_at": "2026-10-21T05:27:52.437Z",
+  "kafka_published": false,
+  "legacy_sha256": "b14afa5fe3bd685396173ca08e0d6411124fac2cb3cf7cd7ed01fde9eeed0dca",
+  "production_checkpoint_written": false,
+  "production_raw_written": false,
+  "runs": [
+    {
+      "application_id": "app-20261021142430-0011",
+      "first_ms": 82569,
+      "mode": "merge_baseline",
+      "repeat_ms": 22567,
+      "repeated": {
+        "accepted": 12,
+        "batch_id": 1,
+        "event_candidates": 12,
+        "quarantined": 0,
+        "raw_candidates": 12,
+        "received": 12
+      },
+      "repeated_versions_unchanged": true,
+      "result": {
+        "accepted": 12,
+        "batch_id": 0,
+        "event_candidates": 12,
+        "quarantined": 0,
+        "raw_candidates": 12,
+        "received": 12
+      },
+      "runtime_metrics": {
+        "mongo_batch_read_calls": 2,
+        "mongo_batch_read_ms": 1136,
+        "mongo_document_read_calls": 24,
+        "mongo_document_read_ms": 0,
+        "mongo_documents": 24,
+        "mongo_raw_bytes": 4126238,
+        "raw_validation_calls": 24,
+        "raw_validation_ms": 74,
+        "target_open_calls": 1,
+        "target_open_ms": 26892
+      }
+    },
+    {
+      "application_id": "app-20261021142430-0011",
+      "first_ms": 48432,
+      "mode": "append_optimized",
+      "repeat_ms": 4674,
+      "repeated": {
+        "accepted": 12,
+        "batch_id": 1,
+        "event_candidates": 12,
+        "quarantined": 0,
+        "raw_candidates": 12,
+        "received": 12
+      },
+      "repeated_versions_unchanged": true,
+      "result": {
+        "accepted": 12,
+        "batch_id": 0,
+        "event_candidates": 12,
+        "quarantined": 0,
+        "raw_candidates": 12,
+        "received": 12
+      },
+      "runtime_metrics": {
+        "delta_append_calls": 6,
+        "delta_append_ms": 23831,
+        "delta_appended_rows": 25,
+        "delta_batch_lookup_calls": 2,
+        "delta_batch_lookup_ms": 4783,
+        "delta_lookup_calls": 7,
+        "delta_lookup_ms": 16446,
+        "delta_storage_verification_calls": 2,
+        "delta_storage_verification_ms": 6414,
+        "delta_target_create_calls": 3,
+        "delta_target_create_ms": 6331,
+        "delta_target_metadata_calls": 1,
+        "delta_target_metadata_ms": 251,
+        "mongo_batch_read_calls": 2,
+        "mongo_batch_read_ms": 1423,
+        "mongo_document_read_calls": 24,
+        "mongo_document_read_ms": 0,
+        "mongo_documents": 24,
+        "mongo_raw_bytes": 4126238,
+        "raw_validation_calls": 24,
+        "raw_validation_ms": 78,
+        "target_open_calls": 1,
+        "target_open_ms": 17391
+      }
+    }
+  ],
+  "same_source_and_event_contents": true,
+  "session_metrics": {
+    "spark_session_reuses": 1,
+    "spark_sessions_started": 1,
+    "spark_shutdown_calls": 1,
+    "spark_shutdown_ms": 423,
+    "spark_startup_ms": 6931
+  },
+  "status": "VERIFIED",
+  "trial_prefix": "s3a://pj3-data/lake/pj3-danawa/bronze/verification/bronze-optimization-9b9e20c5f0cc41fb884a501f8a69fbba",
+  "uncertain_append_reused_without_duplicate": true
+}

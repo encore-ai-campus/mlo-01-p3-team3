@@ -70,7 +70,13 @@ def _product(db,item,plan,at):
     guard=_check_guard(db,item,catalog,at)
     if guard['price_history_mode']!=plan['price_history_mode']:raise Conflict('PUBLICATION_PRICE_HISTORY_POLICY_CHANGED')
     key=catalog['product_key'];old=db.get('products',dict(product_key=key))
-    if old and (old['status']!='ACTIVE' or old['source_code']!=catalog['source_code'] or old['source_product_id']!=catalog['source_product_id']):
+    activating=bool(old and old['status']=='PENDING_REVIEW' and plan.get('publication_mode')=='ACTIVATE_REVIEWED')
+    if old and plan.get('publication_mode')=='ACTIVATE_REVIEWED':
+        approval=guard.get('activation') or {}
+        if (approval.get('from_status')!=old['status'] or old['status'] not in {'PENDING_REVIEW','ACTIVE'} or approval.get('product_id')!=old['id'] or
+                approval.get('current_snapshot_hash')!=digest(parse(old['gold_snapshot_ref_json'])) or not approval.get('evidence_ref')):
+            raise Conflict('PUBLICATION_ACTIVATION_BASELINE_CHANGED')
+    if old and ((old['status']!='ACTIVE' and not activating) or old['source_code']!=catalog['source_code'] or old['source_product_id']!=catalog['source_product_id']):
         raise Conflict('PUBLICATION_PRODUCT_STATE_CHANGED')
     version=db.get('pipeline_product_versions',dict(product_key=key))
     old_proofs=parse(version['field_versions_json']) if version else {}
@@ -87,6 +93,7 @@ def _product(db,item,plan,at):
         if comparable.get(field) is not None:comparable[field]=format(Decimal(str(comparable[field])).normalize(),'f')
     values,proofs=guarded_projection(comparable,incoming,lineage,old_proofs)
     newer=not version or sql_time(plan['as_of'])>=version['latest_as_of']
+    if activating and not newer:raise Conflict('PUBLICATION_ACTIVATION_STALE')
     values.update(extension_values(old,catalog,values,newer=newer))
     first=sql_time(catalog['first_collected_at'])
     if version and version['first_collected_at'] is not None:
@@ -105,6 +112,7 @@ def _product(db,item,plan,at):
             values.update(more);proofs.update({k:v for k,v in priceproof.items() if k=='price_krw'})
     if newer:
         values['category_id']=uuid_hex(catalog['service_category_id'])
+        if activating:values['status']='ACTIVE'
         # URL uses its own proof timestamp; plan evaluation time is not URL observation time.
         links=[r for r in tables['product_links'] if r['usable'] and r['link_kind']=='COMPARISON' and r['source_url']==catalog['comparison_url']]
         if links:
@@ -130,6 +138,14 @@ def _product(db,item,plan,at):
     if version:db.update('pipeline_product_versions',dict(product_key=key),current)
     else:db.identity('pipeline_product_versions',dict(product_key=key),current)
     image_ids=_images(db,product,catalog,tables,guard,at,newer,item,plan)
+    if plan.get('publication_mode')=='ACTIVATE_REVIEWED':
+        for relation in (guard.get('activation') or {}).get('image_relations',[]):
+            if relation not in image_ids:raise PipelineError('PUBLICATION_ACTIVATION_IMAGE_UNAPPROVED')
+            image=db.get('product_images',dict(id=image_ids[relation]))
+            review=parse(image['usage_review_json'])
+            if review.get('decision')!='APPROVED' or 'DISPLAY' not in review.get('scopes',[]):
+                raise PipelineError('PUBLICATION_ACTIVATION_IMAGE_UNAPPROVED')
+            db.update('product_images',dict(id=image['id']),dict(active=True,updated_at=at))
     if newer:
         representative=catalog['representative_image_key']
         if representative is not None and representative not in image_ids:
@@ -160,6 +176,8 @@ def _images(db,product,catalog,tables,guard,at,newer,item,plan):
         if (asset['checksum']!=image['image_checksum'] or asset['size_bytes']!=evidence['bytes'] or asset['status']!='AVAILABLE' or
                 asset['width_px']!=evidence['width'] or asset['height_px']!=evidence['height']):
             raise Conflict('PUBLICATION_ASSET_CONFLICT')
+        if plan.get('publication_mode')=='ACTIVATE_REVIEWED' and owner.get('asset_policy_hash')!=digest(parse(asset['usage_policy_json'])):
+            raise Conflict('PUBLICATION_ASSET_POLICY_CHANGED')
         link,created=db.identity('product_images',dict(product_id=product['id'],source_code=catalog['source_code'],
             source_product_id=catalog['source_product_id'],image_variant=image['image_slot'],
             raw_document_id=image['raw_document_id'],source_version=image['source_version']),
@@ -176,7 +194,8 @@ def _images(db,product,catalog,tables,guard,at,newer,item,plan):
         # Existing active/review fields are NEVER overwritten; new links stay inactive
         # until the service owner explicitly activates them.
         if link['image_relation_key']!=image['image_relation_key']:
-            raise Conflict('PUBLICATION_IMAGE_RELATION_CHANGED')
+            if plan.get('publication_mode')!='ACTIVATE_REVIEWED':raise Conflict('PUBLICATION_IMAGE_RELATION_CHANGED')
+            db.update('product_images',dict(id=link['id']),dict(image_relation_key=image['image_relation_key']))
         if not created and newer:db.update('product_images',dict(id=link['id']),dict(display_order=image['display_order'],updated_at=at,
             gold_recommendation_approved=image['recommendation_approved'],gold_review_snapshot_hash=image['review_snapshot_hash'],
             source_evidence_json=image['evidence_json'],gold_snapshot_ref_json=snapshot_ref(item,plan,[('product_images',image)])))
@@ -195,8 +214,10 @@ def _links(db,product,tables,item,plan,at):
 
 
 def _offers(db,product,catalog,tables,guard,at,max_age,item,plan):
+    _observed_offers(db,product,catalog,tables,at,item,plan)
     grouped={}
     for offer in tables['current_offers']:
+        if parse(offer['evidence_json']).get('offer_publication_status')=='OBSERVED_UNVERIFIED':continue
         if offer['offer_key'] in grouped:raise PipelineError('PUBLICATION_MULTIPLE_CURRENT_CONDITIONS')
         grouped[offer['offer_key']]=offer
     for key,offer in grouped.items():
@@ -241,6 +262,58 @@ def _offers(db,product,catalog,tables,guard,at,max_age,item,plan):
             raise Conflict('PUBLICATION_HISTORY_TERMS_CONFLICT')
 
 
+def _observed_offers(db,product,catalog,tables,at,item,plan):
+    """Store identified seller prices without asserting regular price or purchase readiness."""
+    for offer in tables['current_offers']:
+        proof=parse(offer['evidence_json'])
+        if proof.get('offer_publication_status')!='OBSERVED_UNVERIFIED':continue
+        identity,price=proof['identity'],proof['price']
+        if (not all(identity.get(k) for k in ('source_seller_id','source_offer_id','option_key'))
+                or offer['purchase_ready'] or offer['purchase_url'] is not None or offer['currency']!='KRW'):
+            raise PipelineError('PUBLICATION_OBSERVED_OFFER_INVALID')
+        stamp=sql_time(offer['observed_at'])
+        if not stamp or stamp>at:raise PipelineError('PUBLICATION_OBSERVED_OFFER_TIME_INVALID')
+        values=dict(product_id=product['id'],source_code=catalog['source_code'],
+            source_product_id=catalog['source_product_id'],source_seller_id=identity['source_seller_id'],
+            source_offer_id=identity['source_offer_id'],source_variant_id=identity['option_key'],
+            title=None,price_amount=money(offer['amount']),currency='KRW',purchase_url=None,
+            availability='UNKNOWN',collected_at=stamp,latest_raw_document_id=offer['raw_document_id'],
+            eligible=False,price_basis='UNKNOWN',price_conditions_json=price['condition_json'],
+            option_attributes_json=canonical(dict(option_key=identity['option_key'],
+                status=parse(identity['identity_evidence_json']).get('option_status','UNKNOWN'))),
+            gold_snapshot_ref_json=snapshot_ref(item,plan,[('current_offers',offer)]),created_at=at,updated_at=at)
+        saved,created=db.identity('offers',dict(offer_key=offer['offer_key']),values)
+        if saved['product_id']!=product['id'] or any(saved[k]!=values[k] for k in ('source_seller_id','source_offer_id','source_variant_id')):
+            raise Conflict('PUBLICATION_OFFER_IDENTITY_CONFLICT')
+        if not created:
+            if saved['collected_at']==stamp and (saved['price_amount']!=values['price_amount'] or saved['currency']!='KRW'):
+                raise Conflict('PUBLICATION_EQUAL_TIME_CONFLICT')
+            if saved['collected_at']<stamp or (saved['collected_at']==stamp and not saved['eligible']):
+                db.update('offers',dict(id=saved['id']),{k:v for k,v in values.items() if k not in {
+                    'product_id','source_code','source_product_id','source_seller_id','source_offer_id','source_variant_id','created_at'}})
+    # Observed prices are valid history even when their sale conditions are unverified.
+    if plan['price_history_mode'] not in {'SNAPSHOT_V1','PRICE_EFFECT_V2'}:return
+    for history in tables['offer_history']:
+        if history['eligible'] or history['currency']!='KRW' or history['amount'] is None:continue
+        evidence=parse(history['evidence_json'])
+        if evidence['silver_price']['numeric_status']!='CONFIRMED' or Decimal(str(history['amount']))<=0:continue
+        offer=db.get('offers',dict(offer_key=history['offer_key']))
+        if not offer:continue
+        if offer['product_id']!=product['id']:raise Conflict('PUBLICATION_OFFER_IDENTITY_CONFLICT')
+        stamp=sql_time(history['observed_at'])
+        if not stamp or stamp>at:continue
+        effect=evidence['price_effect']
+        key=history['snapshot_key'] if plan['price_history_mode']=='SNAPSHOT_V1' else history['price_effect_key']
+        values=dict(offer_id=offer['id'],raw_document_id=history['raw_document_id'],
+            price_amount=money(history['amount']),currency='KRW',purchase_url=None,availability='UNKNOWN',
+            collected_at=stamp,pricing_terms_json=canonical(effect),created_at=at,
+            gold_snapshot_ref_json=snapshot_ref(item,plan,[('offer_history',history)]))
+        old,created=db.identity('offer_snapshots',dict(snapshot_key=key),values)
+        if not created and any(old[k]!=values[k] for k in ('offer_id','price_amount','currency','collected_at')):
+            raise Conflict('PUBLICATION_IMMUTABLE_HISTORY_CONFLICT')
+        if not created and parse(old['pricing_terms_json'])!=effect:raise Conflict('PUBLICATION_HISTORY_TERMS_CONFLICT')
+
+
 def publish(plan,db,*,hook=None):
     started=time.monotonic();verify_plan(plan)
     if plan['target']!=db.target:raise Conflict('PUBLICATION_TARGET_MISMATCH')
@@ -264,7 +337,10 @@ def publish(plan,db,*,hook=None):
         for item in plan['products']:
             staged=db.get('pipeline_publication_staging',dict(**identity,product_key=item['product_key']))
             if staged['body_hash']!=digest(item) or parse(staged['body_json'])!=item:raise Conflict('PUBLICATION_STAGING_CHANGED')
-            ids[item['product_key']]=_product(db,item,plan,at)
+            if plan.get('publication_mode')=='PENDING_REVIEW':
+                from .pending import product as pending_product
+                ids[item['product_key']]=pending_product(db,item,plan,at)
+            else:ids[item['product_key']]=_product(db,item,plan,at)
             if hook:hook('PRODUCT_WRITTEN')
         db.update('pipeline_publications',identity,dict(status='COMPLETED',completed_at=at))
         if hook:hook('BEFORE_COMMIT')
@@ -321,9 +397,13 @@ def attribute_projection(previous, incoming):
             continue
         old_time=old.get('observed_at')
         new_time=max((r.get('observed_at') or '' for r in candidates),default='')
-        semantic=lambda r: [r.get(k) for k in ('value_type','value_text','value_decimal','value_min','value_max','codes','unit')]
-        if old_time and new_time and utc(new_time)==utc(old_time) and any(semantic(r)!=semantic(old) for r in candidates if r.get('observed_at') and utc(r['observed_at'])==utc(old_time)):
-            raise Conflict('PUBLICATION_ATTRIBUTE_EQUAL_TIME_CONFLICT')
+        semantic=lambda r: canonical([r.get(k) for k in ('value_type','value_text','value_decimal','value_min','value_max','codes','unit')])
+        if old_time and new_time and utc(new_time)==utc(old_time):
+            # A product may carry several confirmed dimensions under an unresolved
+            # axis. Compare complete value sets, not every old/new cross pair.
+            prior={semantic(r) for r in retained if key(r)==identity and r.get('observed_at') and utc(r['observed_at'])==utc(old_time)}
+            current={semantic(r) for r in candidates if r.get('observed_at') and utc(r['observed_at'])==utc(old_time)}
+            if prior!=current:raise Conflict('PUBLICATION_ATTRIBUTE_EQUAL_TIME_CONFLICT')
         if not new_time and any(semantic(r)!=semantic(old) for r in candidates):
             raise PipelineError('PUBLICATION_ATTRIBUTE_TIME_UNAVAILABLE')
         if old_time and (not new_time or utc(new_time)<utc(old_time)):
@@ -399,6 +479,11 @@ def _sources(db, reference, *, depth=0, seen=None):
 
 
 def audit_publication(plan,db):
+    if plan.get('publication_mode')=='PENDING_REVIEW':
+        verify_plan(plan)
+        if plan['target']!=db.target:raise Conflict('PUBLICATION_TARGET_MISMATCH')
+        from .pending import audit
+        return audit(plan,db)
     from ..operations.flow_audit import sql_plan_audit
     verify_plan(plan)
     if plan['target']!=db.target:raise Conflict('PUBLICATION_TARGET_MISMATCH')

@@ -41,6 +41,16 @@ class Sink:
 
 
 class SilverRuntimeTests(unittest.TestCase):
+    def test_single_engine_checks_receipt_after_durable_write(self):
+        class CorruptReceiptSink(Sink):
+            def insert(self,table,rows):
+                super().insert(table,rows)
+                if table=='pipeline_evaluations':
+                    self.data[table][rows[0]['evaluation_key']]['record_hash']='0'*64
+        with tempfile.TemporaryDirectory() as d:
+            doc,state=sample(d)
+            with self.assertRaises(Conflict):self.execute(doc,States(state),CorruptReceiptSink())
+
     def execute(self,doc,state,sink,**kw):
         return process(doc,state,sink,inputs(),processing_run_id=kw.get('run_id',RUN),as_of=AS_OF,
                        bronze_version=3,bronze_path='file:///bronze',hook=kw.get('hook'))

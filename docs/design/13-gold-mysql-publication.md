@@ -2,7 +2,7 @@
 
 2026-10-19: [추천 서버 카탈로그 어댑터](../interior-recommender/server-catalog.md)를 코드로 준비했다. 완료 게시·현재 상품/이미지·이용 범위·MySQL 임베딩 참조와 고정 Delta export를 대조해 기존 추천 인덱스를 만들고 반환/클릭 시 현재 상태를 재검증한다. 등록안은 출력만 하며 DB 등록·인덱스 활성화·Gold 재평가·업무 데이터 게시와 실제 서버 배포는 별도다. 아래 기존 어댑터 미구현 설명은 이전 상태와 구분한다.
 
-2026-10-18 설계 계약. 필수 컬럼·관계는 `publication/schema.py`의 `document-publication-v2`, `sql/publication_reference_v2.sql`, 게시 writer·계획·읽기 전용 audit에 구현했다. 기존 DB 확장은 별도 적용/롤백 SQL을 사용하며 [스키마 반영·인수 가이드](../../src/data_pipeline/docs/mysql_schema_rollout.md)를 따른다. 코드 구현·격리 검증과 실제 운영 DB 적용·업무 게시·추천 어댑터 인수는 구분한다.
+2026-10-18 설계 계약. 필수 컬럼·관계는 `publication/schema.py`의 `document-publication-v2`, `sql/publication_reference_v2.sql`, 게시 writer·계획·읽기 전용 audit에 구현했다. 기존 DB 확장은 별도 적용/롤백 SQL을 사용하며 [스키마 반영·인수 가이드](../../src/data_pipeline/docs/mysql_schema_rollout.md)를 따른다. 코드 구현·격리 검증과 실제 운영 DB 적용·업무 게시·추천 어댑터 인수는 구분한다. v1 SQL만으로 현재 배포를 준비하지 않는다.
 
 [데이터 모델](03-data-model.md) · [상품 속성 사전](data-dictionary/02-products.md#gold-게시-필수-확장-컬럼) · [게시 실행](../../src/data_pipeline/docs/mysql_publication.md)
 
@@ -108,7 +108,7 @@ Gold는 정제된 상품·판매·이미지·링크 정보의 게시 기준이�
 
 ## 5. 구현 차이와 인수 기준
 
-현재 v2 게시기는 상품 확장 필드·링크 관측·Gold 원문 참조를 기록하고, 임베딩/인덱스 테이블을 포함한 필수 구조를 검사한다. 임베딩 결과 등록·인덱스 활성화·추천 어댑터 연결은 별도 담당 범위다. 추천 로컬 구현은 `application/direct.py`에서 파일 카탈로그를 읽는다. 2026-10-18 서버 검증 기록의 MySQL 업무 테이블 부재와 시험 스키마 검증을 운영 서비스 구축 완료로 해석하지 않는다.
+현재 v2 게시기는 상품 확장 필드·링크 관측·Gold 원문 참조를 기록하고 임베딩/인덱스 참조 구조를 검사한다. 임베딩 생성·인덱스 활성화·추천 어댑터 연결은 별도 담당 범위다. 추천 로컬 구현은 `application/direct.py`에서 파일 카탈로그를 읽는다. 2026-10-18 서버 검증 기록의 MySQL 업무 테이블 부재와 시험 스키마 검증을 운영 서비스 구축 완료로 해석하지 않는다.
 
 DDL 작성 시 기존 참조 스키마 전체 + 본 문서의 필수 확장 + 임베딩/인덱스 원장을 함께 대조한다. 이후 ORM/migration, `schema.py`와 참조 SQL, preflight, plan의 계약 버전/hash, runner, 추천 어댑터를 함께 수정한다. 문서만으로 DB에 적용하지 않는다.
 

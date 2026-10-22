@@ -191,6 +191,12 @@ raw.collected_at은 상품 wrapper 최초 시각이다. source listing의 가격
 
 현재 seller_id는 판매자 링크/식별 문자열일 수 있고 stable source_offer_id가 항상 있지 않다. URL의 임시 클릭 토큰이나 배열 위치·이름·가격으로 offer_key를 만들지 않는다. 안정 ID가 검증되지 않은 판매 항목은 raw/Silver에 보존하고 OFFER_ID_UNVERIFIED로 서비스 Offer 생성을 보류한다. 판매 항목 자체가 seller ID 안에서 유일함을 증명하면 검증 규칙 버전과 근거로 대체 식별을 정의한 뒤 사용한다.
 
+2026-10-19 보완: 보존된 `https://prod.danawa.com/bridge/loadingBridge.html` 주소에서 단일 `pcode`가 원천 상품 ID, 단일 `cmpnyc`가 수집된 seller_id와 일치할 때 단일 `link_pcode`를 판매 상품 ID로 추출한다. `r` 등 클릭·추적 파라미터는 키에 포함하지 않는다. 중복 파라미터·불일치·다른 호스트·명시 식별자와 충돌은 보류한다. 원천 MongoDB 문서는 수정하지 않고 Silver 1.0.4의 새 평가에 추출 근거와 규칙 버전을 보존한다.
+
+옵션을 수집하지 않은 판매 항목은 내부 키의 누락 표식 `UNKNOWN`으로 구분하고 옵션 상태도 UNKNOWN으로 유지한다. 이는 옵션 없음의 확정값인 UNSPECIFIED와 다르다. Gold 1.0.1은 식별된 판매처의 유효한 원화 가격 관측을 `OBSERVED_UNVERIFIED`로 보존한다. MySQL offers에는 `eligible=false`, `price_basis=UNKNOWN`, 구매 URL NULL로 게시하며 확인된 일반 판매가격·대표가격·구매 준비 완료로 승격하지 않는다. 확정된 이력 정책에 따라 offer_snapshots에 당시 관측과 미확인 조건을 보존한다. 집계 최저가로 가상 Offer를 만들지 않는다.
+
+검증(2026-10-19): 보존 원천 500개 상품의 판매 행 3,846개에서 URL 식별자 복원을 확인했다. 로컬 관련 테스트 63개와 서버 테스트 43개를 통과했다. 실제 고정 Bronze 버전 36의 첫 10개 상품을 새 Silver/Gold 평가로 처리하여 업무 MySQL `offers` 56행·`offer_snapshots` 56행을 생성했다. 56개 판매 키를 MongoDB 원천 URL과 대조했으며, 완료 게시 계획 10개를 재실행해 모두 REUSED·기존 UUID 유지·추가 이력 없음·상품 참조 누락 0건을 확인했다. 서버 증거는 `/var/lib/pj3/product-pipeline/spark/production-pending-20261019/offer-recovery-v1/first-publication-verification.json`이다. 이후 배치는 최대 100개 관측 단위로 이어진다. 이 증거는 전체 65,498개 상품의 완료를 의미하지 않는다.
+
 aggregate의 low_price/high_price/offer_count와 listing_prices는 집계 관측이다. offers 일반 판매 가격으로 넣지 않는다. 할인·회원·쿠폰·배송·설치·옵션이 불명확한 가격은 price_basis=UNKNOWN, 조건 원문 유지다. 확인한 일반 가격만 REGULAR로 표시하고 currency 없는 숫자에 KRW를 추정해서 붙이지 않는다. 현재 코드가 명시적으로 KRW로 추출한 값은 그 provenance와 함께 보존한다.
 
 comparison_url은 실제 product_url과 pcode 대응·허용 HTTPS 호스트를 확인해 등록한다. 직접 구매 URL이 없어도 비교 페이지 추천 경로는 가능하다. 검증되지 않은 직접 링크·실제 판매 가격을 만들지 않는다.
@@ -271,3 +277,7 @@ MySQL 게시·검수 읽기와 쓰기는 현재 Primary만 사용하고 Replica 
 8. 자동화: 단일 NiFi 실행 주체, lease 만료·낡은 token 거절·재시도 한도, 원장/스냅샷 백업 복구와 보관 기간 이후 재발행.
 
 대역 시험 통과는 실제 복제·저장소·Kafka 장애 검증과 구분한다. 통합 검증 결과에는 실행 ID·입력 버전·인프라 버전·건수·실패 사유를 기록한다. 소량 통과를 65,498건 전체나 서비스 추천 품질 검증으로 표시하지 않는다. 개발 범위는 1~4를 첫 인수 단위로 하고 5~8은 입력 계약·실행 환경을 갖춘 순서로 별도 인수한다.
+
+### Kafka 보관 만료 후 체크포인트 세대
+
+Bronze의 선택적 `checkpoint_recovery`는 고정 재발행 manifest와 Kafka topic ID·시작 위치를 연결한 명시적 복구 계약이다. 원래 `checkpoint_path`와 Delta target fingerprint는 유지하고 새 물리적 체크포인트를 추가하며, lease는 두 경로를 모두 보호한다. 임의 경로 교체·기존 offset/commit 수정·데이터 유실 건너뛰기는 허용하지 않는다. 원장의 EVENT_CONFIRMED는 Broker 전달 확인이고 Bronze 보존 완료와 구분한다. 재발행 때 원래 이벤트 ID·본문·발생 시각을 보존하고 새 전송 위치만 추가한다. [실행·복구 조건](kafka_retention_recovery.md)을 따른다.

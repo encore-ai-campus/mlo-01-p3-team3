@@ -48,11 +48,18 @@ def storage_options(options, *, writer=False, lease=None):
         raise PipelineError('SPARK_S3_SECRET_IN_OPTIONS_FORBIDDEN')
     if result.get('spark.delta.logStore.s3a.impl', LOG_STORE) != LOG_STORE:
         raise PipelineError('GARAGE_SPARK_LOGSTORE_CONFLICT')
-    # Keep the infrastructure's fixed Hadoop/SDK jars; never fetch another AWS SDK.
+    # These jars are provisioned at the same path on every node. spark.jars,
+    # even with local: URIs, stages them into each executor's work directory.
+    # Use the node-local classpath instead; keep ordinary application jars.
     extra = [j for j in result.get('spark.jars', '').split(',') if j]
     if any(('hadoop-aws' in j or 'bundle-' in j) and j not in {'local:'+p for p in jars} for j in extra):
         raise PipelineError('GARAGE_SPARK_JAR_CONFLICT')
-    result['spark.jars'] = ','.join(dict.fromkeys([*extra, *('local:'+p for p in jars)]))
+    result['spark.jars'] = ','.join(dict.fromkeys(j for j in extra if j not in {'local:'+p for p in jars}))
+    for name in ('spark.driver.extraClassPath', 'spark.executor.extraClassPath'):
+        entries = [p for p in result.get(name, '').split(':') if p]
+        if any(('hadoop-aws' in p or 'bundle-' in p) and p not in jars for p in entries):
+            raise PipelineError('GARAGE_SPARK_JAR_CONFLICT')
+        result[name] = ':'.join(dict.fromkeys([*jars, *entries]))
     trust = ('-Djavax.net.ssl.trustStore='+truststore+' -Djavax.net.ssl.trustStoreType=PKCS12'
              ' -Djavax.net.ssl.trustStorePassword=changeit')  # Public CA store, no private key.
     for name in ['spark.driver.extraJavaOptions', 'spark.executor.extraJavaOptions']:

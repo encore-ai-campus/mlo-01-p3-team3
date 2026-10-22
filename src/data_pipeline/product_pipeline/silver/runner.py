@@ -58,6 +58,7 @@ def process(doc, states, sink, inputs, *, processing_run_id, as_of, bronze_versi
         receipt['record_hash']=semantic_hash(receipt)
         if hook:hook('BEFORE_RECEIPT')
         sink.insert('pipeline_evaluations',[receipt])
+        sink.verify('pipeline_evaluations',{key:receipt['record_hash']},sink.version('pipeline_evaluations'))
         return dict(status=result['status'],evaluation_key=key,reused=False,raw_document_id=raw_id,
                     output_counts={t:len(v) for t,v in result['tables'].items()})
     except Exception as exc:

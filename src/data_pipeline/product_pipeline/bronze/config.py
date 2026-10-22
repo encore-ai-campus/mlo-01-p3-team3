@@ -44,6 +44,7 @@ class BronzeSettings:
     lease_uri_env: str = 'BRONZE_LEASE_MONGO_URI'
     lease_seconds: int = 120
     lease_heartbeat_seconds: int = 10
+    checkpoint_recovery: dict | None = None
 
     def __post_init__(self):
         for value in (self.environment_id, self.mongo_database, self.mongo_replica_set, self.kafka_topic,
@@ -70,6 +71,8 @@ class BronzeSettings:
                 or type(self.max_input_bytes) is not int or not 1 <= self.max_input_bytes <= 32 * 1024 * 1024
                 or type(self.trigger_seconds) is not int or not 1 <= self.trigger_seconds <= 3600):
             raise PipelineError('BRONZE_INVALID_BATCH_LIMIT')
+        from .recovery import recovery
+        recovery(self)
 
     @property
     def fingerprint(self):

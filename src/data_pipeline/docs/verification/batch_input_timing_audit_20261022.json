@@ -1,0 +1,2886 @@
+{
+  "checked_at": "2026-10-22T01:12:54Z",
+  "mode": "READ_ONLY_EXISTING_RECEIPTS_AND_MAJORITY_RAW_AGGREGATE",
+  "epoch_number_is_not_kafka_batch_id": true,
+  "durations": "inclusive_wall_time_ms; nested metrics overlap; no total network byte or SDK retry/wait accounting",
+  "epochs": [
+    {
+      "epoch": 12,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 103814,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 123428,
+          "finished_at": "2026-10-21T12:51:07.809Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 142728,
+          "finished_at": "2026-10-21T12:53:30.540Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 195894,
+          "finished_at": "2026-10-21T12:56:46.438Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 66979,
+          "finished_at": "2026-10-21T12:57:53.423Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 413711,
+          "finished_at": "2026-10-21T13:04:47.138Z"
+        }
+      }
+    },
+    {
+      "epoch": 13,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 198361,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 125354,
+          "finished_at": "2026-10-21T15:35:36.651Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 211548,
+          "finished_at": "2026-10-21T15:39:08.202Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 243455,
+          "finished_at": "2026-10-21T15:43:11.665Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 66098,
+          "finished_at": "2026-10-21T15:44:17.767Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 412051,
+          "finished_at": "2026-10-21T15:51:09.822Z"
+        }
+      }
+    },
+    {
+      "epoch": 14,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 270109,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 147190,
+          "finished_at": "2026-10-21T15:59:14.005Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 219899,
+          "finished_at": "2026-10-21T16:02:53.907Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 250448,
+          "finished_at": "2026-10-21T16:07:04.358Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 77867,
+          "finished_at": "2026-10-21T16:08:22.231Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 431593,
+          "finished_at": "2026-10-21T16:15:33.828Z"
+        }
+      }
+    },
+    {
+      "epoch": 15,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 255594,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 144694,
+          "finished_at": "2026-10-21T16:23:51.650Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 223120,
+          "finished_at": "2026-10-21T16:27:34.774Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 238947,
+          "finished_at": "2026-10-21T16:31:33.730Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 64138,
+          "finished_at": "2026-10-21T16:32:37.875Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 426343,
+          "finished_at": "2026-10-21T16:39:44.221Z"
+        }
+      }
+    },
+    {
+      "epoch": 16,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 270856,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 156235,
+          "finished_at": "2026-10-21T16:48:00.947Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 223276,
+          "finished_at": "2026-10-21T16:51:44.225Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 241163,
+          "finished_at": "2026-10-21T16:55:45.397Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 84155,
+          "finished_at": "2026-10-21T16:57:09.558Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 436960,
+          "finished_at": "2026-10-21T17:04:26.521Z"
+        }
+      }
+    },
+    {
+      "epoch": 17,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 273839,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 162160,
+          "finished_at": "2026-10-21T17:12:54.574Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 223668,
+          "finished_at": "2026-10-21T17:16:38.243Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 260229,
+          "finished_at": "2026-10-21T17:20:58.480Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 72485,
+          "finished_at": "2026-10-21T17:22:10.973Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 438542,
+          "finished_at": "2026-10-21T17:29:29.518Z"
+        }
+      }
+    },
+    {
+      "epoch": 18,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 282408,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 156904,
+          "finished_at": "2026-10-21T17:38:02.371Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 235486,
+          "finished_at": "2026-10-21T17:41:57.860Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 252622,
+          "finished_at": "2026-10-21T17:46:10.485Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 68145,
+          "finished_at": "2026-10-21T17:47:18.634Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 428703,
+          "finished_at": "2026-10-21T17:54:27.341Z"
+        }
+      }
+    },
+    {
+      "epoch": 19,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 277483,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 178860,
+          "finished_at": "2026-10-21T18:03:47.291Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 232365,
+          "finished_at": "2026-10-21T18:07:39.658Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 264074,
+          "finished_at": "2026-10-21T18:12:03.741Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 68247,
+          "finished_at": "2026-10-21T18:13:11.993Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 447530,
+          "finished_at": "2026-10-21T18:20:39.526Z"
+        }
+      }
+    },
+    {
+      "epoch": 20,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 300758,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 179582,
+          "finished_at": "2026-10-21T18:29:56.496Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 236610,
+          "finished_at": "2026-10-21T18:33:53.108Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 273718,
+          "finished_at": "2026-10-21T18:38:26.834Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 81372,
+          "finished_at": "2026-10-21T18:39:48.212Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 493990,
+          "finished_at": "2026-10-21T18:48:02.205Z"
+        }
+      }
+    },
+    {
+      "epoch": 21,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 280612,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 187569,
+          "finished_at": "2026-10-21T18:57:38.540Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 248769,
+          "finished_at": "2026-10-21T19:01:47.311Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 288215,
+          "finished_at": "2026-10-21T19:06:35.531Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 81618,
+          "finished_at": "2026-10-21T19:07:57.154Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 473480,
+          "finished_at": "2026-10-21T19:15:50.638Z"
+        }
+      }
+    },
+    {
+      "epoch": 22,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 317920,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 195804,
+          "finished_at": "2026-10-21T19:25:44.868Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 251136,
+          "finished_at": "2026-10-21T19:29:56.006Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 284233,
+          "finished_at": "2026-10-21T19:34:40.244Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 80355,
+          "finished_at": "2026-10-21T19:36:00.608Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 506030,
+          "finished_at": "2026-10-21T19:44:26.640Z"
+        }
+      }
+    },
+    {
+      "epoch": 23,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 332824,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 209924,
+          "finished_at": "2026-10-21T19:54:53.607Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 255614,
+          "finished_at": "2026-10-21T19:59:09.224Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 289906,
+          "finished_at": "2026-10-21T20:03:59.138Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 76649,
+          "finished_at": "2026-10-21T20:05:15.796Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 486711,
+          "finished_at": "2026-10-21T20:13:22.510Z"
+        }
+      }
+    },
+    {
+      "epoch": 24,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 335079,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 217385,
+          "finished_at": "2026-10-21T20:24:01.947Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 262328,
+          "finished_at": "2026-10-21T20:28:24.278Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 311704,
+          "finished_at": "2026-10-21T20:33:35.990Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 80219,
+          "finished_at": "2026-10-21T20:34:56.213Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 500316,
+          "finished_at": "2026-10-21T20:43:16.532Z"
+        }
+      }
+    },
+    {
+      "epoch": 25,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 329177,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 224999,
+          "finished_at": "2026-10-21T20:53:59.744Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 273129,
+          "finished_at": "2026-10-21T20:58:32.875Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 302744,
+          "finished_at": "2026-10-21T21:03:35.626Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 89017,
+          "finished_at": "2026-10-21T21:05:04.648Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 523905,
+          "finished_at": "2026-10-21T21:13:48.556Z"
+        }
+      }
+    },
+    {
+      "epoch": 26,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 334622,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 244487,
+          "finished_at": "2026-10-21T21:24:55.741Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 273950,
+          "finished_at": "2026-10-21T21:29:29.694Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 308694,
+          "finished_at": "2026-10-21T21:34:38.392Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 79346,
+          "finished_at": "2026-10-21T21:35:57.742Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 518433,
+          "finished_at": "2026-10-21T21:44:36.178Z"
+        }
+      }
+    },
+    {
+      "epoch": 27,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 350808,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 243180,
+          "finished_at": "2026-10-21T21:56:04.934Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 273998,
+          "finished_at": "2026-10-21T22:00:38.936Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 325840,
+          "finished_at": "2026-10-21T22:06:04.782Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 86202,
+          "finished_at": "2026-10-21T22:07:30.991Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 513588,
+          "finished_at": "2026-10-21T22:16:04.582Z"
+        }
+      }
+    },
+    {
+      "epoch": 28,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 356566,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 251534,
+          "finished_at": "2026-10-21T22:27:52.041Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 277647,
+          "finished_at": "2026-10-21T22:32:29.691Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 342631,
+          "finished_at": "2026-10-21T22:38:12.328Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 92170,
+          "finished_at": "2026-10-21T22:39:44.504Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 539354,
+          "finished_at": "2026-10-21T22:48:43.861Z"
+        }
+      }
+    },
+    {
+      "epoch": 29,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 362904,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 250481,
+          "finished_at": "2026-10-21T23:00:33.913Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 278190,
+          "finished_at": "2026-10-21T23:05:12.106Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 338554,
+          "finished_at": "2026-10-21T23:10:50.667Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 95700,
+          "finished_at": "2026-10-21T23:12:26.376Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 550158,
+          "finished_at": "2026-10-21T23:21:36.536Z"
+        }
+      }
+    },
+    {
+      "epoch": 30,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 388422,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 286116,
+          "finished_at": "2026-10-21T23:34:29.048Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 328158,
+          "finished_at": "2026-10-21T23:39:57.209Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 443549,
+          "finished_at": "2026-10-21T23:47:20.768Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 130495,
+          "finished_at": "2026-10-21T23:49:31.271Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 859410,
+          "finished_at": "2026-10-22T00:03:50.685Z"
+        }
+      }
+    },
+    {
+      "epoch": 31,
+      "products": 100,
+      "observations": 100,
+      "phases": {
+        "bronze": {
+          "duration_ms": 717050,
+          "result": "completed"
+        },
+        "plan": {
+          "status": "COMPLETED",
+          "duration_ms": 530080,
+          "finished_at": "2026-10-22T00:27:00.298Z"
+        },
+        "silver": {
+          "status": "COMPLETED",
+          "duration_ms": 440489,
+          "finished_at": "2026-10-22T00:34:20.790Z"
+        },
+        "gold": {
+          "status": "COMPLETED",
+          "duration_ms": 458702,
+          "finished_at": "2026-10-22T00:41:59.497Z"
+        },
+        "publish": {
+          "status": "COMPLETED",
+          "duration_ms": 146000,
+          "finished_at": "2026-10-22T00:44:25.505Z"
+        },
+        "activation": {
+          "status": "COMPLETED",
+          "duration_ms": 809151,
+          "finished_at": "2026-10-22T00:57:54.659Z"
+        }
+      }
+    }
+  ],
+  "comparison": {
+    "14": {
+      "input": {
+        "raw_documents": 100,
+        "bson_bytes": 16098489,
+        "image_slots": 229,
+        "unique_image_urls": 229,
+        "image_slots_by_state": {
+          "UNAVAILABLE": 188,
+          "VERIFIED": 41
+        },
+        "immutable_image_metadata_bytes": 1280194,
+        "unique_verified_image_bytes": 1280194,
+        "unique_verified_objects": 41,
+        "receipt_files": {
+          "silver-state/runs/9723d553-eed9-4479-a9bf-7dbb9487fcb5.json": {
+            "keys": [
+              "bronze_version",
+              "duration_ms",
+              "evaluation_selection_hash",
+              "execution_id",
+              "lease_owner_ref",
+              "mode",
+              "normalization_skipped",
+              "normalized_verified",
+              "processed",
+              "quality_wait",
+              "reused",
+              "source_drained",
+              "status"
+            ],
+            "scalars": {
+              "bronze_version": 296,
+              "duration_ms": 217349,
+              "normalization_skipped": 0,
+              "normalized_verified": 100,
+              "processed": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            },
+            "nested_counts": {}
+          },
+          "gold-state/runs/81550f26-8a98-4852-96d8-d54997b92797.json": {
+            "keys": [
+              "as_of",
+              "duration_ms",
+              "execution_id",
+              "export_manifest_ref",
+              "lease_owner_ref",
+              "mode",
+              "mysql_published",
+              "processed",
+              "product_count",
+              "quality_summary_ref",
+              "quality_wait",
+              "reused",
+              "silver_versions",
+              "source_drained",
+              "status"
+            ],
+            "scalars": {
+              "duration_ms": 202035,
+              "mysql_published": false,
+              "processed": 100,
+              "product_count": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            },
+            "nested_counts": {}
+          }
+        }
+      },
+      "counts": {
+        "main": {
+          "silver_input_counts": {
+            "links": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "mappings": {
+              "status": "PROVIDED",
+              "rows": 41
+            },
+            "reviews": {
+              "status": "PROVIDED",
+              "rows": 689
+            },
+            "rules": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            }
+          },
+          "silver_runs": [
+            {
+              "bronze_version": 296,
+              "duration_ms": 217349,
+              "normalization_skipped": 0,
+              "normalized_verified": 100,
+              "processed": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ],
+          "gold_input_counts": {
+            "embeddings": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "evaluation_selection": {
+              "status": "PROVIDED",
+              "rows": 103
+            },
+            "gallery_selection": {
+              "status": "PROVIDED",
+              "rows": 17
+            },
+            "price_confirmations": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "product_states": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            }
+          },
+          "gold_runs": [
+            {
+              "duration_ms": 202035,
+              "mysql_published": false,
+              "processed": 100,
+              "product_count": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ]
+        },
+        "activation": {
+          "silver_input_counts": {
+            "links": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "mappings": {
+              "status": "PROVIDED",
+              "rows": 41
+            },
+            "reviews": {
+              "status": "PROVIDED",
+              "rows": 717
+            },
+            "rules": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            }
+          },
+          "silver_runs": [
+            {
+              "bronze_version": 296,
+              "duration_ms": 156044,
+              "normalization_skipped": 87,
+              "normalized_verified": 100,
+              "processed": 100,
+              "quality_wait": 100,
+              "reused": 87,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ],
+          "gold_input_counts": {
+            "embeddings": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "evaluation_selection": {
+              "status": "PROVIDED",
+              "rows": 103
+            },
+            "gallery_selection": {
+              "status": "PROVIDED",
+              "rows": 17
+            },
+            "price_confirmations": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "product_states": {
+              "status": "PROVIDED",
+              "rows": 88
+            }
+          },
+          "gold_runs": [
+            {
+              "duration_ms": 145266,
+              "mysql_published": false,
+              "processed": 100,
+              "product_count": 100,
+              "quality_wait": 12,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ]
+        },
+        "failure_receipts": [],
+        "bronze_log_records": [
+          {
+            "stage": "bronze_batch",
+            "batch_id": 12,
+            "received": 100,
+            "accepted": 100,
+            "quarantined": 0,
+            "raw_candidates": 100,
+            "event_candidates": 100,
+            "status": "COMMITTED",
+            "duration_ms": 252635
+          }
+        ]
+      },
+      "timing_and_output_metrics": {
+        "main": {
+          "plan": {
+            "duration_ms": 147190,
+            "finished_at": "2026-10-21T15:59:14.005Z",
+            "observations": 100,
+            "products": 100,
+            "runtime_metrics": {
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "stage": "plan",
+            "status": "COMPLETED"
+          },
+          "silver": {
+            "duration_ms": 219899,
+            "finished_at": "2026-10-21T16:02:53.907Z",
+            "runtime_metrics": {
+              "archive_bundled_entries": 200,
+              "archive_bundles": 2,
+              "archive_ms": 1838,
+              "archive_reads": 7,
+              "archive_writes": 6,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 17167,
+              "delta_appended_rows": 6421,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 1,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 1,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 51663,
+              "delta_key_index_absent_keys": 6418,
+              "delta_key_index_disk_cache_hits": 16,
+              "delta_key_index_disk_cache_writes": 16,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 43331,
+              "delta_key_index_seeded_keys": 110002,
+              "delta_key_index_seeded_tables": 8,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 67650,
+              "delta_output_insert_ms": 2919,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 15094,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 10650,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_union_batches": 3,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 70651,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 2228,
+              "delta_verified_rows_cache_hits": 1,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 973,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 16,
+              "delta_versions_many_ms": 5628,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "silver_append_rows_disk_cache_writes": 2,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 100,
+              "silver_owned_append_edges": 8,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "stage": "silver",
+            "status": "COMPLETED"
+          },
+          "gold": {
+            "duration_ms": 250448,
+            "finished_at": "2026-10-21T16:07:04.358Z",
+            "runtime_metrics": {
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 2156,
+              "archive_reads": 8,
+              "archive_writes": 7,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 22399,
+              "delta_appended_rows": 3299,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 46394,
+              "delta_key_index_absent_keys": 3299,
+              "delta_key_index_disk_cache_hits": 16,
+              "delta_key_index_disk_cache_writes": 16,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 46301,
+              "delta_key_index_seeded_keys": 81923,
+              "delta_key_index_seeded_tables": 8,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 68783,
+              "delta_output_insert_ms": 2059,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 12176,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 8999,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_union_batches": 2,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 68354,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 2380,
+              "delta_verified_rows_cache_hits": 0,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 1073,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 17,
+              "delta_versions_many_ms": 5073,
+              "gold_export_cached_frames": 4,
+              "gold_export_finalize_calls": 1,
+              "gold_export_finalize_ms": 39716,
+              "gold_export_rollup_batches": 1,
+              "gold_input_preparation_calls": 1,
+              "gold_input_preparation_ms": 44103,
+              "pinned_metadata_read_batches": 1,
+              "pinned_version_reads": 8,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 4,
+              "silver_groups_cache_hits": 1,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 1,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_remember_calls": 1,
+              "silver_snapshot_remember_ms": 96,
+              "silver_tables_disk_cache_writes": 1,
+              "silver_union_read_batches": 1,
+              "silver_union_read_ms": 40033,
+              "spark_session_reuses": 3,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "stage": "gold",
+            "status": "COMPLETED"
+          },
+          "publish": {
+            "counts": {
+              "pending": 216,
+              "products": 1341,
+              "recommendation_ready": 0
+            },
+            "duration_ms": 77867,
+            "finished_at": "2026-10-21T16:08:22.231Z",
+            "images": 32,
+            "owner_managed": 3,
+            "plans": 97,
+            "products": 97,
+            "reviewed": {
+              "activated": 0,
+              "status": "COMPLETED",
+              "waiting": 100
+            },
+            "runtime_metrics": {
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 0,
+              "archive_reads": 0,
+              "archive_writes": 0,
+              "delta_append_batches": 0,
+              "delta_append_commit_calls": 0,
+              "delta_append_commit_ms": 0,
+              "delta_appended_rows": 0,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 0,
+              "delta_existing_union_read_ms": 0,
+              "delta_key_index_absent_keys": 0,
+              "delta_key_index_disk_cache_hits": 0,
+              "delta_key_index_disk_cache_writes": 0,
+              "delta_key_index_owned_advances": 0,
+              "delta_key_index_seed_calls": 0,
+              "delta_key_index_seed_ms": 0,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 0,
+              "delta_output_insert_calls": 0,
+              "delta_output_insert_many_calls": 0,
+              "delta_output_insert_many_ms": 0,
+              "delta_output_insert_ms": 0,
+              "delta_output_read_calls": 0,
+              "delta_output_read_ms": 0,
+              "delta_output_verify_calls": 0,
+              "delta_output_verify_ms": 0,
+              "delta_proof_reads": 0,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_union_batches": 0,
+              "delta_proof_union_read_calls": 0,
+              "delta_proof_union_read_ms": 0,
+              "delta_target_checks": 0,
+              "delta_target_open_calls": 0,
+              "delta_target_open_ms": 0,
+              "delta_verified_rows_cache_hits": 0,
+              "delta_version_read_calls": 0,
+              "delta_version_read_ms": 0,
+              "delta_version_reads": 0,
+              "delta_version_union_batches": 0,
+              "delta_versions_many_calls": 0,
+              "delta_versions_many_ms": 0,
+              "gold_export_cached_frames": 0,
+              "gold_export_finalize_calls": 0,
+              "gold_export_finalize_ms": 0,
+              "gold_export_rollup_batches": 0,
+              "gold_input_preparation_calls": 0,
+              "gold_input_preparation_ms": 0,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "publication_activation_mysql_calls": 1,
+              "publication_activation_mysql_ms": 330,
+              "publication_gold_read_calls": 1,
+              "publication_gold_read_ms": 45365,
+              "publication_gold_union_batches": 1,
+              "publication_gold_union_read_calls": 1,
+              "publication_gold_union_read_ms": 44271,
+              "publication_pending_mysql_calls": 1,
+              "publication_pending_mysql_ms": 31273,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 0,
+              "silver_groups_cache_hits": 0,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 0,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_remember_calls": 0,
+              "silver_snapshot_remember_ms": 0,
+              "silver_tables_disk_cache_writes": 0,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "status": "COMPLETED"
+          },
+          "activation": {
+            "duration_ms": 431593,
+            "finished_at": "2026-10-21T16:15:33.828Z",
+            "reason": "POST_INTAKE_DECISIONS_REEVALUATED",
+            "reevaluated_products": 100,
+            "reviewed": {
+              "activated": 88,
+              "status": "COMPLETED",
+              "waiting": 12
+            },
+            "runtime_metrics": {
+              "activation_gold_calls": 1,
+              "activation_gold_ms": 155480,
+              "activation_owner_decisions_calls": 1,
+              "activation_owner_decisions_ms": 9564,
+              "activation_pending_intake_skipped": 100,
+              "activation_publish_calls": 1,
+              "activation_publish_ms": 108529,
+              "activation_silver_calls": 1,
+              "activation_silver_ms": 156089,
+              "activation_silver_reuse_check_calls": 1,
+              "activation_silver_reuse_check_ms": 1911,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 2827,
+              "archive_reads": 13,
+              "archive_writes": 11,
+              "delta_append_batches": 16,
+              "delta_append_commit_calls": 16,
+              "delta_append_commit_ms": 40107,
+              "delta_appended_rows": 4008,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 2,
+              "delta_existing_union_read_ms": 201,
+              "delta_key_index_absent_keys": 4121,
+              "delta_key_index_disk_cache_hits": 50,
+              "delta_key_index_disk_cache_writes": 16,
+              "delta_key_index_owned_advances": 16,
+              "delta_key_index_seed_calls": 2,
+              "delta_key_index_seed_ms": 10,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 2,
+              "delta_output_insert_calls": 2,
+              "delta_output_insert_many_calls": 2,
+              "delta_output_insert_many_ms": 40446,
+              "delta_output_insert_ms": 3572,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 19173,
+              "delta_output_verify_calls": 2,
+              "delta_output_verify_ms": 20994,
+              "delta_proof_forwarded_rows": 9720,
+              "delta_proof_reads": 16,
+              "delta_proof_reused_rows": 5496,
+              "delta_proof_reuses": 7,
+              "delta_proof_union_batches": 4,
+              "delta_proof_union_read_calls": 6,
+              "delta_proof_union_read_ms": 133595,
+              "delta_target_checks": 16,
+              "delta_target_open_calls": 2,
+              "delta_target_open_ms": 1925,
+              "delta_verified_rows_cache_hits": 69,
+              "delta_version_read_calls": 22,
+              "delta_version_read_ms": 1698,
+              "delta_version_reads": 16,
+              "delta_version_union_batches": 4,
+              "delta_versions_many_calls": 34,
+              "delta_versions_many_ms": 10545,
+              "gold_export_cached_frames": 4,
+              "gold_export_finalize_calls": 1,
+              "gold_export_finalize_ms": 38117,
+              "gold_export_rollup_batches": 1,
+              "gold_input_preparation_calls": 1,
+              "gold_input_preparation_ms": 5803,
+              "pinned_metadata_read_batches": 1,
+              "pinned_version_reads": 8,
+              "publication_activation_mysql_calls": 1,
+              "publication_activation_mysql_ms": 56470,
+              "publication_gold_read_calls": 1,
+              "publication_gold_read_ms": 51339,
+              "publication_gold_union_batches": 1,
+              "publication_gold_union_read_calls": 1,
+              "publication_gold_union_read_ms": 50316,
+              "publication_pending_mysql_calls": 1,
+              "publication_pending_mysql_ms": 4,
+              "silver_append_rows_cache_hits": 8,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 4,
+              "silver_groups_cache_hits": 1,
+              "silver_normalization_skipped": 87,
+              "silver_normalizations": 13,
+              "silver_owned_append_edges": 8,
+              "silver_snapshot_bridge_calls": 1,
+              "silver_snapshot_bridge_edges": 8,
+              "silver_snapshot_bridge_ms": 167,
+              "silver_snapshot_bridge_reuses": 1,
+              "silver_snapshot_bridge_rows": 810,
+              "silver_snapshot_remember_calls": 1,
+              "silver_snapshot_remember_ms": 96,
+              "silver_tables_disk_cache_hits": 1,
+              "silver_tables_disk_cache_writes": 1,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 5,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 1,
+              "verified_input_refs_cache_hits": 200
+            },
+            "silver_normalization_skipped": 87,
+            "skipped_already_activated": 0,
+            "stage": "activation",
+            "status": "COMPLETED"
+          }
+        },
+        "activation": {
+          "silver": {
+            "duration_ms": 156088,
+            "finished_at": "2026-10-21T16:11:09.816Z",
+            "runtime_metrics": {
+              "activation_owner_decisions_calls": 0,
+              "activation_owner_decisions_ms": 0,
+              "activation_silver_reuse_check_calls": 0,
+              "activation_silver_reuse_check_ms": 0,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 1137,
+              "archive_reads": 5,
+              "archive_writes": 5,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 14010,
+              "delta_appended_rows": 810,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 122,
+              "delta_key_index_absent_keys": 823,
+              "delta_key_index_disk_cache_hits": 25,
+              "delta_key_index_disk_cache_writes": 8,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 4,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 14114,
+              "delta_output_insert_ms": 1742,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 19173,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 11683,
+              "delta_proof_forwarded_rows": 6421,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 5496,
+              "delta_proof_reuses": 7,
+              "delta_proof_union_batches": 2,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 63932,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 1047,
+              "delta_verified_rows_cache_hits": 38,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 873,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 17,
+              "delta_versions_many_ms": 5560,
+              "gold_export_cached_frames": 0,
+              "gold_export_finalize_calls": 0,
+              "gold_export_finalize_ms": 0,
+              "gold_export_rollup_batches": 0,
+              "gold_input_preparation_calls": 0,
+              "gold_input_preparation_ms": 0,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "publication_activation_mysql_calls": 0,
+              "publication_activation_mysql_ms": 0,
+              "publication_gold_read_calls": 0,
+              "publication_gold_read_ms": 0,
+              "publication_gold_union_batches": 0,
+              "publication_gold_union_read_calls": 0,
+              "publication_gold_union_read_ms": 0,
+              "publication_pending_mysql_calls": 0,
+              "publication_pending_mysql_ms": 0,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 0,
+              "silver_groups_cache_hits": 0,
+              "silver_normalization_skipped": 87,
+              "silver_normalizations": 13,
+              "silver_owned_append_edges": 8,
+              "silver_snapshot_bridge_calls": 0,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_remember_calls": 0,
+              "silver_snapshot_remember_ms": 0,
+              "silver_tables_disk_cache_writes": 0,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 1,
+              "verified_input_refs_cache_hits": 200
+            },
+            "stage": "silver",
+            "status": "COMPLETED"
+          },
+          "gold": {
+            "duration_ms": 155477,
+            "finished_at": "2026-10-21T16:13:45.295Z",
+            "runtime_metrics": {
+              "activation_owner_decisions_calls": 0,
+              "activation_owner_decisions_ms": 0,
+              "activation_silver_calls": 0,
+              "activation_silver_ms": 0,
+              "activation_silver_reuse_check_calls": 0,
+              "activation_silver_reuse_check_ms": 0,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 1690,
+              "archive_reads": 8,
+              "archive_writes": 6,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 26097,
+              "delta_appended_rows": 3198,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 79,
+              "delta_key_index_absent_keys": 3298,
+              "delta_key_index_disk_cache_hits": 25,
+              "delta_key_index_disk_cache_writes": 8,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 6,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 26332,
+              "delta_output_insert_ms": 1830,
+              "delta_output_read_calls": 0,
+              "delta_output_read_ms": 0,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 9311,
+              "delta_proof_forwarded_rows": 3299,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_reuses": 0,
+              "delta_proof_union_batches": 2,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 69663,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 878,
+              "delta_verified_rows_cache_hits": 31,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 825,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 17,
+              "delta_versions_many_ms": 4985,
+              "gold_export_cached_frames": 4,
+              "gold_export_finalize_calls": 1,
+              "gold_export_finalize_ms": 38117,
+              "gold_export_rollup_batches": 1,
+              "gold_input_preparation_calls": 1,
+              "gold_input_preparation_ms": 5803,
+              "pinned_metadata_read_batches": 1,
+              "pinned_version_reads": 8,
+              "publication_activation_mysql_calls": 0,
+              "publication_activation_mysql_ms": 0,
+              "publication_gold_read_calls": 0,
+              "publication_gold_read_ms": 0,
+              "publication_gold_union_batches": 0,
+              "publication_gold_union_read_calls": 0,
+              "publication_gold_union_read_ms": 0,
+              "publication_pending_mysql_calls": 0,
+              "publication_pending_mysql_ms": 0,
+              "silver_append_rows_cache_hits": 8,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 4,
+              "silver_groups_cache_hits": 1,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 1,
+              "silver_snapshot_bridge_edges": 8,
+              "silver_snapshot_bridge_ms": 167,
+              "silver_snapshot_bridge_reuses": 1,
+              "silver_snapshot_bridge_rows": 810,
+              "silver_snapshot_remember_calls": 1,
+              "silver_snapshot_remember_ms": 96,
+              "silver_tables_disk_cache_hits": 1,
+              "silver_tables_disk_cache_writes": 1,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 3,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 0,
+              "verified_input_refs_cache_hits": 0
+            },
+            "stage": "gold",
+            "status": "COMPLETED"
+          },
+          "publish": {
+            "counts": {
+              "pending": 128,
+              "products": 1341,
+              "recommendation_ready": 0
+            },
+            "duration_ms": 108527,
+            "finished_at": "2026-10-21T16:15:33.825Z",
+            "images": 0,
+            "owner_managed": 100,
+            "pending_intake_skipped": true,
+            "plans": 0,
+            "products": 0,
+            "reviewed": {
+              "activated": 88,
+              "status": "COMPLETED",
+              "waiting": 12
+            },
+            "runtime_metrics": {
+              "activation_gold_calls": 0,
+              "activation_gold_ms": 0,
+              "activation_owner_decisions_calls": 0,
+              "activation_owner_decisions_ms": 0,
+              "activation_pending_intake_skipped": 100,
+              "activation_silver_calls": 0,
+              "activation_silver_ms": 0,
+              "activation_silver_reuse_check_calls": 0,
+              "activation_silver_reuse_check_ms": 0,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 0,
+              "archive_reads": 0,
+              "archive_writes": 0,
+              "delta_append_batches": 0,
+              "delta_append_commit_calls": 0,
+              "delta_append_commit_ms": 0,
+              "delta_appended_rows": 0,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 0,
+              "delta_existing_union_read_ms": 0,
+              "delta_key_index_absent_keys": 0,
+              "delta_key_index_disk_cache_hits": 0,
+              "delta_key_index_disk_cache_writes": 0,
+              "delta_key_index_owned_advances": 0,
+              "delta_key_index_seed_calls": 0,
+              "delta_key_index_seed_ms": 0,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 0,
+              "delta_output_insert_calls": 0,
+              "delta_output_insert_many_calls": 0,
+              "delta_output_insert_many_ms": 0,
+              "delta_output_insert_ms": 0,
+              "delta_output_read_calls": 0,
+              "delta_output_read_ms": 0,
+              "delta_output_verify_calls": 0,
+              "delta_output_verify_ms": 0,
+              "delta_proof_forwarded_rows": 0,
+              "delta_proof_reads": 0,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_reuses": 0,
+              "delta_proof_union_batches": 0,
+              "delta_proof_union_read_calls": 0,
+              "delta_proof_union_read_ms": 0,
+              "delta_target_checks": 0,
+              "delta_target_open_calls": 0,
+              "delta_target_open_ms": 0,
+              "delta_verified_rows_cache_hits": 0,
+              "delta_version_read_calls": 0,
+              "delta_version_read_ms": 0,
+              "delta_version_reads": 0,
+              "delta_version_union_batches": 0,
+              "delta_versions_many_calls": 0,
+              "delta_versions_many_ms": 0,
+              "gold_export_cached_frames": 0,
+              "gold_export_finalize_calls": 0,
+              "gold_export_finalize_ms": 0,
+              "gold_export_rollup_batches": 0,
+              "gold_input_preparation_calls": 0,
+              "gold_input_preparation_ms": 0,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "publication_activation_mysql_calls": 1,
+              "publication_activation_mysql_ms": 56470,
+              "publication_gold_read_calls": 1,
+              "publication_gold_read_ms": 51339,
+              "publication_gold_union_batches": 1,
+              "publication_gold_union_read_calls": 1,
+              "publication_gold_union_read_ms": 50316,
+              "publication_pending_mysql_calls": 1,
+              "publication_pending_mysql_ms": 4,
+              "silver_append_rows_cache_hits": 0,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 0,
+              "silver_groups_cache_hits": 0,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 0,
+              "silver_snapshot_bridge_edges": 0,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_bridge_reuses": 0,
+              "silver_snapshot_bridge_rows": 0,
+              "silver_snapshot_remember_calls": 0,
+              "silver_snapshot_remember_ms": 0,
+              "silver_tables_disk_cache_hits": 0,
+              "silver_tables_disk_cache_writes": 0,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 0,
+              "verified_input_refs_cache_hits": 0
+            },
+            "status": "COMPLETED"
+          }
+        },
+        "bronze": {
+          "committed_batches": 1,
+          "duration_ms": 270109,
+          "last_committed_batch_id": 12,
+          "runtime_metrics": {
+            "checkpoint_binding_calls": 1,
+            "checkpoint_binding_ms": 262,
+            "delta_append_calls": 30,
+            "delta_append_ms": 62698,
+            "delta_appended_rows": 200,
+            "delta_batch_lookup_calls": 1,
+            "delta_batch_lookup_ms": 60643,
+            "delta_lookup_calls": 2,
+            "delta_lookup_ms": 84340,
+            "delta_storage_verification_calls": 2,
+            "delta_storage_verification_ms": 84677,
+            "delta_target_existing": 3,
+            "delta_target_open_calls": 1,
+            "delta_target_open_ms": 1852,
+            "delta_target_snapshot_calls": 3,
+            "delta_target_snapshot_ms": 1496,
+            "foreach_batch_calls": 1,
+            "foreach_batch_ms": 252636,
+            "kafka_connect_and_frontiers_calls": 1,
+            "kafka_connect_and_frontiers_ms": 2272,
+            "lease_acquire_calls": 1,
+            "lease_acquire_ms": 749,
+            "lease_close_calls": 1,
+            "lease_close_ms": 74,
+            "lease_renew_calls": 365,
+            "lease_renew_ms": 37736,
+            "mongo_batch_read_calls": 1,
+            "mongo_batch_read_ms": 4300,
+            "mongo_close_calls": 1,
+            "mongo_close_ms": 6,
+            "mongo_connect_calls": 1,
+            "mongo_connect_ms": 159,
+            "mongo_document_read_calls": 100,
+            "mongo_document_read_ms": 0,
+            "mongo_documents": 100,
+            "mongo_raw_bytes": 17586315,
+            "query_run_calls": 1,
+            "query_run_ms": 255855,
+            "query_start_calls": 1,
+            "query_start_ms": 5827,
+            "query_stop_calls": 1,
+            "query_stop_ms": 1,
+            "raw_validation_calls": 100,
+            "raw_validation_ms": 353,
+            "spark_connect_calls": 1,
+            "spark_connect_ms": 6576,
+            "spark_release_calls": 1,
+            "spark_release_ms": 14,
+            "spark_session_reused": 0
+          },
+          "source_drained": false
+        },
+        "bronze_result": {
+          "bronze_runtime_metrics": {
+            "checkpoint_binding_calls": 1,
+            "checkpoint_binding_ms": 262,
+            "delta_append_calls": 30,
+            "delta_append_ms": 62698,
+            "delta_appended_rows": 200,
+            "delta_batch_lookup_calls": 1,
+            "delta_batch_lookup_ms": 60643,
+            "delta_lookup_calls": 2,
+            "delta_lookup_ms": 84340,
+            "delta_storage_verification_calls": 2,
+            "delta_storage_verification_ms": 84677,
+            "delta_target_existing": 3,
+            "delta_target_open_calls": 1,
+            "delta_target_open_ms": 1852,
+            "delta_target_snapshot_calls": 3,
+            "delta_target_snapshot_ms": 1496,
+            "foreach_batch_calls": 1,
+            "foreach_batch_ms": 252636,
+            "kafka_connect_and_frontiers_calls": 1,
+            "kafka_connect_and_frontiers_ms": 2272,
+            "lease_acquire_calls": 1,
+            "lease_acquire_ms": 749,
+            "lease_close_calls": 1,
+            "lease_close_ms": 74,
+            "lease_renew_calls": 365,
+            "lease_renew_ms": 37736,
+            "mongo_batch_read_calls": 1,
+            "mongo_batch_read_ms": 4300,
+            "mongo_close_calls": 1,
+            "mongo_close_ms": 6,
+            "mongo_connect_calls": 1,
+            "mongo_connect_ms": 159,
+            "mongo_document_read_calls": 100,
+            "mongo_document_read_ms": 0,
+            "mongo_documents": 100,
+            "mongo_raw_bytes": 17586315,
+            "query_run_calls": 1,
+            "query_run_ms": 255855,
+            "query_start_calls": 1,
+            "query_start_ms": 5827,
+            "query_stop_calls": 1,
+            "query_stop_ms": 1,
+            "raw_validation_calls": 100,
+            "raw_validation_ms": 353,
+            "spark_connect_calls": 1,
+            "spark_connect_ms": 6576,
+            "spark_release_calls": 1,
+            "spark_release_ms": 14,
+            "spark_session_reused": 0
+          },
+          "committed_batches": 1,
+          "duration_ms": 270141,
+          "finished_at": "2026-10-21T15:56:45.205Z",
+          "runtime_metrics": {
+            "spark_sessions_started": 1,
+            "spark_startup_ms": 6576
+          },
+          "source_drained": false,
+          "stage": "bronze",
+          "status": "COMPLETED"
+        },
+        "manager": {
+          "base_bronze_version": 276,
+          "bronze_version": 296,
+          "contract_version": 1,
+          "last_batch": {
+            "duration_ms": 1127019,
+            "observations": 100,
+            "products": 100,
+            "recorded_stage_total_ms": 1126997,
+            "stage_duration_ms": {
+              "activation": 431593,
+              "gold": 250448,
+              "plan": 147190,
+              "publish": 77867,
+              "silver": 219899
+            }
+          },
+          "published_windows": 1,
+          "stage": "plan",
+          "status": "COMPLETED",
+          "window": 1
+        },
+        "artifacts": [
+          "window-status.json",
+          "batch-runtime.json",
+          "windows/000000/gold-inputs.json",
+          "windows/000000/silver-inputs.json",
+          "windows/000000/activation-v3/gold-inputs.json",
+          "windows/000000/activation-v3/silver-inputs.json"
+        ]
+      }
+    },
+    "30": {
+      "input": {
+        "raw_documents": 100,
+        "bson_bytes": 15977693,
+        "image_slots": 209,
+        "unique_image_urls": 209,
+        "image_slots_by_state": {
+          "UNAVAILABLE": 176,
+          "VERIFIED": 33
+        },
+        "immutable_image_metadata_bytes": 1298883,
+        "unique_verified_image_bytes": 1298883,
+        "unique_verified_objects": 33,
+        "receipt_files": {
+          "silver-state/runs/9aefb2b6-6a02-4819-b8af-1b3bdf32835c.json": {
+            "keys": [
+              "bronze_version",
+              "duration_ms",
+              "evaluation_selection_hash",
+              "execution_id",
+              "lease_owner_ref",
+              "mode",
+              "normalization_skipped",
+              "normalized_verified",
+              "processed",
+              "quality_wait",
+              "reused",
+              "source_drained",
+              "status"
+            ],
+            "scalars": {
+              "bronze_version": 621,
+              "duration_ms": 324022,
+              "normalization_skipped": 0,
+              "normalized_verified": 100,
+              "processed": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            },
+            "nested_counts": {}
+          },
+          "gold-state/runs/668fbc9a-9669-4647-ad23-debd30859ab3.json": {
+            "keys": [
+              "as_of",
+              "duration_ms",
+              "execution_id",
+              "export_manifest_ref",
+              "lease_owner_ref",
+              "mode",
+              "mysql_published",
+              "processed",
+              "product_count",
+              "quality_summary_ref",
+              "quality_wait",
+              "reused",
+              "silver_versions",
+              "source_drained",
+              "status"
+            ],
+            "scalars": {
+              "duration_ms": 362328,
+              "mysql_published": false,
+              "processed": 100,
+              "product_count": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            },
+            "nested_counts": {}
+          }
+        }
+      },
+      "counts": {
+        "main": {
+          "silver_input_counts": {
+            "links": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "mappings": {
+              "status": "PROVIDED",
+              "rows": 42
+            },
+            "reviews": {
+              "status": "PROVIDED",
+              "rows": 1292
+            },
+            "rules": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            }
+          },
+          "silver_runs": [
+            {
+              "bronze_version": 621,
+              "duration_ms": 324022,
+              "normalization_skipped": 0,
+              "normalized_verified": 100,
+              "processed": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ],
+          "gold_input_counts": {
+            "embeddings": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "evaluation_selection": {
+              "status": "PROVIDED",
+              "rows": 103
+            },
+            "gallery_selection": {
+              "status": "PROVIDED",
+              "rows": 17
+            },
+            "price_confirmations": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "product_states": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            }
+          },
+          "gold_runs": [
+            {
+              "duration_ms": 362328,
+              "mysql_published": false,
+              "processed": 100,
+              "product_count": 100,
+              "quality_wait": 100,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ]
+        },
+        "activation": {
+          "silver_input_counts": {
+            "links": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "mappings": {
+              "status": "PROVIDED",
+              "rows": 42
+            },
+            "reviews": {
+              "status": "PROVIDED",
+              "rows": 1321
+            },
+            "rules": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            }
+          },
+          "silver_runs": [
+            {
+              "bronze_version": 621,
+              "duration_ms": 270636,
+              "normalization_skipped": 85,
+              "normalized_verified": 100,
+              "processed": 100,
+              "quality_wait": 100,
+              "reused": 85,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ],
+          "gold_input_counts": {
+            "embeddings": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "evaluation_selection": {
+              "status": "PROVIDED",
+              "rows": 103
+            },
+            "gallery_selection": {
+              "status": "PROVIDED",
+              "rows": 17
+            },
+            "price_confirmations": {
+              "status": "NOT_PROVIDED",
+              "rows": 0
+            },
+            "product_states": {
+              "status": "PROVIDED",
+              "rows": 84
+            }
+          },
+          "gold_runs": [
+            {
+              "duration_ms": 353027,
+              "mysql_published": false,
+              "processed": 100,
+              "product_count": 100,
+              "quality_wait": 16,
+              "reused": 0,
+              "source_drained": true,
+              "status": "COMPLETED"
+            }
+          ]
+        },
+        "failure_receipts": [],
+        "bronze_log_records": [
+          {
+            "stage": "bronze_batch",
+            "batch_id": 28,
+            "received": 100,
+            "accepted": 100,
+            "quarantined": 0,
+            "raw_candidates": 100,
+            "event_candidates": 100,
+            "status": "COMMITTED",
+            "duration_ms": 372803
+          }
+        ]
+      },
+      "timing_and_output_metrics": {
+        "main": {
+          "plan": {
+            "duration_ms": 286116,
+            "finished_at": "2026-10-21T23:34:29.048Z",
+            "observations": 100,
+            "products": 100,
+            "runtime_metrics": {
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "stage": "plan",
+            "status": "COMPLETED"
+          },
+          "silver": {
+            "duration_ms": 328158,
+            "finished_at": "2026-10-21T23:39:57.209Z",
+            "runtime_metrics": {
+              "archive_bundled_entries": 200,
+              "archive_bundles": 2,
+              "archive_ms": 2062,
+              "archive_reads": 7,
+              "archive_writes": 6,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 26341,
+              "delta_appended_rows": 6336,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 2,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 1,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 101803,
+              "delta_key_index_absent_keys": 6320,
+              "delta_key_index_disk_cache_hits": 16,
+              "delta_key_index_disk_cache_writes": 16,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 78265,
+              "delta_key_index_seeded_keys": 222555,
+              "delta_key_index_seeded_tables": 8,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 124527,
+              "delta_output_insert_ms": 6391,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 21907,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 17765,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_union_batches": 3,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 104123,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 2941,
+              "delta_verified_rows_cache_hits": 2,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 1366,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 16,
+              "delta_versions_many_ms": 6870,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "silver_append_rows_disk_cache_writes": 2,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 100,
+              "silver_owned_append_edges": 8,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "stage": "silver",
+            "status": "COMPLETED"
+          },
+          "gold": {
+            "duration_ms": 443549,
+            "finished_at": "2026-10-21T23:47:20.768Z",
+            "runtime_metrics": {
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 2306,
+              "archive_reads": 8,
+              "archive_writes": 7,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 27181,
+              "delta_appended_rows": 3386,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 96654,
+              "delta_key_index_absent_keys": 3386,
+              "delta_key_index_disk_cache_hits": 16,
+              "delta_key_index_disk_cache_writes": 16,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 95972,
+              "delta_key_index_seeded_keys": 179086,
+              "delta_key_index_seeded_tables": 8,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 124683,
+              "delta_output_insert_ms": 5138,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 25540,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 14559,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_union_batches": 2,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 128173,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 2547,
+              "delta_verified_rows_cache_hits": 0,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 1653,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 17,
+              "delta_versions_many_ms": 9073,
+              "gold_export_cached_frames": 4,
+              "gold_export_finalize_calls": 1,
+              "gold_export_finalize_ms": 63357,
+              "gold_export_rollup_batches": 1,
+              "gold_input_preparation_calls": 1,
+              "gold_input_preparation_ms": 77055,
+              "pinned_metadata_read_batches": 1,
+              "pinned_version_reads": 8,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 4,
+              "silver_groups_cache_hits": 1,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 1,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_remember_calls": 1,
+              "silver_snapshot_remember_ms": 93,
+              "silver_tables_disk_cache_writes": 1,
+              "silver_union_read_batches": 1,
+              "silver_union_read_ms": 70680,
+              "spark_session_reuses": 3,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "stage": "gold",
+            "status": "COMPLETED"
+          },
+          "publish": {
+            "counts": {
+              "pending": 400,
+              "products": 2928,
+              "recommendation_ready": 0
+            },
+            "duration_ms": 130495,
+            "finished_at": "2026-10-21T23:49:31.271Z",
+            "images": 32,
+            "owner_managed": 2,
+            "plans": 82,
+            "products": 98,
+            "reviewed": {
+              "activated": 0,
+              "status": "COMPLETED",
+              "waiting": 100
+            },
+            "runtime_metrics": {
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 0,
+              "archive_reads": 0,
+              "archive_writes": 0,
+              "delta_append_batches": 0,
+              "delta_append_commit_calls": 0,
+              "delta_append_commit_ms": 0,
+              "delta_appended_rows": 0,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 0,
+              "delta_existing_union_read_ms": 0,
+              "delta_key_index_absent_keys": 0,
+              "delta_key_index_disk_cache_hits": 0,
+              "delta_key_index_disk_cache_writes": 0,
+              "delta_key_index_owned_advances": 0,
+              "delta_key_index_seed_calls": 0,
+              "delta_key_index_seed_ms": 0,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 0,
+              "delta_output_insert_calls": 0,
+              "delta_output_insert_many_calls": 0,
+              "delta_output_insert_many_ms": 0,
+              "delta_output_insert_ms": 0,
+              "delta_output_read_calls": 0,
+              "delta_output_read_ms": 0,
+              "delta_output_verify_calls": 0,
+              "delta_output_verify_ms": 0,
+              "delta_proof_reads": 0,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_union_batches": 0,
+              "delta_proof_union_read_calls": 0,
+              "delta_proof_union_read_ms": 0,
+              "delta_target_checks": 0,
+              "delta_target_open_calls": 0,
+              "delta_target_open_ms": 0,
+              "delta_verified_rows_cache_hits": 0,
+              "delta_version_read_calls": 0,
+              "delta_version_read_ms": 0,
+              "delta_version_reads": 0,
+              "delta_version_union_batches": 0,
+              "delta_versions_many_calls": 0,
+              "delta_versions_many_ms": 0,
+              "gold_export_cached_frames": 0,
+              "gold_export_finalize_calls": 0,
+              "gold_export_finalize_ms": 0,
+              "gold_export_rollup_batches": 0,
+              "gold_input_preparation_calls": 0,
+              "gold_input_preparation_ms": 0,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "publication_activation_mysql_calls": 1,
+              "publication_activation_mysql_ms": 270,
+              "publication_gold_read_calls": 1,
+              "publication_gold_read_ms": 95985,
+              "publication_gold_union_batches": 1,
+              "publication_gold_union_read_calls": 1,
+              "publication_gold_union_read_ms": 94811,
+              "publication_pending_mysql_calls": 1,
+              "publication_pending_mysql_ms": 30903,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 0,
+              "silver_groups_cache_hits": 0,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 0,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_remember_calls": 0,
+              "silver_snapshot_remember_ms": 0,
+              "silver_tables_disk_cache_writes": 0,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0
+            },
+            "status": "COMPLETED"
+          },
+          "activation": {
+            "duration_ms": 859410,
+            "finished_at": "2026-10-22T00:03:50.685Z",
+            "reason": "POST_INTAKE_DECISIONS_REEVALUATED",
+            "reevaluated_products": 100,
+            "reviewed": {
+              "activated": 84,
+              "status": "COMPLETED",
+              "waiting": 16
+            },
+            "runtime_metrics": {
+              "activation_gold_calls": 1,
+              "activation_gold_ms": 366216,
+              "activation_owner_decisions_calls": 1,
+              "activation_owner_decisions_ms": 11559,
+              "activation_pending_intake_skipped": 100,
+              "activation_publish_calls": 1,
+              "activation_publish_ms": 207051,
+              "activation_silver_calls": 1,
+              "activation_silver_ms": 270726,
+              "activation_silver_reuse_check_calls": 1,
+              "activation_silver_reuse_check_ms": 3838,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 5080,
+              "archive_reads": 13,
+              "archive_writes": 11,
+              "delta_append_batches": 16,
+              "delta_append_commit_calls": 16,
+              "delta_append_commit_ms": 90810,
+              "delta_appended_rows": 4168,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 4,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 2,
+              "delta_existing_union_read_calls": 2,
+              "delta_existing_union_read_ms": 46986,
+              "delta_key_index_absent_keys": 4278,
+              "delta_key_index_disk_cache_hits": 50,
+              "delta_key_index_disk_cache_writes": 16,
+              "delta_key_index_owned_advances": 16,
+              "delta_key_index_seed_calls": 2,
+              "delta_key_index_seed_ms": 15,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 2,
+              "delta_output_insert_calls": 2,
+              "delta_output_insert_many_calls": 2,
+              "delta_output_insert_many_ms": 132761,
+              "delta_output_insert_ms": 14387,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 34216,
+              "delta_output_verify_calls": 2,
+              "delta_output_verify_ms": 36089,
+              "delta_proof_forwarded_rows": 9722,
+              "delta_proof_reads": 16,
+              "delta_proof_reused_rows": 5341,
+              "delta_proof_reuses": 7,
+              "delta_proof_union_batches": 4,
+              "delta_proof_union_read_calls": 6,
+              "delta_proof_union_read_ms": 281094,
+              "delta_target_checks": 16,
+              "delta_target_open_calls": 2,
+              "delta_target_open_ms": 2061,
+              "delta_verified_rows_cache_hits": 73,
+              "delta_version_read_calls": 22,
+              "delta_version_read_ms": 4415,
+              "delta_version_reads": 16,
+              "delta_version_union_batches": 4,
+              "delta_versions_many_calls": 34,
+              "delta_versions_many_ms": 19553,
+              "gold_export_cached_frames": 4,
+              "gold_export_finalize_calls": 1,
+              "gold_export_finalize_ms": 72335,
+              "gold_export_rollup_batches": 1,
+              "gold_input_preparation_calls": 1,
+              "gold_input_preparation_ms": 7947,
+              "pinned_metadata_read_batches": 1,
+              "pinned_version_reads": 8,
+              "publication_activation_mysql_calls": 1,
+              "publication_activation_mysql_ms": 57540,
+              "publication_gold_read_calls": 1,
+              "publication_gold_read_ms": 148475,
+              "publication_gold_union_batches": 1,
+              "publication_gold_union_read_calls": 1,
+              "publication_gold_union_read_ms": 147463,
+              "publication_pending_mysql_calls": 1,
+              "publication_pending_mysql_ms": 6,
+              "silver_append_rows_cache_hits": 8,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 4,
+              "silver_groups_cache_hits": 1,
+              "silver_normalization_skipped": 85,
+              "silver_normalizations": 15,
+              "silver_owned_append_edges": 8,
+              "silver_snapshot_bridge_calls": 1,
+              "silver_snapshot_bridge_edges": 8,
+              "silver_snapshot_bridge_ms": 171,
+              "silver_snapshot_bridge_reuses": 1,
+              "silver_snapshot_bridge_rows": 881,
+              "silver_snapshot_remember_calls": 1,
+              "silver_snapshot_remember_ms": 93,
+              "silver_tables_disk_cache_hits": 1,
+              "silver_tables_disk_cache_writes": 1,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 5,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 1,
+              "verified_input_refs_cache_hits": 200
+            },
+            "silver_normalization_skipped": 85,
+            "skipped_already_activated": 0,
+            "stage": "activation",
+            "status": "COMPLETED"
+          }
+        },
+        "activation": {
+          "silver": {
+            "duration_ms": 270724,
+            "finished_at": "2026-10-21T23:54:17.415Z",
+            "runtime_metrics": {
+              "activation_owner_decisions_calls": 0,
+              "activation_owner_decisions_ms": 0,
+              "activation_silver_reuse_check_calls": 0,
+              "activation_silver_reuse_check_ms": 0,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 2088,
+              "archive_reads": 5,
+              "archive_writes": 5,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 18389,
+              "delta_appended_rows": 881,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 3,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 1,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 32031,
+              "delta_key_index_absent_keys": 892,
+              "delta_key_index_disk_cache_hits": 25,
+              "delta_key_index_disk_cache_writes": 8,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 11,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 48735,
+              "delta_output_insert_ms": 4141,
+              "delta_output_read_calls": 1,
+              "delta_output_read_ms": 34216,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 19098,
+              "delta_proof_forwarded_rows": 6336,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 5341,
+              "delta_proof_reuses": 7,
+              "delta_proof_union_batches": 2,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 111606,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 1081,
+              "delta_verified_rows_cache_hits": 41,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 1754,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 17,
+              "delta_versions_many_ms": 8121,
+              "gold_export_cached_frames": 0,
+              "gold_export_finalize_calls": 0,
+              "gold_export_finalize_ms": 0,
+              "gold_export_rollup_batches": 0,
+              "gold_input_preparation_calls": 0,
+              "gold_input_preparation_ms": 0,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "publication_activation_mysql_calls": 0,
+              "publication_activation_mysql_ms": 0,
+              "publication_gold_read_calls": 0,
+              "publication_gold_read_ms": 0,
+              "publication_gold_union_batches": 0,
+              "publication_gold_union_read_calls": 0,
+              "publication_gold_union_read_ms": 0,
+              "publication_pending_mysql_calls": 0,
+              "publication_pending_mysql_ms": 0,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 0,
+              "silver_groups_cache_hits": 0,
+              "silver_normalization_skipped": 85,
+              "silver_normalizations": 15,
+              "silver_owned_append_edges": 8,
+              "silver_snapshot_bridge_calls": 0,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_remember_calls": 0,
+              "silver_snapshot_remember_ms": 0,
+              "silver_tables_disk_cache_writes": 0,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 1,
+              "verified_input_refs_cache_hits": 200
+            },
+            "stage": "silver",
+            "status": "COMPLETED"
+          },
+          "gold": {
+            "duration_ms": 366212,
+            "finished_at": "2026-10-22T00:00:23.630Z",
+            "runtime_metrics": {
+              "activation_owner_decisions_calls": 0,
+              "activation_owner_decisions_ms": 0,
+              "activation_silver_calls": 0,
+              "activation_silver_ms": 0,
+              "activation_silver_reuse_check_calls": 0,
+              "activation_silver_reuse_check_ms": 0,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 2992,
+              "archive_reads": 8,
+              "archive_writes": 6,
+              "delta_append_batches": 8,
+              "delta_append_commit_calls": 8,
+              "delta_append_commit_ms": 72421,
+              "delta_appended_rows": 3287,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 1,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 1,
+              "delta_existing_union_read_calls": 1,
+              "delta_existing_union_read_ms": 14955,
+              "delta_key_index_absent_keys": 3386,
+              "delta_key_index_disk_cache_hits": 25,
+              "delta_key_index_disk_cache_writes": 8,
+              "delta_key_index_owned_advances": 8,
+              "delta_key_index_seed_calls": 1,
+              "delta_key_index_seed_ms": 4,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 1,
+              "delta_output_insert_calls": 1,
+              "delta_output_insert_many_calls": 1,
+              "delta_output_insert_many_ms": 84026,
+              "delta_output_insert_ms": 10246,
+              "delta_output_read_calls": 0,
+              "delta_output_read_ms": 0,
+              "delta_output_verify_calls": 1,
+              "delta_output_verify_ms": 16991,
+              "delta_proof_forwarded_rows": 3386,
+              "delta_proof_reads": 8,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_reuses": 0,
+              "delta_proof_union_batches": 2,
+              "delta_proof_union_read_calls": 3,
+              "delta_proof_union_read_ms": 169488,
+              "delta_target_checks": 8,
+              "delta_target_open_calls": 1,
+              "delta_target_open_ms": 980,
+              "delta_verified_rows_cache_hits": 32,
+              "delta_version_read_calls": 11,
+              "delta_version_read_ms": 2661,
+              "delta_version_reads": 8,
+              "delta_version_union_batches": 2,
+              "delta_versions_many_calls": 17,
+              "delta_versions_many_ms": 11432,
+              "gold_export_cached_frames": 4,
+              "gold_export_finalize_calls": 1,
+              "gold_export_finalize_ms": 72335,
+              "gold_export_rollup_batches": 1,
+              "gold_input_preparation_calls": 1,
+              "gold_input_preparation_ms": 7947,
+              "pinned_metadata_read_batches": 1,
+              "pinned_version_reads": 8,
+              "publication_activation_mysql_calls": 0,
+              "publication_activation_mysql_ms": 0,
+              "publication_gold_read_calls": 0,
+              "publication_gold_read_ms": 0,
+              "publication_gold_union_batches": 0,
+              "publication_gold_union_read_calls": 0,
+              "publication_gold_union_read_ms": 0,
+              "publication_pending_mysql_calls": 0,
+              "publication_pending_mysql_ms": 0,
+              "silver_append_rows_cache_hits": 8,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 4,
+              "silver_groups_cache_hits": 1,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 1,
+              "silver_snapshot_bridge_edges": 8,
+              "silver_snapshot_bridge_ms": 171,
+              "silver_snapshot_bridge_reuses": 1,
+              "silver_snapshot_bridge_rows": 881,
+              "silver_snapshot_remember_calls": 1,
+              "silver_snapshot_remember_ms": 93,
+              "silver_tables_disk_cache_hits": 1,
+              "silver_tables_disk_cache_writes": 1,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 3,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 0,
+              "verified_input_refs_cache_hits": 0
+            },
+            "stage": "gold",
+            "status": "COMPLETED"
+          },
+          "publish": {
+            "counts": {
+              "pending": 316,
+              "products": 2928,
+              "recommendation_ready": 0
+            },
+            "duration_ms": 207050,
+            "finished_at": "2026-10-22T00:03:50.683Z",
+            "images": 0,
+            "owner_managed": 100,
+            "pending_intake_skipped": true,
+            "plans": 0,
+            "products": 0,
+            "reviewed": {
+              "activated": 84,
+              "status": "COMPLETED",
+              "waiting": 16
+            },
+            "runtime_metrics": {
+              "activation_gold_calls": 0,
+              "activation_gold_ms": 0,
+              "activation_owner_decisions_calls": 0,
+              "activation_owner_decisions_ms": 0,
+              "activation_pending_intake_skipped": 100,
+              "activation_silver_calls": 0,
+              "activation_silver_ms": 0,
+              "activation_silver_reuse_check_calls": 0,
+              "activation_silver_reuse_check_ms": 0,
+              "archive_bundled_entries": 0,
+              "archive_bundles": 0,
+              "archive_ms": 0,
+              "archive_reads": 0,
+              "archive_writes": 0,
+              "delta_append_batches": 0,
+              "delta_append_commit_calls": 0,
+              "delta_append_commit_ms": 0,
+              "delta_appended_rows": 0,
+              "delta_batch_preflight_reused_keys": 0,
+              "delta_existing_reads": 0,
+              "delta_existing_reused_rows": 0,
+              "delta_existing_union_batches": 0,
+              "delta_existing_union_read_calls": 0,
+              "delta_existing_union_read_ms": 0,
+              "delta_key_index_absent_keys": 0,
+              "delta_key_index_disk_cache_hits": 0,
+              "delta_key_index_disk_cache_writes": 0,
+              "delta_key_index_owned_advances": 0,
+              "delta_key_index_seed_calls": 0,
+              "delta_key_index_seed_ms": 0,
+              "delta_key_index_seeded_keys": 0,
+              "delta_key_index_seeded_tables": 0,
+              "delta_metadata_read_batches": 0,
+              "delta_output_insert_calls": 0,
+              "delta_output_insert_many_calls": 0,
+              "delta_output_insert_many_ms": 0,
+              "delta_output_insert_ms": 0,
+              "delta_output_read_calls": 0,
+              "delta_output_read_ms": 0,
+              "delta_output_verify_calls": 0,
+              "delta_output_verify_ms": 0,
+              "delta_proof_forwarded_rows": 0,
+              "delta_proof_reads": 0,
+              "delta_proof_reused_rows": 0,
+              "delta_proof_reuses": 0,
+              "delta_proof_union_batches": 0,
+              "delta_proof_union_read_calls": 0,
+              "delta_proof_union_read_ms": 0,
+              "delta_target_checks": 0,
+              "delta_target_open_calls": 0,
+              "delta_target_open_ms": 0,
+              "delta_verified_rows_cache_hits": 0,
+              "delta_version_read_calls": 0,
+              "delta_version_read_ms": 0,
+              "delta_version_reads": 0,
+              "delta_version_union_batches": 0,
+              "delta_versions_many_calls": 0,
+              "delta_versions_many_ms": 0,
+              "gold_export_cached_frames": 0,
+              "gold_export_finalize_calls": 0,
+              "gold_export_finalize_ms": 0,
+              "gold_export_rollup_batches": 0,
+              "gold_input_preparation_calls": 0,
+              "gold_input_preparation_ms": 0,
+              "pinned_metadata_read_batches": 0,
+              "pinned_version_reads": 0,
+              "publication_activation_mysql_calls": 1,
+              "publication_activation_mysql_ms": 57540,
+              "publication_gold_read_calls": 1,
+              "publication_gold_read_ms": 148475,
+              "publication_gold_union_batches": 1,
+              "publication_gold_union_read_calls": 1,
+              "publication_gold_union_read_ms": 147463,
+              "publication_pending_mysql_calls": 1,
+              "publication_pending_mysql_ms": 6,
+              "silver_append_rows_cache_hits": 0,
+              "silver_append_rows_disk_cache_writes": 0,
+              "silver_discovery_reuses": 0,
+              "silver_groups_cache_hits": 0,
+              "silver_normalization_skipped": 0,
+              "silver_normalizations": 0,
+              "silver_owned_append_edges": 0,
+              "silver_snapshot_bridge_calls": 0,
+              "silver_snapshot_bridge_edges": 0,
+              "silver_snapshot_bridge_ms": 0,
+              "silver_snapshot_bridge_reuses": 0,
+              "silver_snapshot_bridge_rows": 0,
+              "silver_snapshot_remember_calls": 0,
+              "silver_snapshot_remember_ms": 0,
+              "silver_tables_disk_cache_hits": 0,
+              "silver_tables_disk_cache_writes": 0,
+              "silver_union_read_batches": 0,
+              "silver_union_read_ms": 0,
+              "spark_session_reuses": 1,
+              "spark_sessions_started": 0,
+              "spark_startup_ms": 0,
+              "verified_input_archives_cache_hits": 0,
+              "verified_input_refs_cache_hits": 0
+            },
+            "status": "COMPLETED"
+          }
+        },
+        "bronze": {
+          "committed_batches": 1,
+          "duration_ms": 388422,
+          "last_committed_batch_id": 28,
+          "runtime_metrics": {
+            "checkpoint_binding_calls": 1,
+            "checkpoint_binding_ms": 324,
+            "delta_append_calls": 30,
+            "delta_append_ms": 62637,
+            "delta_appended_rows": 200,
+            "delta_batch_lookup_calls": 1,
+            "delta_batch_lookup_ms": 114749,
+            "delta_lookup_calls": 2,
+            "delta_lookup_ms": 151692,
+            "delta_storage_verification_calls": 2,
+            "delta_storage_verification_ms": 152159,
+            "delta_target_existing": 3,
+            "delta_target_open_calls": 1,
+            "delta_target_open_ms": 2111,
+            "delta_target_snapshot_calls": 3,
+            "delta_target_snapshot_ms": 1744,
+            "foreach_batch_calls": 1,
+            "foreach_batch_ms": 372803,
+            "kafka_connect_and_frontiers_calls": 1,
+            "kafka_connect_and_frontiers_ms": 2471,
+            "lease_acquire_calls": 1,
+            "lease_acquire_ms": 191,
+            "lease_close_calls": 1,
+            "lease_close_ms": 74,
+            "lease_renew_calls": 480,
+            "lease_renew_ms": 54052,
+            "mongo_batch_read_calls": 1,
+            "mongo_batch_read_ms": 3009,
+            "mongo_close_calls": 1,
+            "mongo_close_ms": 6,
+            "mongo_connect_calls": 1,
+            "mongo_connect_ms": 108,
+            "mongo_document_read_calls": 100,
+            "mongo_document_read_ms": 0,
+            "mongo_documents": 100,
+            "mongo_raw_bytes": 17460990,
+            "query_run_calls": 1,
+            "query_run_ms": 374379,
+            "query_start_calls": 1,
+            "query_start_ms": 6425,
+            "query_stop_calls": 1,
+            "query_stop_ms": 1,
+            "raw_validation_calls": 100,
+            "raw_validation_ms": 319,
+            "spark_connect_calls": 1,
+            "spark_connect_ms": 6457,
+            "spark_release_calls": 1,
+            "spark_release_ms": 14,
+            "spark_session_reused": 0
+          },
+          "source_drained": false
+        },
+        "bronze_result": {
+          "bronze_runtime_metrics": {
+            "checkpoint_binding_calls": 1,
+            "checkpoint_binding_ms": 324,
+            "delta_append_calls": 30,
+            "delta_append_ms": 62637,
+            "delta_appended_rows": 200,
+            "delta_batch_lookup_calls": 1,
+            "delta_batch_lookup_ms": 114749,
+            "delta_lookup_calls": 2,
+            "delta_lookup_ms": 151692,
+            "delta_storage_verification_calls": 2,
+            "delta_storage_verification_ms": 152159,
+            "delta_target_existing": 3,
+            "delta_target_open_calls": 1,
+            "delta_target_open_ms": 2111,
+            "delta_target_snapshot_calls": 3,
+            "delta_target_snapshot_ms": 1744,
+            "foreach_batch_calls": 1,
+            "foreach_batch_ms": 372803,
+            "kafka_connect_and_frontiers_calls": 1,
+            "kafka_connect_and_frontiers_ms": 2471,
+            "lease_acquire_calls": 1,
+            "lease_acquire_ms": 191,
+            "lease_close_calls": 1,
+            "lease_close_ms": 74,
+            "lease_renew_calls": 480,
+            "lease_renew_ms": 54052,
+            "mongo_batch_read_calls": 1,
+            "mongo_batch_read_ms": 3009,
+            "mongo_close_calls": 1,
+            "mongo_close_ms": 6,
+            "mongo_connect_calls": 1,
+            "mongo_connect_ms": 108,
+            "mongo_document_read_calls": 100,
+            "mongo_document_read_ms": 0,
+            "mongo_documents": 100,
+            "mongo_raw_bytes": 17460990,
+            "query_run_calls": 1,
+            "query_run_ms": 374379,
+            "query_start_calls": 1,
+            "query_start_ms": 6425,
+            "query_stop_calls": 1,
+            "query_stop_ms": 1,
+            "raw_validation_calls": 100,
+            "raw_validation_ms": 319,
+            "spark_connect_calls": 1,
+            "spark_connect_ms": 6457,
+            "spark_release_calls": 1,
+            "spark_release_ms": 14,
+            "spark_session_reused": 0
+          },
+          "committed_batches": 1,
+          "duration_ms": 388451,
+          "finished_at": "2026-10-21T23:29:41.732Z",
+          "runtime_metrics": {
+            "spark_sessions_started": 1,
+            "spark_startup_ms": 6457
+          },
+          "source_drained": false,
+          "stage": "bronze",
+          "status": "COMPLETED"
+        },
+        "manager": {
+          "base_bronze_version": 601,
+          "bronze_version": 621,
+          "contract_version": 1,
+          "last_batch": {
+            "duration_ms": 2047757,
+            "observations": 100,
+            "products": 100,
+            "recorded_stage_total_ms": 2047728,
+            "stage_duration_ms": {
+              "activation": 859410,
+              "gold": 443549,
+              "plan": 286116,
+              "publish": 130495,
+              "silver": 328158
+            }
+          },
+          "published_windows": 1,
+          "stage": "plan",
+          "status": "COMPLETED",
+          "window": 1
+        },
+        "artifacts": [
+          "window-status.json",
+          "batch-runtime.json",
+          "windows/000000/gold-inputs.json",
+          "windows/000000/silver-inputs.json",
+          "windows/000000/activation-v3/gold-inputs.json",
+          "windows/000000/activation-v3/silver-inputs.json"
+        ]
+      }
+    }
+  },
+  "continuous_processing": "PAUSED_AFTER_BATCH",
+  "new_batch_200": "NOT_YET_APPLIED; discussion requested before further change"
+}

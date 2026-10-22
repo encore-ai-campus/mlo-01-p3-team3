@@ -1,5 +1,7 @@
 # Gold 실행·복구·서버 배포
 
+현재 서버의 작은 window·세션 공유·게시 후 활성화 경로는 [대기 적재·연속 실행](pending_intake.md), 최신 실제 결과는 [검증 현황](service_validation_20261018.md)을 따른다. 아래 일반 CLI/초기 시험 계약과 배포된 서버 coordinator를 구분한다. Kafka 보관 만료 시 [복구 절차](kafka_retention_recovery.md)를 사용한다.
+
 2026-10-17. 상품 파이프라인의 Gold 구현 기준이다. 실행 코드는 `product_pipeline/gold/`, 진입점은 `run_gold.py`/`danawa-gold`다. **Gold Delta 생성과 서비스 MySQL 게시를 구분한다.** 이번 구현은 고정 Silver → Gold → 고정 버전 export manifest까지이며 서비스 DB 쓰기·승인·임베딩 생성·인덱스 활성화를 수행하지 않는다.
 
 ## 입력과 책임

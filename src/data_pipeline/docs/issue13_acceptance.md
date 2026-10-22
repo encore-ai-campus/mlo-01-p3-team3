@@ -1,6 +1,6 @@
 # 이슈 #13 구현·인수 대조
 
-2026-10-18 기준. 체크 여부는 담당자가 판단한다. 아래는 구현, 소량 실제 검증, 남은 인수를 구분한 근거다. 현재 검증 상태의 기준은 [실서버 검증](service_validation_20261018.md), 실행은 [문서 안내](README.md)를 따른다. 문서가 있다는 이유로 운영 완료로 판정하지 않는다.
+2026-10-21 기준. 상세 초기 시험 수치는 해당 날짜의 기록이며 현재 실행 결과와 구분한다. 체크 여부는 담당자가 판단한다. 아래는 구현, 소량 실제 검증, 남은 인수를 구분한 근거다. 현재 검증 상태의 기준은 [실서버 검증](service_validation_20261018.md), 실행은 [문서 안내](README.md)를 따른다. 문서가 있다는 이유로 운영 완료로 판정하지 않는다.
 
 ## 1. 입력 검증 및 스냅샷
 
@@ -28,7 +28,7 @@
 
 | 요구 | 구현·검증 | 남은 인수 |
 |---|---|---|
-| product.raw.collected 계약·원천 확인 후 발행 | 고정 key/필드/ID/시각/본문, RAW_CONFIRMED 이후 전송, 실제 격리 토픽에서 3건 | 운영 토픽/ACL·보관 정책 |
+| product.raw.collected 계약·원천 확인 후 발행 | 고정 key/필드/ID/시각/본문, RAW_CONFIRMED 이후 전송, 실제 토픽·업무 원장 연결 및 고정 81,882이벤트 복구 계획·1,100개 재발행 | 전체 재발행·장기 보관/부하 |
 | 고정 재발행·중복 전달 | 같은 이벤트 replay·동일 checkpoint 재소비 후 raw/event 3/3 유지 | 실제 broker 장애·ACK 유실 |
 | 전달 확인/미확인 구분 | callback·EVENT_UNKNOWN·RF3/minISR2 확인 | 실제 failover |
 | 저장 후 발행 전 종료·등록 복구 | 대역 경계 중단 회귀, 실제 등록 실패 3건을 기존 ID로 재개 | 모든 외부 경계의 실제 장애 주입 |
@@ -41,11 +41,11 @@ at-least-once 전달이다. 응답 미확인은 같은 이벤트를 재전송할
 |---|---|---|
 | 원천 ID Bronze 멱등 | 실제 Kafka/Mongo/Garage 3원천·3receipt·격리0, 반복/재전달 | 전체 데이터·장애 |
 | 작업별 checkpoint·단일 작성자 | cluster ID/fingerprint 바인딩·MongoLease, 실제 잠금 중복 차단·Worker 3대 Delta | 다른 Driver로 장애 후 재개 |
-| Silver 분류/규격/가격/이미지/검수·품질 | 8개 테이블·고정 입력·재평가·receipt 구현, 실제 원천 1상품/4이미지 관계 엔진·QUALITY_WAIT | 담당 NORMALIZATION/매핑/검수 export와 운영 CLI |
-| Gold 안정 키/관측 시각·현재 판매/이력 | 8개 테이블·고정 Silver/export·반복 재사용, 실제 저장소 엔진 시험 | 담당 GOLD_BUILD/정책 입력·확보율 |
-| 고정 Delta→staging→MySQL·UUID/검수 보존·역전 방지 | 초기 VM v1 9개 사례, 로컬 v2 게시 12개·migration 16개. 후속 신규 업무 DB v2 13테이블/160컬럼·실제 TLS preflight, 별도 검증 DB 게시/REUSED/audit 통과 | 실제 상품 guard·고정 Gold export와 외부 서비스 ORM 인수. 기존 서비스 DB 통합 시 UUID/관측 baseline 확인 |
+| Silver 분류/규격/가격/이미지/검수·품질 | 8개 테이블·고정 입력·재평가·receipt 구현, 작은 확정 window의 운영 CLI·등록·검수 입력·변경 관측 재사용 | 전체 데이터 품질·부하 |
+| Gold 안정 키/관측 시각·현재 판매/이력 | 8개 테이블·고정 Silver/export·반복 재사용, 실제 저장소·GOLD_BUILD 등록·이력 선택·고정 export·업무 게시 연결 | 전체 확보율·장기 실행 |
+| 고정 Delta→staging→MySQL·UUID/검수 보존·역전 방지 | v2 문서 계약·TLS·업무 pj3_products 게시와 활성화, 상품 234 / ACTIVE 213 | 전체 데이터 완주·외부 서비스 ORM/baseline 인수 |
 
-실제 Silver/Gold는 담당 입력 NOT_PROVIDED, Gold 정책 fixture의 기술 시험이다. 준비 완료/추천 승인이나 운영 CLI 등록 인수가 아니다. 새 이미지 연결은 inactive로 게시하며 담당 원장을 수정하지 않는다. 미확인 집계 가격으로 가상 Offer를 만들지 않는다. 집계 가격/판매 항목, 최초 시각/값별 관측 시각을 구분한다.
+초기 Silver/Gold의 NOT_PROVIDED/fixture 시험과 현재 업무 실행을 구분한다. 현재는 내부 프로젝트 정책의 별도 reviewer·확정 등록·guard를 사용하고 MySQL 게시 후 활성화까지 연결했다. 분류·상품 상태 미확인은 품질 대기이며 추천 준비를 대신 확정하지 않는다. 미확인 집계 가격으로 가상 Offer를 만들지 않는다. 집계 가격/판매 항목, 최초 시각/값별 관측 시각을 구분한다.
 
 ## 5. 수집 중 증분 인계
 
@@ -73,9 +73,9 @@ LIVE 캐시는 append-only source와 파이프라인 소유 불변 spool을 전�
 
 ## 완료 판단과 지원 경계
 
-- 최신 자동 회귀 **266개/107.125초 통과**. 이전 Linux 운영/LIVE/전송 파일·대역 **43개/1.056초 통과**와 구분한다. 실제 시험과 대역을 합산하여 통합 완료로 판정하지 않는다. 로컬 초기 근거는 [로컬 검증 기록](validation_20261018.md), 최신 MySQL 결과는 [v2 반영 기록](mysql_schema_rollout.md#신규-vm-스키마와-tls-반영-결과), 공개 서버 결과는 실서버 검증 문서에 있다.
-- 운영 전에 실제 DDL/guard·매핑/검수·NORMALIZATION/GOLD_BUILD 입력 계약을 인수하고 전체 FLOW·운영 일정·백업/복원·부하를 확인한다. 등록 export가 공식 계약이면 서비스 pipeline_runs 직접 생성 어댑터가 반드시 필요한 것은 아니다.
+- 현재 업무 DB·한 배치 시간·최신 회귀는 [실서버 검증](service_validation_20261018.md)과 [변경 이력](implementation_history.md)을 따른다. 초기 252개·Linux 43개 시험을 최신 전체 회귀로 기재하지 않는다.
+- 실제 전체 65,498상품 처리, 장기 연속 운전, NiFi 업무 일정, 외부 백업/복원·부하 인수는 남아 있다. 운영 CLI·v2 TLS 게시·일부 ACTIVE 전환은 이미 확인했으므로 전부 미구현/미연결로 되돌려 설명하지 않는다.
 - queue는 지정 호스트 한 대 소유다. 만료된 Driver lease 자동 takeover·TTL 삭제, Windows Spark checkpoint URI 변환, 다른 Kafka cluster offset 자동 이행은 지원하지 않는다. 이전 Driver 종료 증명 후 명시 복구한다.
 - Silver 상품별 이력 기본 상한은 20,000행/32MiB다. 65,498건 합성 stream 비교는 전체 JSON/ETL 성능 보장이 아니다. 과거 미수집 응답 본문/hash·판매 조건/시각은 생성하지 않고 NULL/UNKNOWN/LEGACY_EXTRACTED_ONLY를 유지한다.
 - 정상 재개는 원장에 확인된 성공 단계를 재사용한다. 외부 유실 raw의 명시 복구는 --repair-raw, 고정 이벤트 재발행은 --replay-events로 구분한다. 검증 원장의 운영 fingerprint 충돌 처리도 실서버 인계 지침을 따른다.
-- 크롤러/인프라 설치, 매핑·승인 원장 편집, 외부 임베딩·추천·UI·서비스 작업 원장 연결은 다른 담당자 책임이다.
+- 크롤러/인프라 운영, 외부 임베딩·추천·UI·서비스 작업 원장 연결은 다른 담당자 책임이다. 운영자가 지정한 내부 정책의 검수 등록은 별도 reviewer·감사 원장으로 수행하며 일반 게시 계정과 분리한다.
