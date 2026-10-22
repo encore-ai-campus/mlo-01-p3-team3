@@ -1,5 +1,9 @@
 # 카탈로그 준비와 사전 임베딩
 
+2026-10-19: [서버 카탈로그 연결](../server-catalog.md)을 추가했다. `catalog.server`가 읽기 전용 MySQL·Garage와 고정 Delta export를 연결하고 `server_embeddings`가 검증된 기존 배치를 변환한다. `product_pipeline.embedding_vectors`가 Delta 적재/NPY export를 담당한다. 운영 상품 게시·등록/활성화·실제 배포와 구분한다. 서버 카탈로그만 현재 상태를 재조회하며 기존 파일 카탈로그는 유지한다. 아래 10월 18일의 MySQL 어댑터 부재 설명은 당시 상태다.
+
+2026-10-18: 기존 파일 카탈로그를 유지하며 `Product.interior_profile`, `attributes_json`을 선택 입력으로 지원한다. [방 특징 추천](../interior-ranking.md)의 확인 상태·옵션·부위 규칙으로 특징을 인덱스 로딩 시 준비한다. MySQL에서 읽는 어댑터는 아직 없고 실제 이미지/벡터 대응·현재 검수 인수는 후속 범위다. 이 변경만을 이유로 임베딩/카탈로그를 재생성하지 않는다.
+
 [역할별 라우팅](../README.md) · [실행 명령·manifest 예시](../../../src/interior_recommender/README.md) · [데이터 파이프라인 설계](../../design/02-data-pipeline.md)
 
 `catalog/`는 사용자 요청 전에 상품 원장·이미지·벡터를 준비한다. `catalog/danawa.py::DanawaCatalog`는 저장 임베딩의 이미지·벡터·checksum·설정 대응을 읽는 공통 로더다.
@@ -11,6 +15,7 @@
 | 사전 임베딩 | `cli embed-directory → batch_embedding.BatchEmbedding.run` | 준비 이미지 → `Pipeline.stage → ModelAdapter` → 저장 임베딩 index |
 | 수집 결과 결합 | `crawl.export` | 준비 manifest·완료 벡터 대응 검증 → 상품 manifest·NPY·이미지 |
 | 별도 원장 결합 | `export.export_catalog` | 저장 다나와 벡터·별도 metadata.json → 상품 카탈로그 |
+| 로컬 시연 스냅샷 | `local_snapshot.build` | 검증된 로컬 카탈로그·고정 Delta export·Garage 인계 대응 → 오프라인 시연 카탈로그. API 호출 없음; [실행](../server-catalog.md#파이프라인-완료-전-로컬-시연) |
 | 온라인 연결 | `DirectStudio → ProductIndex.load` | `--products` manifest 로딩·설정 호환 검사 |
 
 기존 `python -m interior_recommender.crawl_catalog`·`product_catalog` 명령은 유지한다. 새 구현 진입점은 각각 `python -m interior_recommender.catalog.crawl`·`interior_recommender.catalog.export`다. 일괄 임베딩 명령은 기존 `python -m interior_recommender embed-directory`다.

@@ -12,20 +12,29 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from ..assets import checksum, read_json
 from ..schemas import Box, Contract
+from .interior import FEATURE_WEIGHTS, INTERIOR_VERSION, InteriorProfile, compatibility, product_profile
 
-RANKING_VERSION = "weighted-content-v2"
-CONTEXT_VERSION = "direct-context-v2"
+RANKING_VERSION = "interior-content-v3"
+CONTEXT_VERSION = "direct-context-v3"
 
 
 class RankingPolicy(Contract):
-    version: Literal["weighted-content-v1", "weighted-content-v2"] = RANKING_VERSION
+    version: Literal["weighted-content-v1", "weighted-content-v2", "interior-content-v3"] = RANKING_VERSION
     similarity_weight: float = Field(default=.85, ge=0, le=1, allow_inf_nan=False)
     color_weight: float = Field(default=.15, ge=0, le=1, allow_inf_nan=False)
+    room_weight: float = Field(default=.2, ge=0, le=1, allow_inf_nan=False)
+    interior_version: Literal["room-compatibility-v1"] = INTERIOR_VERSION
+    room_feature_weights: dict[str, float] = Field(default_factory=lambda: dict(FEATURE_WEIGHTS))
+    palette_family_affinity: float = Field(default=.7, ge=0, le=1, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def total(self):
         if not math.isclose(self.similarity_weight + self.color_weight, 1, abs_tol=1e-8):
             raise ValueError("Ranking weights must sum to one")
+        if (set(self.room_feature_weights) != set(FEATURE_WEIGHTS)
+                or any(not math.isfinite(v) or not 0 <= v <= 1 for v in self.room_feature_weights.values())
+                or not math.isclose(sum(self.room_feature_weights.values()), 1, abs_tol=1e-8)):
+            raise ValueError("Room feature weights must be finite, complete and sum to one")
         return self
 
 
@@ -60,6 +69,7 @@ class RecommendationContext(Contract):
     required: list[Condition] = Field(default_factory=list, max_length=20)
     preferred_color: str | None = None
     room_context: str = Field(default="", max_length=4000)
+    room_profile: InteriorProfile = Field(default_factory=InteriorProfile)
     placement_intent: str = Field(default="", max_length=2000)
     placement_region: Box | None = None
     size_estimate: SizeEvidence = Field(default_factory=SizeEvidence)
@@ -108,9 +118,20 @@ def parse_context(payload, text, categories):
     return validate_context(data, text, categories)
 
 
-def context_prompt(request):
+def context_prompt(request, *, include_room=True):
     import json
+    instructions = ("Populate room_profile with ONLY visible room observations, distinct from requested product features. "
+                    "Use palette codes white,ivory,beige,brown,black,gray,green,blue,navy,pink,red,yellow; "
+                    "materials wood,metal,fabric,leather,synthetic_leather,glass,plastic,mesh,ceramic,mdf; "
+                    "shapes round,oval,rectangle,square,l_shape,straight; "
+                    "styles minimal,modern,scandinavian,natural,industrial,classic,vintage. "
+                    "Provide short visual evidence and uncertainties; leave unsupported features empty. "
+                    "Never use sketch annotation colors or the requested furniture as observed room features. "
+                    "Never copy observed room palette into preferred_color; that field is for user preferences only. "
+                    "search_terms should describe the desired furniture in English, informed by room context. "
+                    if include_room else "")
     return ("Interpret ONE requested furniture item from room photo then separate sketch (when present). "
+            + instructions +
             "Return the provided schema. Use only allowed categories. Never generate an image. "
             "Separate explicit requirements from observed room style. Black sketch lines are not a color request. "
             "required contains ONLY explicit mandatory conditions from user TEXT, with exact source_quote. "
@@ -155,6 +176,8 @@ class Product(Contract):
     attribute_options: dict[Literal["color", "material", "shape"], list[str]] = Field(default_factory=dict)
     component_attributes: dict[str, list[str]] = Field(default_factory=dict)
     raw_attributes: dict[str, list[str]] = Field(default_factory=dict)
+    attributes_json: list[dict] = Field(default_factory=list)
+    interior_profile: InteriorProfile = Field(default_factory=InteriorProfile)
     metadata_issues: list[str] = Field(default_factory=list)
     metadata_source: str | None = None
     observed_at: str | None = None
@@ -169,7 +192,8 @@ class Product(Contract):
             raise ValueError("Invalid or unsourced product comparison URL")
         has_attributes = any(getattr(self, key) is not None for key in ("category_code", "color", "material", "shape", "price_krw", "width_mm", "depth_mm", "height_mm"))
         if (has_attributes or self.dimension_ranges_mm or self.component_dimensions_mm or self.attribute_options
-                or self.component_attributes or self.raw_attributes or self.metadata_issues) and not self.metadata_source:
+                or self.component_attributes or self.raw_attributes or self.metadata_issues or self.attributes_json
+                or any(getattr(self.interior_profile, k) for k in ("palette", "materials", "shapes", "styles"))) and not self.metadata_source:
             raise ValueError("Product metadata needs a source")
         for field, interval in self.dimension_ranges_mm.items():
             scalar = getattr(self, field)
@@ -185,6 +209,7 @@ class ProductIndex:
         if len({p.image_id for p in self.products}) != len(self.products):
             raise ValueError("Duplicate image_id")
         self.by_image = {p.image_id: p for p in self.products}
+        self.interior_profiles = {p.image_id: product_profile(p) for p in self.products}
         # Multiple images of one product must refer to the same metadata.
         metadata = {}
         for p in self.products:
@@ -204,9 +229,11 @@ class ProductIndex:
         self.vectors.flags.writeable = False
         self.model, self.preprocessing, self.version = model, preprocessing, version
         self.dimension = self.vectors.shape[1]
+        self.server_catalog = None
+        self.live_guard = None
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, *, server_config=None):
         path = Path(path).resolve()
         data = read_json(path)
         def inside(name):
@@ -240,6 +267,16 @@ class ProductIndex:
                      version=checksum(path.read_bytes() + vector_version.encode()))
         if result.dimension != data["dimension"]:
             raise ValueError("Catalog dimension mismatch")
+        if 'server_catalog' in data:
+            from ..catalog.server import CONTRACT, LiveGuard
+            server = data['server_catalog']
+            if (server.get('contract') != CONTRACT or set(server.get('bindings', {})) != set(result.by_image)
+                    or any(v.get('image_uuid') != k or v.get('index_id') != server.get('index_id')
+                           or not isinstance(v.get('index_manifest_checksum'), str) or len(v['index_manifest_checksum']) != 64
+                           for k, v in server['bindings'].items())):
+                raise ValueError('Server catalog bindings mismatch')
+            result.server_catalog = server
+            result.live_guard = LiveGuard(server_config)
         return result
 
     def validate_settings(self, settings):
@@ -279,7 +316,7 @@ class ProductIndex:
                         match = left == right if condition.operator == "EQ" else left != right if condition.operator == "NE" else left <= right
                         state = "MATCH" if match else "DIFFERENT"
                     # Sparse material metadata is search context in v2, never an eligibility gate.
-                    target = preferences if condition.field == "material" and policy.version == "weighted-content-v2" else checks
+                    target = preferences if condition.field == "material" and policy.version in {"weighted-content-v2", "interior-content-v3"} else checks
                     target[f"required:{n}:{condition.field}"] = state
                 if "DIFFERENT" in checks.values():
                     excluded += 1
@@ -298,20 +335,45 @@ class ProductIndex:
                 sim_weight = policy.similarity_weight if context.preferred_color else 1.0
                 color_weight = policy.color_weight if context.preferred_color else 0.0
                 components = {"similarity": sim_weight * float(similarity), "preferred_color": color_weight * (color_state == "MATCH")}
+                interior = None
+                if policy.version == "interior-content-v3":
+                    interior = compatibility(context.room_profile, product, actual=self.interior_profiles[product.image_id],
+                                             feature_weights=policy.room_feature_weights,
+                                             palette_family_affinity=policy.palette_family_affinity)
+                    room_weight = policy.room_weight if interior["applicable"] else 0.0
+                    components = {key: value * (1 - room_weight) for key, value in components.items()}
+                    components["room_compatibility"] = room_weight * interior["score"]
+                    interior["contribution"] = components["room_compatibility"]
                 item = {"product_id": product.product_id, "image_id": product.image_id, "name": product.name,
                         "score": sum(components.values()), "similarity": float(similarity), "score_components": components,
                         "condition_status": group, "checks": checks, "preferred_color_status": color_state,
                         "size_fit": "UNKNOWN", "metadata": product.model_dump(exclude={"image", "image_checksum"})}
-                if policy.version == "weighted-content-v2":
+                if policy.version in {"weighted-content-v2", "interior-content-v3"}:
                     item["preference_checks"] = preferences
+                if interior is not None:
+                    item["interior_match"] = interior
+                    item["match_explanation"] = interior["reasons"] or ["방 맥락을 반영한 임베딩 유사도를 기준으로 추천했습니다. 확인된 상품 특징이 부족하면 개별 조화 여부는 미확인입니다."]
                 previous = best[group].get(product.product_id)
                 key = lambda x: (-x["score"], -x["similarity"], x["product_id"], x["image_id"])
                 if previous is None or key(item) < key(previous):
                     best[group][product.product_id] = item
         order = lambda x: (-x["score"], -x["similarity"], x["product_id"], x["image_id"])
-        return {"ranking_version": policy.version, "policy": policy.model_dump(), "weight_source": "MANUAL_INITIAL",
+        result = {"ranking_version": policy.version, "policy": policy.model_dump(), "weight_source": "MANUAL_INITIAL",
                 "sklearn_version": sklearn.__version__, "index_version": self.version, "score_is_probability": False,
                 "searched_images": len(self.products), "excluded_images": excluded,
                 "items": heapq.nsmallest(limit, best["MATCH"].values(), key=order),
                 "unverified_items": heapq.nsmallest(limit, best["UNKNOWN"].values(), key=order),
                 "unapplied_conditions": context.unapplied_conditions}
+        if self.server_catalog is not None:
+            selected = result['items'] + result['unverified_items']
+            bindings = [self.server_catalog['bindings'][item['image_id']] for item in selected]
+            if bindings:
+                self.live_guard.validate(bindings)
+            else:
+                expected = next(iter(self.server_catalog['bindings'].values()))
+                self.live_guard.validate_index(expected['index_id'], expected['index_manifest_checksum'])
+            for item, bound in zip(selected, bindings):
+                item['server_binding'] = bound
+            result['catalog_source'] = {k: self.server_catalog[k] for k in
+                ('contract', 'index_id', 'publication_plan_ids', 'delta_path', 'delta_version')}
+        return result

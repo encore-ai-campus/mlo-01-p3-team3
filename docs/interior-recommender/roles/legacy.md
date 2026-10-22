@@ -1,5 +1,7 @@
 # 기존 생성 CLI와 웹
 
+2026-10-18 신규 [선택 상품 배치 미리보기](../product-preview.md)는 `application/preview.py`가 담당한다. 아래 과거 템플릿 기반 생성 흐름과 별도이며 신규 기능에 `--legacy-generation`을 사용할 필요는 없다.
+
 [역할별 라우팅](../README.md) · [전환 경계](../../design/08-template-generation.md) · [기존 실행 이력](../../../src/interior_recommender/README.md)
 
 `python -m interior_recommender`와 설치 스크립트 `interior-recommender`는 `cli.main()`으로 진입한다. `embed-directory`는 새 `catalog.batch_embedding`으로, 기존 start/resume/select/embed 등 생성 명령은 `create_run()`·`Pipeline.execute()`로 연결된다. 이 CLI를 직접 추천 웹 실행 명령으로 설명하지 않는다.

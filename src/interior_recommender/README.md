@@ -1,4 +1,12 @@
-# 이미지 생성 없는 scikit-learn 콘텐츠 추천 MVP
+# scikit-learn 콘텐츠 추천과 선택 상품 배치 미리보기 MVP
+
+2026-10-21: #34 로컬 시연 웹은 `../local_demo/`, dev 원본 웹은 `../demo_sketchon/`으로 분리했다. 공유 추천/생성 엔진과 MySQL·Garage·Delta 연결은 이 패키지에 유지한다. 시연의 파이프라인 미연동 배경·스냅샷·실행은 [분리 안내](../../docs/interior-recommender/local-demo.md)를 따른다. 아래 기존 웹 경로 설명은 해당 시점의 기록이다.
+
+2026-10-19: [MySQL·Garage·Delta 서버 카탈로그 연결](../../docs/interior-recommender/server-catalog.md) 코드를 추가했다. 실제 접속 설정은 Git에서 제외하고, 기존 파일 카탈로그와 같은 형식으로 export한 서버 카탈로그만 현재 MySQL 상태를 재검증한다. 운영 상품 적재·임베딩 이전·DB 등록/활성화·서버 배포는 별도이며 이번에는 연결 코드와 읽기 전용 접속을 준비했다.
+
+2026-10-18: 추천 카드의 **이 상품을 방에 배치해 보기**로 외부 이미지 생성 API를 호출하는 선택 기능을 추가했다. 방·선택 상품·선택 스케치를 사용하며 추천/상품 벡터는 재생성하지 않는다. [설정·구동·선택/중복/복구 계약](../../docs/interior-recommender/product-preview.md)을 따른다. 아래 생성 제외 설명은 추천 선행 생성과 과거 템플릿 흐름에 관한 내용이다.
+
+2026-10-18 새 기본 추천은 `interior-content-v3`다. [방 특징 추천·점수·입력·호환](../../docs/interior-recommender/interior-ranking.md)을 따른다. 기존 파일 상품/벡터에 방 색조·재질·형태·스타일 맥락을 연결하며 결측은 UNKNOWN이다. API 호출 종류는 기존 해석/질의 임베딩이고 MySQL 연결은 후속 작업이다. 아래 v1/v2 정책 설명은 구버전 동작이다.
 
 2026-10-18 SketchOn 통합 실행은 웹 접수/조회와 별도 SQLite 워커로 나뉜다. 기존 `DirectStudio.prepare`/domain 규칙과 stage/receipt를 재사용하고 Gemini는 native async 호출, 이미지/파일/계산은 제한된 공유 풀에서 실행한다. [SQLite 실행·복구·후속 파이프라인 연결](../../docs/interior-recommender/execution.md)을 따른다. 아래 독립 `python -m interior_recommender.web`은 기존 제한된 스레드풀 방식이다.
 

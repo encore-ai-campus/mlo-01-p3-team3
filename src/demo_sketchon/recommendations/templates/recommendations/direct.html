@@ -4,12 +4,12 @@
 <title>스케치·온 SketchOn · 공간 맞춤 상품 추천</title><meta name="theme-color" content="#244f42">
 <link rel="icon" type="image/svg+xml" href="{% static 'sketch/assets/sketchon-pencil.svg' %}">
 <link rel="stylesheet" href="{% static 'sketch/roompick-ui.css' %}?v=ad-sticky8">
-<link rel="stylesheet" href="{% static 'recommendations/direct.css' %}?v=3">
-<script type="module" src="{% static 'recommendations/direct.mjs' %}?v=6"></script></head>
+<link rel="stylesheet" href="{% static 'recommendations/direct.css' %}?v=4">
+<script type="module" src="{% static 'recommendations/direct.mjs' %}?v=9"></script><link rel="stylesheet" href="{% static 'sketch/mascot.css' %}"></head>
 <body class="recommendation-page" data-base-url="{% url 'recommendations:index' %}">
 <a class="skip-link" href="#main-content">본문으로 이동</a>
 <header class="header">{% include 'sketch/brand.html' %}<a class="button subtle" href="{{ editor_url }}">입력 수정하기 ↗</a>{% include 'sketch/account_navigation.html' %}</header>
-<main id="main-content">
+{% if ad_delivery_enabled %}<div class="page-layout">{% endif %}<main id="main-content">
   <section class="intro"><div><p class="eyebrow">FIND YOUR NEXT PIECE</p><h1>내 공간에 어울리는 가구</h1><p>SketchOn에서 입력한 사진·스케치·요청사항으로 상품을 찾고 있어요.</p></div>
   <span class="mode-label">{% if demo %}고정 해석·검색 벡터로 화면 확인 중{% else %}공간 맞춤 상품 추천{% endif %}</span></section>
   <div class="recommendation-layout">
@@ -21,15 +21,14 @@
       <p class="hint">입력은 기존 SketchOn에서 수정해 주세요. 가격과 규격은 수집 시점의 정보이며 현재 조건은 다나와에서 확인해 주세요.</p>
     </aside>
     <section id="recommendation-results" class="recommendation-content" aria-label="상품 추천 결과" aria-live="polite">
-      <div id="status" class="recommendation-notice" role="status">전달받은 사진·스케치·요청사항으로 추천을 준비하고 있어요.</div>
+      <div class="mascot-status"><img src="{% static 'sketch/assets/capysaurus-avatar-128.png' %}" width="128" height="128" alt="" aria-hidden="true"><div><span class="mascot-status-label">카피사우루스의 공간 안내</span><div id="status" class="recommendation-notice" role="status">전달받은 사진·스케치·요청사항으로 추천을 준비하고 있어요.</div></div></div>
       <p id="legacy-preference-notice" class="hint" hidden>이전 방식으로 선호 스타일이 필수 조건에 포함된 결과입니다. 입력 수정 후 다시 추천하면 선호 스타일을 검색 참고로 분리합니다.</p>
       <button id="retry" type="button" hidden>같은 요청 재시도</button>
-      <section id="context" class="context-panel" hidden></section>
       <section id="verified-panel" class="products-panel"><div class="section-heading"><h2 id="items-heading">추천 상품</h2><span>당신의 요청을 기준으로</span></div><p id="material-policy-notice" class="hint" hidden>재질은 검색 참고로 사용했어요. 재질 정보가 없거나 달라도 추천에 포함될 수 있어요.</p><div id="items" class="candidates"><p class="hint">추천 상품이 여기에 표시돼요.</p></div></section>
-      <section id="unverified-panel" class="products-panel" hidden><h2>필수 정보 미확인 후보</h2><p class="hint">품목이나 규격 등 필요한 정보가 없어 요청 조건의 충족 여부를 확인하지 못한 후보예요.</p><div id="unverified" class="candidates"></div></section>
+      <section id="product-preview" class="products-panel" hidden><h2 data-preview-title>상품 배치 미리보기</h2><p data-preview-status role="status"></p><img data-preview-image class="room" alt="AI가 만든 상품 배치 미리보기" hidden><button data-preview-retry type="button" hidden>미리보기 재시도</button><p class="hint">실제 상품의 형태·색상·크기 및 설치 가능성은 원래 상품 정보에서 확인하세요. 같은 상품을 다시 선택하면 기존 작업과 결과를 불러옵니다.</p></section>
     </section>
   </div>
-  <p class="hint recommendation-disclaimer">공간 크기는 추정이며 실측이 아닙니다. 실제 설치 가능 여부는 상품 규격과 공간을 직접 확인해 주세요. 이 화면의 추천은 공간 이미지를 새로 생성하지 않으며 기존 공간 만들기 횟수를 사용하지 않습니다.</p>
+  <p class="hint recommendation-disclaimer">공간 크기는 추정이며 실측이 아닙니다. 상품을 선택하면 외부 이미지 생성 API로 배치 미리보기를 만들 수 있습니다. 생성 결과는 시각 참고용이며 기존 공간 만들기 횟수와는 별도로 처리합니다.</p>
   <footer class="site-footer"><span>{% include 'sketch/brand.html' %} <span class="footer-separator">/</span> Find a piece of your next space.</span><p>사진과 요청은 추천 결과와 함께 보관됩니다.<br>상품 링크 클릭은 구매 완료를 의미하지 않습니다.</p></footer>
-</main>{% csrf_token %}
+</main>{% if ad_delivery_enabled %}{% include 'sketch/ad_delivery.html' with ad_slot='result-right' ad_run_id=ad_run_id %}</div>{% endif %}{% csrf_token %}
 </body></html>

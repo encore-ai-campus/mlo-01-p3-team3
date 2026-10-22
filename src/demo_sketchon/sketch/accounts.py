@@ -85,6 +85,8 @@ def logout_action(request):
 @require_GET
 def account_status(request):
     from .quota import quota_status
+    from operations.permissions import entry_url, page_access
+    ops_url=entry_url(request.user)
     identifier = request.GET.get('project_id')
     access = None
     if identifier:
@@ -95,6 +97,8 @@ def account_status(request):
     return JsonResponse({'authenticated':request.user.is_authenticated,
         'actor_key':f'user:{request.user.pk}' if request.user.is_authenticated else 'guest:' + visitor_id(request),
         'nickname':request.user.first_name or request.user.username if request.user.is_authenticated else '',
+        'can_access_ops':bool(ops_url), 'ops_url':ops_url,
+        'ops_page_access':page_access(request.user,request.GET['ops_permission']) if 'ops_permission' in request.GET else None,
         'csrf_token':get_token(request), 'quota':quota_status(request), 'project_access':access})
 
 

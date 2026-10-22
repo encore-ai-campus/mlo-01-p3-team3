@@ -366,6 +366,24 @@ class ExecutionTests(TransactionTestCase):
             self.assertIsNotNone(available)
             self.assertEqual(ProviderPermit.objects.count(), 1)
 
+    def test_generation_gate_uses_provider_and_separate_limits(self):
+        self.submit()
+        self.submit()
+        first, second = queue.claim(), queue.claim()
+        cfg = {**settings.RECOMMENDATION_EXECUTION, "generation_concurrency": 1, "generation_rpm": 2}
+        with override_settings(RECOMMENDATION_EXECUTION=cfg):
+            permit, due = queue.acquire_provider(first, "same-model", "generate", "cloudflare")
+            self.assertIsNotNone(permit)
+            self.assertIsNone(due)
+            blocked, due = queue.acquire_provider(second, "same-model", "generate", "cloudflare")
+            self.assertIsNone(blocked)
+            self.assertGreater((due - timezone.now()).total_seconds(), 20)
+            independent, due = queue.acquire_provider(second, "same-model", "generate", "gemini")
+            self.assertIsNotNone(independent)
+            self.assertIsNone(due)
+            queue.release_provider(permit)
+            queue.release_provider(independent)
+
     def test_management_command_executes_enqueued_job_in_another_process(self):
         # Reuse this fixture's three synthetic images/vectors; no new embedding.
         catalog = self.engine.root / "products.json"

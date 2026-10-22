@@ -95,8 +95,19 @@ class GeminiAdapter:
                 config=types.GenerateContentConfig(response_mime_type="application/json",
                     response_json_schema=direct_context_wire_schema(schema), system_instruction=SYSTEM))
             payload = {"text": response.text, "coordinate_space": "normalized_1000_xyxy"}
+        elif kind == "generate":
+            response = await self.client.aio.models.generate_content(
+                model=self.settings.image_model,
+                contents=[prompt] + [types.Part.from_bytes(data=data, mime_type="image/png") for data in images],
+                config=types.GenerateContentConfig(response_modalities=["IMAGE"]))
+            images_out = [p.inline_data for p in (response.parts or [])
+                          if p.inline_data and p.inline_data.mime_type.startswith("image/") and not p.thought]
+            if not images_out or not images_out[0].data:
+                raise ValueError("Generation response contains no image")
+            payload = {"image_base64": base64.b64encode(images_out[0].data).decode("ascii"),
+                       "mime_type": images_out[0].mime_type}
         else:
-            raise ValueError("Async direct adapter supports context and text embedding only")
+            raise ValueError("Async adapter supports context, text embedding and image generation only")
         usage = getattr(response, "usage_metadata", None)
         return {"payload": payload, "usage_json": usage.model_dump(mode="json") if usage else None,
                 "provider_request_id": getattr(response, "response_id", None)}

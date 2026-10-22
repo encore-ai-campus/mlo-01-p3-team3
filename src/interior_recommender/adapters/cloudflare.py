@@ -31,11 +31,33 @@ class CloudflareAdapter:
         if settings.image_model != "@cf/black-forest-labs/flux-2-klein-4b":
             raise ValueError("Cloudflare MVP supports only the documented FLUX.2 klein 4B model")
         self.client = client or httpx.Client(timeout=settings.timeout_seconds)
+        self.async_client = None
 
     def close(self):
         self.client.close()
 
+    async def aclose(self):
+        if self.async_client:
+            await self.async_client.aclose()
+
     def call(self, kind, prompt, images, schema=None):
+        files, sizes = self._inputs(kind, prompt, images)
+        response = self.client.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{self.account}/ai/run/{self.settings.image_model}",
+            headers={"Authorization": "Bearer " + self.token}, files=files)
+        return self._result(response, sizes)
+
+    async def acall(self, kind, prompt, images, schema=None):
+        # Header/size checks are CPU-small (references are already <=480px).
+        files, sizes = self._inputs(kind, prompt, images)
+        if self.async_client is None:
+            self.async_client = httpx.AsyncClient(timeout=self.settings.timeout_seconds)
+        response = await self.async_client.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{self.account}/ai/run/{self.settings.image_model}",
+            headers={"Authorization": "Bearer " + self.token}, files=files)
+        return self._result(response, sizes)
+
+    def _inputs(self, kind, prompt, images):
         if kind != "generate" or len(images) > 4:
             raise ValueError("Cloudflare generation supports at most four reference images")
         sizes = []
@@ -49,10 +71,9 @@ class CloudflareAdapter:
                  "height": (None, str(self.settings.output_height))}
         files.update({f"input_image_{i}": (f"reference-{i}.png", data, "image/png")
                       for i, data in enumerate(images)})
-        response = self.client.post(
-            f"https://api.cloudflare.com/client/v4/accounts/{self.account}/ai/run/{self.settings.image_model}",
-            headers={"Authorization": "Bearer " + self.token}, files=files,
-        )
+        return files, sizes
+
+    def _result(self, response, sizes):
         try:
             body = response.json()
         except ValueError:

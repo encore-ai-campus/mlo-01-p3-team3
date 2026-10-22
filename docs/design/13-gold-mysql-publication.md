@@ -1,6 +1,8 @@
 # Gold → MySQL 게시 필드 계약
 
-2026-10-18 설계 계약. 이 문서의 필수 컬럼·관계를 포함해 서비스 DDL을 작성한다. 현재 `publication/schema.py`의 document-publication-v2·`sql/publication_reference_v2.sql`·게시 writer는 확장 필드·링크 관측·고정 Gold 참조를 구현한다. v1 SQL만으로 현재 배포를 준비하지 않는다. 실제 DB migration·게시 코드·추천 어댑터 적용 완료 기록이 아니다.
+2026-10-19: [추천 서버 카탈로그 어댑터](../interior-recommender/server-catalog.md)를 코드로 준비했다. 완료 게시·현재 상품/이미지·이용 범위·MySQL 임베딩 참조와 고정 Delta export를 대조해 기존 추천 인덱스를 만들고 반환/클릭 시 현재 상태를 재검증한다. 등록안은 출력만 하며 DB 등록·인덱스 활성화·Gold 재평가·업무 데이터 게시와 실제 서버 배포는 별도다. 아래 기존 어댑터 미구현 설명은 이전 상태와 구분한다.
+
+2026-10-18 설계 계약. 필수 컬럼·관계는 `publication/schema.py`의 `document-publication-v2`, `sql/publication_reference_v2.sql`, 게시 writer·계획·읽기 전용 audit에 구현했다. 기존 DB 확장은 별도 적용/롤백 SQL을 사용하며 [스키마 반영·인수 가이드](../../src/data_pipeline/docs/mysql_schema_rollout.md)를 따른다. 코드 구현·격리 검증과 실제 운영 DB 적용·업무 게시·추천 어댑터 인수는 구분한다. v1 SQL만으로 현재 배포를 준비하지 않는다.
 
 [데이터 모델](03-data-model.md) · [상품 속성 사전](data-dictionary/02-products.md#gold-게시-필수-확장-컬럼) · [게시 실행](../../src/data_pipeline/docs/mysql_publication.md)
 

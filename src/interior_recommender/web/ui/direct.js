@@ -1,4 +1,5 @@
 "use strict";
+import {createProductPreview} from "./product-preview.mjs";
 const $ = id => document.getElementById(id);
 let runId = new URLSearchParams(location.search).get("run");
 let timer;
@@ -6,6 +7,7 @@ let csrf;
 const statusNames = {PENDING:"추천을 준비하고 있습니다.", COMPLETED:"추천이 완료되었습니다.", UNVERIFIED_ONLY:"필수 정보가 확인된 상품이 없습니다. 미확인 후보를 따로 표시합니다.", NO_RESULTS:"조건에 맞는 상품이 없습니다.", AMBIGUOUS:"원하는 가구가 모호합니다. 입력 내용을 수정해 주세요.", UNSUPPORTED:"현재 지원하지 않는 요청입니다.", INDEX_NOT_READY:"상품 카탈로그가 준비되지 않았습니다.", RANKING_FAILED:"추천 계산에 실패했습니다."};
 const fieldNames = {category_code:"품목", color:"색상", material:"재질", shape:"형태", price_krw:"예산", width_mm:"폭", depth_mm:"깊이", height_mm:"높이", unapplied_conditions:"추가 조건"};
 const checkNames = {MATCH:"확인", DIFFERENT:"불일치", UNKNOWN:"미확인"};
+const preview = createProductPreview({api, parent:()=>runId, panel:document.getElementById("product-preview")});
 const basisNames = {NONE:"기준 치수 없음", RELATIVE_ONLY:"사진 속 상대 비율", TYPICAL_OBJECT_SIZE:"주변 물체의 통상 크기를 가정"};
 function node(tag, text) { const el = document.createElement(tag); el.textContent = text; return el; }
 const valueNames = {black:"검정", white:"흰색", gray:"회색", brown:"갈색", beige:"베이지", ivory:"아이보리", navy:"네이비", blue:"파랑", pink:"분홍", green:"초록", red:"빨강", yellow:"노랑", wood:"목재", metal:"금속", glass:"유리", ceramic:"세라믹", fabric:"패브릭", mesh:"메쉬", synthetic_leather:"인조가죽", leather:"천연가죽", plastic:"플라스틱", mdf:"MDF", rectangle:"사각형", square:"정사각형", round:"원형", oval:"타원형", l_shape:"ㄱ자형", straight:"일자형"};
@@ -46,13 +48,14 @@ function cards(target, items) {
       if (componentNames[key]) card.append(node("p", `${componentNames[key]}: ${values.map(v=>valueNames[v] || v).join(" / ")}`));
     }
     if (m.metadata_issues?.length) card.append(node("p", "일부 원천 규격은 확인이 필요합니다."));
-    if (Object.keys(m.raw_attributes || {}).length) {
-      const details=node("details", ""); details.append(node("summary", "수집 규격 원문"));
-      for (const [key, values] of Object.entries(m.raw_attributes)) details.append(node("p", `${key}: ${values.join(" / ")}`));
-      card.append(details);
-    }
     const checks = Object.entries(item.checks).map(([key,value])=>`${fieldNames[key.split(":").at(-1)] || "요청 조건"}: ${checkNames[value] || "미확인"}`).join(" · ");
+    for (const reason of item.match_explanation || []) card.append(node("p", reason));
+    const roomLabels = {palette:"색조", materials:"재질", shapes:"형태", styles:"스타일"};
+    const unknownRoom = Object.entries(item.interior_match?.checks || {}).filter(([,v])=>v.state === "UNKNOWN").map(([key])=>roomLabels[key]);
+    if (unknownRoom.length) card.append(node("p", `상품 정보가 부족해 방과의 조화를 비교하지 못한 특징: ${unknownRoom.join(", ")}`));
     card.append(node("p", checks), node("p", "실제 공간의 크기 적합성: 미확인"));
+    const generate = node("button", "이 상품을 방에 배치해 보기"); generate.type="button";
+    generate.addEventListener("click", () => preview.start(item)); card.append(generate);
     target.append(card);
   }
   if (!items.length) target.append(node("p", "표시할 상품이 없습니다."));
@@ -78,7 +81,7 @@ async function poll() {
   } catch (error) { $("status").textContent=error.message; $("retry").hidden=false; }
 }
 $("request-form").addEventListener("submit", async event => {
-  event.preventDefault(); clearTimeout(timer);
+  event.preventDefault(); clearTimeout(timer); preview.clear();
   const button=event.currentTarget.querySelector("button"); button.disabled=true;
   try {
     const form=new FormData(event.currentTarget); form.set("request_id", crypto.randomUUID());

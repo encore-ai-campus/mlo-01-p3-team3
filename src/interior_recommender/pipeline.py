@@ -33,6 +33,8 @@ def contract_hash(manifest):
         frozen["direct_contract"] = manifest["direct_contract"]
     if "execution_backend" in manifest:
         frozen["execution_backend"] = manifest["execution_backend"]
+    if "preview_contract" in manifest:
+        frozen["preview_contract"] = manifest["preview_contract"]
     return checksum(json.dumps(frozen, sort_keys=True, ensure_ascii=False).encode("utf-8"))
 
 

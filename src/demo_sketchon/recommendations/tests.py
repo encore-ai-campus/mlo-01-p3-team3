@@ -29,6 +29,92 @@ def picture(size=(64, 48)):
 
 
 class IntegrationTests(TransactionTestCase):
+    def test_preview_daily_budget_wait_is_durable(self):
+        from .models import RecommendationJob
+        from interior_recommender.adapters.cloudflare import CloudflareError
+        from types import SimpleNamespace
+        run = self.submit().json()["run_id"]
+        parent = self.completed(self.client, run)
+        item = parent["recommendations"]["items"][0]
+
+        class Budget(DirectDemoAdapter):
+            def call(self, *args):
+                raise CloudflareError(429, SimpleNamespace(headers={}), 3036)
+
+        self.engine.factory = Budget
+        child = self.client.post(BASE + f"api/runs/{run}/previews", {"image_id": item["image_id"]}, content_type="application/json").json()["run_id"]
+        self.runner.run(self.worker.drain_due())
+        job = RecommendationJob.objects.get(pk=child)
+        self.assertEqual(job.status, "RETRY_WAIT")
+        self.assertIsNone(job.lease_until)
+        self.assertEqual(job.available_at.hour, 0)
+        stage = read_json(self.engine.root / "runs" / child / "manifest.json")["stages"]["preview"]
+        self.assertEqual(stage["status"], "BUDGET_WAIT")
+        self.assertEqual(stage["attempts"][0]["error_code"], "3036")
+
+    def test_product_preview_is_optional_idempotent_and_owned(self):
+        run = self.submit().json()["run_id"]
+        parent = self.completed(self.client, run)
+        self.assertNotIn("generate", self.calls)
+        item = parent["recommendations"]["items"][0]
+        url = BASE + "api/runs/" + run + "/previews"
+        response = self.client.post(url, {"image_id": item["image_id"]}, content_type="application/json")
+        self.assertEqual(response.status_code, 202, response.content)
+        child = response.json()["run_id"]
+        self.assertNotEqual(child, run)
+        self.assertNotIn("generate", self.calls)  # Admission never calls a provider.
+        state = self.completed(self.client, child)
+        self.assertEqual(state["flow"], "product-preview")
+        self.assertEqual(state["parent_run_id"], run)
+        self.assertEqual(state["result_image"], "generated.png")
+        self.assertEqual(state["selected_product"]["image_id"], item["image_id"])
+        self.assertEqual(self.calls, ["direct_context", "embed_text", "generate"])
+        again = self.client.post(url, {"image_id": item["image_id"]}, content_type="application/json")
+        self.assertEqual(again.json()["run_id"], child)
+        self.runner.run(self.worker.drain_due())
+        self.assertEqual(self.calls.count("generate"), 1)
+        preserved = self.client.get(BASE + "api/runs/" + run).json()
+        self.assertEqual(preserved["recommendations"], parent["recommendations"])
+        asset = self.client.get(BASE + f"assets/{child}/generated.png")
+        self.assertEqual(asset.status_code, 200)
+        self.assertTrue(b"".join(asset.streaming_content).startswith(b"\x89PNG"))
+        stranger = Client()
+        self.assertEqual(stranger.post(url, {"image_id": item["image_id"]}, content_type="application/json").status_code, 403)
+        self.assertEqual(stranger.get(BASE + "api/runs/" + child).status_code, 403)
+        self.assertEqual(stranger.get(BASE + f"assets/{child}/generated.png").status_code, 403)
+
+    def test_preview_rejects_unknown_product_incomplete_parent_and_csrf(self):
+        run = self.submit().json()["run_id"]
+        url = BASE + "api/runs/" + run + "/previews"
+        self.assertEqual(self.client.post(url, {"image_id": "unknown"}, content_type="application/json").status_code, 400)
+        self.completed(self.client, run)
+        self.assertEqual(self.client.post(url, {"image_id": "https://example.com/image.png"}, content_type="application/json").status_code, 404)
+        self.assertEqual(Client(enforce_csrf_checks=True).post(url, {}, content_type="application/json").status_code, 403)
+        self.assertNotIn("generate", self.calls)
+
+    def test_generation_failure_keeps_recommendations_and_retry_reuses_analysis(self):
+        run = self.submit().json()["run_id"]
+        parent = self.completed(self.client, run)
+        item = parent["recommendations"]["items"][0]
+        original = self.engine.factory
+
+        class Failing(DirectDemoAdapter):
+            def call(self, kind, *args, **kwargs):
+                if kind == "generate":
+                    raise ValueError("offline generation failure")
+                raise AssertionError("Analysis must not run in preview")
+
+        self.engine.factory = Failing
+        response = self.client.post(BASE + f"api/runs/{run}/previews", {"image_id": item["image_id"]}, content_type="application/json")
+        child = response.json()["run_id"]
+        self.runner.run(self.worker.drain_due())
+        self.assertEqual(self.client.get(BASE + f"api/runs/{child}").json()["job"]["status"], "FAILED")
+        self.assertEqual(self.client.get(BASE + f"api/runs/{run}").json()["recommendations"], parent["recommendations"])
+        self.engine.factory = original
+        self.client.post(BASE + f"api/runs/{child}/actions/prepare", {"retry": True}, content_type="application/json")
+        self.completed(self.client, child)
+        self.assertEqual(self.calls, ["direct_context", "embed_text", "generate"])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix=".recommendation-test-", dir=settings.BASE_DIR)
         self.addCleanup(self.temp.cleanup)
@@ -92,6 +178,10 @@ class IntegrationTests(TransactionTestCase):
         self.assertContains(response, "sketchon-logo-approved.png")
         self.assertContains(response, "recommendations/direct.mjs")
         self.assertNotContains(response, "RoomPick")
+        self.assertNotContains(response, 'id="context"')
+        self.assertNotContains(response, "입력 해석")
+        self.assertNotContains(response, 'id="unverified-panel"')
+        self.assertNotContains(response, "필수 정보 미확인 후보")
         self.assertNotContains(response, 'id="request-form"')
         self.assertNotContains(response, 'type="file"')
         self.assertContains(response, 'id="requested-text"')
@@ -276,7 +366,7 @@ class IntegrationTests(TransactionTestCase):
         state = self.completed(self.client, response.json()["run_id"])
         self.assertIn("원목", seen["embed_text"])
         self.assertEqual(state["status"], "COMPLETED")
-        self.assertEqual(state["recommendations"]["ranking_version"], "weighted-content-v2")
+        self.assertEqual(state["recommendations"]["ranking_version"], "interior-content-v3")
         self.assertEqual(len(state["recommendations"]["items"]), 6)
         for item in state["recommendations"]["items"]:
             self.assertEqual(item["metadata"]["category_code"], "CHAIR")

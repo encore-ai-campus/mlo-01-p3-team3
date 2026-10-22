@@ -57,5 +57,22 @@
   ],
   "single_100_trial": "Background server task started separately; completion/time is not asserted by this release proof",
   "batch_200": "Not applied",
-  "continuous_restart": "Not requested or performed by Git release"
+  "continuous_restart": "Not requested or performed by Git release",
+  "dev_merge": {
+    "source": "f39372a498795f71315bab11b6021006c64e161e",
+    "resolved_documents": [
+      "README.md",
+      "docs/design/13-gold-mysql-publication.md",
+      "src/data_pipeline/docs/README.md"
+    ],
+    "resolution": "User approved preserving dev layout and newest adapter explanation, keeping pipeline/Mongo links, v1 SQL restriction and both guide rows",
+    "post_merge_unit_tests": {
+      "tests": 32,
+      "failures": 0,
+      "errors": 0,
+      "scope": "New dev embedding_table, embedding_vectors, garage_embeddings plus shared Spark reuse; not a fresh full-suite run"
+    },
+    "mongodb_tools": "Git tree preserved unchanged; materialized in sparse checkout for link verification",
+    "server_deployment": "Not performed by dev merge"
+  }
 }
