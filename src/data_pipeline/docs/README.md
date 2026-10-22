@@ -6,6 +6,8 @@
 
 현재 상태·남은 인수는 **[실서버 검증](service_validation_20261018.md)** 한 곳에서 관리한다. 실행 명령은 각 실행 가이드, 데이터와 복구 규칙은 아래 계약 문서를 따른다. 검증 기록의 과거 버전/시험 전용 경로를 운영 설정으로 사용하지 않는다.
 
+실제 배치의 반복 시간 측정과 병목 비교는 [실서버 파이프라인 반복 계측](performance_measurement.md)의 순서와 기록 형식을 사용한다. 계측 코드 변경 경로는 [책임별 코드·문서 라우팅](code-routing.md)을 따른다.
+
 ## 인계와 검증
 
 | 문서 | 용도 |
@@ -14,8 +16,11 @@
 | [2026-10-22 Git 전달 검증](verification/git_release_20261022.json) | 커밋 대상 격리 시험본의 전체 회귀 564개 통과·전달 범위·제외 파일 |
 | [2026-10-22 파일 정리·동등성 검증](verification/range_index_compaction_20261022.json) | 19개 Delta 테이블 정리·내용 보존·100건 범위 읽기 확인·서버 테스트 183개 |
 | [배치별 입력·처리량·시간 비교](verification/batch_input_timing_audit_20261022.json) | epoch 14·30 입력량과 12~31 시간 추이, 미계측 항목 구분 |
+| [세부 계측 단일 100건 결과](verification/detailed_metrics_single100_20261022.json) | 계측 배포 후 epoch 34의 Bronze·Silver·Gold·게시·활성화 지표와 MySQL 전후 읽기 전용 스냅샷 |
+| [epoch 12–34 배치 시간 비교](verification/batch_timing_comparison_20261022.md) | 기존 배치 이력과 epoch 33·34 비교, 시간 측정 경계와 해석 주의사항 |
 | [구현·검증 변경 이력](implementation_history.md) | 10월 19~21일 개선 순서·실제 결과·남은 작업 |
 | [Silver·Gold·활성화 비용 개선](downstream_optimization.md) | 고정 버전 검증 재사용·메타데이터·입력 묶음 보존·실제 배치 비교 |
+| [실서버 파이프라인 반복 계측](performance_measurement.md) | 동일 절차의 단일 배치 단계별 계측·병목 비교·결과 JSON 형식 |
 | [MySQL v2 스키마 반영](mysql_schema_rollout.md) | 적용/롤백·계약 검사·기존 데이터 보완 |
 | [서버 배포·인계](deployment.md) | 서버 역할·보호 설정 경로·설치·배포·초기 적재·재개 |
 | [실서버 검증·남은 인수](service_validation_20261018.md) | 현재 확인 범위·최종 release·증거·운영 전 필요한 입력 |
