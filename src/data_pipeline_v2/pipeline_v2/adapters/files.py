@@ -122,6 +122,19 @@ class FileLake:
                 self.metrics['written_rows'] += len(rows)-len(old)
         return proof
 
+    def purge(self, table, expired):
+        """Retention deletion for expiring tables only; immutable stage proofs never point here."""
+        if not table.replace('_', '').isalnum(): raise Invalid('TABLE_NAME_INVALID')
+        removed = 0
+        with locked(self.root/'writer.lock'):
+            for path in sorted((self.root/table/'rows').glob('*.json')):
+                values = read(path)
+                kept = {k:v for k,v in values.items() if not expired(v['payload'])}
+                if len(kept) != len(values):
+                    removed += len(values) - len(kept)
+                    write(path, kept)
+        return removed
+
     def verify(self, proof):
         verified(proof)
         if proof['lake'] != self.identity: raise Invalid('LAKE_TARGET_CHANGED')

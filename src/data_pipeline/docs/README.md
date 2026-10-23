@@ -1,5 +1,7 @@
 # 파이프라인 문서 안내
 
+이 폴더는 현재 운영 중인 기존 실행기 문서다. 재설계 목표 경로(승인·활성화 없는 직접 게시, 크롤 완료 후 Kafka offset 범위를 고정한 Spark 유한 배치)는 별도 패키지인 **[새 실행기 v2](../../data_pipeline_v2/README.md)**에서 진행한다. 책임 경계는 [v2 구조와 계약](../../data_pipeline_v2/docs/architecture.md), NiFi 연결은 [NiFi 기동 계약](../../data_pipeline_v2/docs/nifi-contract.md), 서버 이전은 [v2 서버 이전](../../data_pipeline_v2/docs/server-migration.md)을 본다. v2는 기존 운영 tick·원장·Delta를 공유하지 않는다.
+
 처음 인계받는 운영자는 **[운영 인계 요약](operator_handoff.md)**에서 접속·현재 상태·배포 차이·실행·정지·복구 순서부터 확인한다.
 
 코드 변경·리팩토링은 **[책임별 코드·문서 라우팅](code-routing.md)**에서 담당 계층·파일·먼저 읽을 계약·회귀 테스트를 선택한다. 구현 기준은 로컬 `develop`이며, 실행·복구 안내와 코드 변경 안내를 구분한다.

@@ -46,3 +46,35 @@ python -B /opt/pj3/pipeline-v2/releases/RELEASE/v2/run_pipeline.py --config /etc
 다음 tick 호출을 중단한 뒤 현재 프로세스/Spark 종료를 확인한다. `RUNNING`과 lease 불명확 상태는 정지 증거 없이 초기화하지 않는다. `recover --job HASH --stop-evidence 실제근거`는 기록을 남기고 안전한 재검증·인계를 다시 시도한다. lease 복구는 기존 lease 운영 절차로 별도 처리하며 state recover만으로 다른 서버의 lease를 지우지 않는다.
 
 롤백은 실행기 경로만 되돌리는 것으로 끝나지 않는다. v3 출처가 들어간 서비스 DB를 구버전 감사·추천 어댑터가 해석할 수 있는지 확인하고, 필요하면 보존한 DB 복구 지점/게시 근거와 함께 되돌린다. 새 상태와 v2 Delta는 장애 증거로 보존하고 기존 v1 checkpoint를 새 실행기에 연결하지 않는다.
+
+## 크롤 완료 유한 배치 서버 이전
+
+위 절차에 더해 유한 배치 경로는 다음을 먼저 확인한다. 이 항목도 아직 **서버에서 실행하지 않았다.**
+
+1. `batch.server.example.json`을 보호된 경로로 복사하고 `replace-with-*`를 채운다. `lake_root`는 `/direct-v2`로 끝나야 하고 Delta 출력은 그 아래 `finite-v1/`에 생긴다. 기존 v1 Delta와 `capture/tick` 실행기의 상태를 공유하지 않는다.
+2. Kafka topic(`kafka.topic`)의 partition 수, retention, 최대 메시지 크기를 정한다. retention은 관측된 최대 backlog와 복구 SLA보다 길어야 한다. 실제 topic retention을 `kafka.retention_seconds`에 적으면 `batch-backlog`가 가장 오래된 미처리 batch 기준의 `kafka_retention_margin_seconds`를 보고한다. producer 옵션은 `PIPELINE_V2_KAFKA_PRODUCER_OPTIONS`, Spark Kafka 옵션은 `PIPELINE_V2_KAFKA_SPARK_OPTIONS` 환경변수 JSON에 둔다. `acks`, `enable_idempotence`, `assign`, `startingOffsets`, `endingOffsets`, `failOnDataLoss`는 코드가 고정한다. Spark에는 설치된 Spark 버전에 맞는 `spark-sql-kafka` jar가 필요하다.
+3. 제어 원장 DB(`store.database`)에 컬렉션 `pipeline_v2_<kind>`가 생긴다. 일반 처리 계정과 격리 열람 계정을 분리하고, `pipeline_v2_quarantine_raw`·`pipeline_v2_quarantine_access`는 제한 역할에만 읽기를 허용한다. TTL 인덱스로 지우지 않고 `batch-retention`으로 지운다.
+4. writer lease는 두 대상으로 나뉜다. 처리 단계는 기존과 같은 Delta writer 대상을 쓴다. 게시 전용 프로세스(`--phase publish`)는 `<lake_root>/_mysql-publication` 대상을 쓴다. 두 lease 모두 TTL 없이 운영하며, 정지 근거 없이 수동으로 지우지 않는다.
+5. `admission.field_allowlist`는 원천별 보관 허용 필드가 확정되면 설정한다. 비어 있으면 원천 계약 검사만 적용한다. `retention` 30/90일은 복구 SLA와 내부 보존 정책을 확인한 뒤 고정한다.
+6. canary는 상품 몇 개짜리 크롤 manifest 하나로 `batch-prepare → batch-relay → batch-submit → batch-work --phase process → batch-work --phase publish → batch-audit` 순서로 실행한다. 이어서 같은 manifest의 재제출, ack 유실 후 재발행, offset 만료 후 새 generation, 게시 응답 유실 복구, 철회·재계산을 제한 범위에서 확인한다.
+7. 실제 Delta 4.x 런타임에서 `txnAppId` snapshot 재시도, `append_history`의 키 사전 조회 후 append, `DeltaTable.delete` 보존 정리를 검증한다. 로컬 시험은 Delta를 메모리 대역으로 바꿔 Spark 로직만 확인했다. Delta는 동시 writer를 키 조회로 막지 못하므로 처리 잠금과 lease로 단일 writer를 강제한다.
+8. NiFi 연결은 [NiFi 기동 계약](nifi-contract.md)을 따른다. 처리와 게시를 겹쳐 실행할지는 실제 backlog·Spark 기동 비용·공유 I/O를 측정한 뒤 정한다.
+
+## 반복 배포와 서버 계측
+
+유한 배치의 반복 배포는 운영자 작업 폴더(이 저장소의 상위 폴더)의 `/v2-server-deploy` 스킬을 쓴다. 원본은 `.agents/skills/v2-server-deploy/SKILL.md`와 `scripts/deploy.sh`다. 이 저장소에는 배포 묶음 생성기(`tools/release.py`)와 고정 관측 키 재생 도구(`tools/export_batch_input.py`)만 둔다. 서버 주소와 접속 절차가 운영자 PC의 로컬 전용 자료에 있기 때문이다.
+
+| 단계 | 내용 |
+|---|---|
+| `build` | 현재 작업 트리로 해시가 붙은 배포 묶음과 Executor용 `pyfiles.zip`을 만들고 기준 HEAD·미커밋 항목 수를 기록 |
+| `stage` → `push` → `install` | Bastion을 거쳐 Master의 격리 디렉터리 `/var/lib/pj3/product-pipeline/spark/v2-batch-20261023/`에 올리고, `releases/<manifest_hash>/`에 해제한 뒤 `current` 링크를 바꿈. 기존 릴리스는 덮어쓰지 않음 |
+| `start` / `status` | `current`로 계측 드라이버를 실행하고 결과(`results/<시각>/report.json`)를 확인 |
+
+서버 실행 조건:
+
+- Executor는 Worker의 기본 Python(`/usr/bin/python3`)을 쓴다. 이 Python에는 `pymongo`가 없고, Worker는 Mongo 호스트명을 해석하지 못한다. 그래서 허용된 원천 payload를 Kafka 이벤트와 Bronze 색인에 실어 보내고, Executor는 원천 DB에 접속하지 않는다. 코드는 `spark.submit.pyFiles`로 전달한다.
+- Master venv의 Kafka 클라이언트는 `confluent-kafka`다. Spark Kafka 옵션은 기존 `kafka_tls.spark_options` 형식을 쓴다.
+- `pj3-spark-master`의 Kafka ACL은 `product.raw.collected`와 검증 topic에만 쓰기를 허용한다. 계측은 검증 topic만 쓴다(partition 1, 보존 1일, 최대 약 1MB). 운영 topic은 기존 Bronze가 소비하므로 쓰지 않는다. 새 topic이 필요하면 ACL 승인을 먼저 받는다.
+- 계측은 Gold까지만 실행하고 MySQL에는 게시하지 않는다. 게시는 추천 소비자의 v3 출처 호환을 확인하고 승인받은 뒤 연다.
+
+배포 이력과 현재 배포본은 상위 폴더 `HANDOFF.md`의 "v2 서버 배포 기록"에 남긴다. 2026-10-23 첫 배포(manifest `70af2bb4…`)는 배포 가능 여부(`DEPLOY_READY`)만 확인했고, 계측은 하지 않았다.

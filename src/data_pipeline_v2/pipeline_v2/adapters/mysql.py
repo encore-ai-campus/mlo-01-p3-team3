@@ -1,9 +1,10 @@
 """V2 transport and one bounded schema discovery, without review/index tables."""
 import re
+from contextlib import contextmanager, nullcontext
 
 from product_pipeline.publication.mysql import MySQL
 from product_pipeline.publication.schema import TABLES, PRIMARY, UNIQUE, FKS
-from ..domain.contracts import digest, Invalid
+from ..domain.contracts import canonical, digest, Invalid
 
 
 USED=('categories','products','assets','product_images','offers','offer_snapshots',
@@ -11,13 +12,89 @@ USED=('categories','products','assets','product_images','offers','offer_snapshot
 
 
 class DirectMySQL(MySQL):
+    def _timed(self, stage, counts=None):
+        timing = getattr(self, 'timing', None)
+        return timing.measure(stage, timing.active_scope or 'mysql', counts=counts) if timing else nullcontext()
+
     def all(self,sql,args=()):
         if hasattr(self,'query_metrics'):self.query_metrics['sql_queries']+=1
-        return super().all(sql,args)
+        kind = sql.split(None, 1)[0].lower()
+        with self._timed('mysql.client.' + kind, {'sql_calls':1}) as counts:
+            rows = super().all(sql,args)
+            if counts is not None:counts['returned_rows'] = len(rows)
+            return rows
 
     def execute(self,sql,args=()):
         if hasattr(self,'query_metrics'):self.query_metrics['sql_queries']+=1
-        return super().execute(sql,args)
+        kind = sql.split(None, 1)[0].lower()
+        with self._timed('mysql.client.' + kind, {'sql_calls':1}) as counts:
+            rows = super().execute(sql,args)
+            if counts is not None:counts['affected_rows'] = max(0, rows)
+            return rows
+
+    @contextmanager
+    def transaction(self):
+        with self._timed('mysql.transaction.begin'):
+            self.connection.begin()
+        self._read_cache = {}
+        try:
+            yield self
+            with self._timed('mysql.transaction.commit'):
+                self.connection.commit()
+        except BaseException:
+            with self._timed('mysql.transaction.rollback'):
+                self.connection.rollback()
+            raise
+        finally:
+            self._read_cache = None
+
+    def get(self,table,key,*,locking=True):
+        cache = getattr(self,'_read_cache',None)
+        identity = (table,canonical(key),locking)
+        if cache is not None and identity in cache:
+            return cache[identity]
+        return super().get(table,key,locking=locking)
+
+    def prefetch(self,table,keys):
+        if table not in USED or getattr(self,'_read_cache',None) is None:
+            raise Invalid('MYSQL_PREFETCH_TRANSACTION_REQUIRED')
+        unique = {canonical(key):key for key in keys}
+        for body in unique.values():
+            if not body or any(k not in TABLES[table] for k in body):
+                raise Invalid('MYSQL_PREFETCH_KEY_INVALID')
+        values = list(unique.values())
+        for start in range(0,len(values),100):
+            chunk = values[start:start+100]
+            where = ' OR '.join('('+' AND '.join('`'+k+'`=%s' for k in body)+')' for body in chunk)
+            lock = ' FOR SHARE' if table == 'categories' else ' FOR UPDATE'
+            rows = self.all('SELECT * FROM `'+table+'` WHERE '+where+lock,tuple(v for body in chunk for v in body.values()))
+            for body in chunk:
+                matches = [row for row in rows if all(row[k] == v for k,v in body.items())]
+                if len(matches) > 1:
+                    raise Invalid('MYSQL_PREFETCH_DUPLICATE_KEY')
+                self._read_cache[(table,canonical(body),True)] = matches[0] if matches else None
+
+    def _invalidate(self,table,identity):
+        cache = getattr(self,'_read_cache',None)
+        if cache is not None:
+            import json
+            for key, row in list(cache.items()):
+                body = row if row is not None else json.loads(key[1])
+                if key[0] == table and any(k in body and body[k] == v for k,v in identity.items()):
+                    cache.pop(key,None)
+
+    def insert(self,table,values):
+        self._invalidate(table,values)
+        try:
+            return super().insert(table,values)
+        except BaseException:
+            if getattr(self,'_read_cache',None) is not None:
+                self._read_cache.clear()
+            raise
+
+    def update(self,table,key,values):
+        self._invalidate(table,key)
+        return super().update(table,key,values)
 
     def preflight(self):
         server=self.one('SELECT @@version AS version, @@global.read_only AS ro, @@global.super_read_only AS sro')

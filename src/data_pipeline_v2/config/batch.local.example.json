@@ -1,0 +1,28 @@
+{
+  "batch_config_version": 1,
+  "mode": "local",
+  "target": "local-finite-v1",
+  "state_root": "../data/batch-state",
+  "lake_root": "../data/batch-lake",
+  "publication_root": "../data/batch-publication",
+  "broker_root": "../data/batch-broker",
+  "admission": {
+    "storage_allowed": true,
+    "quarantine_allowed": true
+  },
+  "retention": {
+    "quarantine_raw_days": 30,
+    "error_metadata_days": 90
+  },
+  "policy": {
+    "mappings": [],
+    "rules": [],
+    "gold": {}
+  },
+  "batch_limits": {
+    "max_events": 10000,
+    "pending_batches": 3,
+    "publication_products": 100,
+    "pending_age_seconds": 86400
+  }
+}

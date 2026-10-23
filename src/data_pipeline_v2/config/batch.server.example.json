@@ -1,0 +1,59 @@
+{
+  "batch_config_version": 1,
+  "mode": "server",
+  "target": "replace-with-finite-server-target",
+  "state_root": "/var/lib/pj3/product-pipeline-v2/finite-state",
+  "lake_root": "s3a://pj3-data/direct-v2",
+  "single_coordinator": true,
+  "spark_options_env": "PIPELINE_V2_SPARK_OPTIONS",
+  "store": {
+    "uri_env": "PIPELINE_V2_MONGO_URI",
+    "database": "pipeline_ops",
+    "replica_set": "rs-products"
+  },
+  "mongo": {
+    "replica_set": "rs-products"
+  },
+  "lease": {
+    "uri_env": "PIPELINE_V2_LEASE_URI",
+    "database": "pipeline_ops",
+    "collection": "pipeline_writer_leases",
+    "seconds": 120,
+    "heartbeat_seconds": 20
+  },
+  "kafka": {
+    "topic": "product-observation-batch-v1",
+    "producer_options_env": "PIPELINE_V2_KAFKA_PRODUCER_OPTIONS",
+    "spark_options_env": "PIPELINE_V2_KAFKA_SPARK_OPTIONS",
+    "retention_seconds": 604800
+  },
+  "mysql": {
+    "contract_version": 1,
+    "target_id": "replace-with-target",
+    "host": "replace-with-primary",
+    "database": "replace-with-database",
+    "user": "replace-with-publisher",
+    "password_env": "PIPELINE_V2_MYSQL_PASSWORD",
+    "ca_env": "PIPELINE_V2_MYSQL_CA"
+  },
+  "admission": {
+    "storage_allowed": true,
+    "quarantine_allowed": true
+  },
+  "retention": {
+    "quarantine_raw_days": 30,
+    "error_metadata_days": 90
+  },
+  "policy": {
+    "mappings": [],
+    "rules": [],
+    "gold": {}
+  },
+  "batch_limits": {
+    "max_events": 10000,
+    "pending_batches": 3,
+    "publication_products": 100,
+    "spark_partitions": 3,
+    "pending_age_seconds": 86400
+  }
+}

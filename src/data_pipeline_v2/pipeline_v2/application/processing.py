@@ -16,7 +16,7 @@ class Processor:
 
     def _silver(self, references, policies, scope_id):
         try:
-            with self.state.timing.measure('source.read_raw_page',scope_id,counters={'observations':len(references)}):
+            with self.state.timing.measure('source.read_raw_page',scope_id,counts={'observations':len(references)}):
                 items = self.source.read_many(references)
         except Invalid as exc:
             if str(exc) not in {'SOURCE_PAGE_BYTES','SOURCE_CHANGED','SOURCE_RANGE_MISSING_OR_DUPLICATE','IMAGE_STATE_MISSING'}:raise

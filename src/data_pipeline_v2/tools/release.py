@@ -19,7 +19,8 @@ def build(output, root=ROOT):
         for path in sorted((root/directory).rglob('*')):
             if path.is_file() and not path.is_symlink() and path.suffix in {'.py','.md'}:
                 files['v2/'+path.relative_to(root).as_posix()]=path.read_bytes()
-    for name in ('README.md','pyproject.toml','run_pipeline.py','config/local.example.json','config/server.example.json'):
+    for name in ('README.md','pyproject.toml','run_pipeline.py','config/local.example.json','config/server.example.json',
+                 'config/batch.local.example.json','config/batch.server.example.json'):
         files['v2/'+name]=(root/name).read_bytes()
     # Ship the exact parser/transport dependency, including its transitive imports.
     legacy=root.parent/'data_pipeline'

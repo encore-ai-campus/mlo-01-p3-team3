@@ -47,6 +47,63 @@ MySQL 출처 JSON `schema_version=3`은 `plan_id`, `product_key`, `source_refs`,
 
 scope 완료는 봉인된 **해당 상품 전체**의 Gold·게시 증거로 계산한다. 기존 65,498 같은 전역 상품 수를 완료 기준으로 사용하지 않는다. `BLOCKED/FAILED/SUPERSEDED/RUNNING`을 품질 보류와 구분한다. 실행 상태와 영수증에 비밀값·접속 URI를 넣지 않으며, 상태 내부 경로는 상대 POSIX 표기로 저장한다.
 
-모든 실행 단계는 상태 경로 `metrics/stage-times/<scope-sha256>/`의 해시가 붙은 JSON 묶음으로 남긴다. 각 묶음은 개별 이벤트의 run UUID, 단계 이름, UTC 시작/종료, `perf_counter_ns` 기반 `elapsed_ms`, 성공/실패 범주, job hash, 관측/저장/SQL 호출 건수를 보존한다. 실행 중 쓰기 지연을 줄이려고 최대 32개 이벤트를 묶되 명령 경계·오류에서 즉시 저장한다. scope·job 원문과 예외 문구·원천값·URI는 측정 로그에 복사하지 않는다. `summary.json`은 단계별 이벤트 수·전체 경과·최댓값·실패 수·누적 카운터를 요약한다. `run.total`, `tick.total`, 개별 DB/Delta 작업 시간은 포함 범위가 겹치므로 단순 합산하지 않는다. SQL 수는 연결 후 감지한 문장 호출 수이며 MySQL 서버 처리량이나 Spark의 실제 디스크 scan bytes를 뜻하지 않는다.
+모든 실행 단계는 상태 경로 `metrics/stage-times/<scope-sha256>/`의 해시가 붙은 JSON 묶음으로 남긴다. 각 묶음은 개별 이벤트의 run UUID, 단계 이름, UTC 시작/종료, `perf_counter_ns` 기반 `elapsed_ms`, 성공/실패 범주, job hash, 관측/저장/SQL 호출 건수를 보존한다. 실행 중 쓰기 지연을 줄이려고 최대 32개 이벤트를 묶되 명령 경계·오류에서 즉시 저장한다. scope·job 원문과 예외 문구·원천값·URI는 측정 로그에 복사하지 않는다. `summary.json`은 단계별 이벤트 수·전체 경과·최댓값·실패 수·누적 카운터를 요약한다. `run.total`, `tick.total`, 개별 DB/Delta 작업 시간은 포함 범위가 겹치므로 단순 합산하지 않는다. 유한 배치 경로에서는 계측 저장 실패가 업무 상태를 바꾸지 않는다. 저장에 실패한 이벤트는 최대 4,096개까지 메모리에 두고 다음 flush에서 다시 저장하며, 실패 횟수는 `batch-status`의 `metric_failures`로 보인다. SQL 수는 연결 후 감지한 문장 호출 수이며 MySQL 서버 처리량이나 Spark의 실제 디스크 scan bytes를 뜻하지 않는다.
 
 `recover`는 정지 근거와 이전 상태를 기록하고 차단된 작업이 뒤처져 있어도 해당 scope 커서를 되돌린다. 완료된 다른 작업은 결과를 다시 검증한 뒤 건너뛴다. 승인·활성화 기능을 복구 명령에 추가하지 않는다.
+
+## 크롤 완료 유한 배치의 책임과 계약
+
+재설계 목표 경로다. 위 `capture/tick` 실행기와 같은 업무 규칙(`domain/transform.py`)과 게시기를 쓰지만, 입력 고정·실행·저장 구조는 별도다.
+
+| 책임 | 위치 | 지켜야 할 경계 |
+|---|---|---|
+| 배치·이벤트·처분 계약 | `domain/batch.py` | 크롤·전달 manifest, event ID, 거부 이벤트, 보존 기간, 철회·재계산 job ID를 네트워크 없이 정의한다. |
+| 크롤 대조·Kafka 전달 | `application/outbox.py` | 행별 처분, 원천→Outbox 저장 후 읽기 대조, ack 기반 offset 범위, delivery generation |
+| 제출·처리·게시·복구 | `application/batch.py` | job 원장 CAS, 용량 예약·해제, 처리와 게시를 별도 잠금으로 실행, 정지 근거 기반 복구, 상세 감사, 보존 정리 |
+| 로컬 참조 처리 | `adapters/batch_local.py` | 파일 broker·FileLake로 계약과 복구를 검증한다. Spark를 대신하지 않는다. |
+| 분산 처리 | `adapters/spark_batch.py`, `adapters/spark_gold.py`, `adapters/batch_delta.py`, `adapters/kafka_batch.py` | 고정 offset Kafka batch 읽기, Executor 원천 조회·분류·정제, native Gold, Delta snapshot/history |
+| 제어 원장 | `adapters/batch_store.py` | 파일·Mongo 저장. `quarantine_raw`만 보존 기한 삭제가 허용되고 나머지는 append-only다. |
+| 명령 | `interfaces/batch_cli.py` | NiFi가 호출하는 유한 명령과 JSON 출력 |
+
+### 상태 축
+
+| 축 | 값 | 저장 위치 |
+|---|---|---|
+| 입력 처분 | `ACCEPTED`, `INPUT_QUARANTINE`, `PAYLOAD_OMITTED`, `SOURCE_METADATA_ONLY` | 크롤 원장 `intake`, Bronze stage `counts`, 격리 metadata |
+| Silver 품질 | `VALID`, `QUALITY_HOLD` | `normalized_history`, `silver_holds`/`silver_quality_holds` |
+| job 진행 | `QUEUED` → `RUNNING` → `GOLD_COMMITTED` → `PUBLISHING` → `COMPLETED` | job 원장 |
+| 실행 복구 | `RECOVERY_REQUIRED`(실패 단계 `failed_phase`) | job 원장 |
+| 상품 결과 | `OUTPUT_COMMITTED`, `QUALITY_WAIT`, `SOURCE_RETRACTED` / 게시 `PUBLISHED`, `LAST_GOOD_RETAINED`, `QUALITY_WAIT`, `WITHDRAWN` | Gold `outcome`, publication receipt |
+
+`PENDING_REVIEW`, `ACTIVATE_REVIEWED`, 승인 대기 상태는 만들지 않는다. 일시 장애는 품질 보류나 격리로 바꾸지 않고 `RECOVERY_REQUIRED`로 멈춘다.
+
+### 상품 이력 한도
+
+Silver는 상품별 관측 수와 바이트가 `history_observations`·`history_bytes`를 넘으면 그 상품만 `QUALITY_HOLD`(사유 `PRODUCT_HISTORY_LIMIT`)로 `silver_holds`에 기록하고 Silver·Gold·게시에서 제외한다. 배치와 다른 상품은 계속 처리한다. 이미 게시된 이전 버전은 그대로 남고 숨기지 않는다. 단계 `counts.history_limit`이 보류한 상품 수다. 같은 상품은 이후 batch에서도 한도를 넘는 동안 매번 다시 보류된다. 한도 조정이나 입력 정리는 운영자가 판단하며 자동으로 풀리지 않는다. 이 항목은 새 유한 배치 경로에만 적용한다. 위 `capture/tick` 실행기는 `BLOCKED_HISTORY_LIMIT`으로 그 작업만 멈춘다.
+
+### manifest 연결
+
+- 크롤 원장: 크롤 manifest, 고유 event inventory와 집합 hash, 입력 행 수·중복 수·처분별 수, 입력 바이트
+- 전달 manifest: generation, partition별 `start_offset`(포함)·`end_offset`(제외)·물리 레코드 수, 크롤 원장 hash
+- 단계 manifest(`bronze`/`silver`/`gold`/`publication`): `parent`(앞 단계 content hash), 입력(`delivery_hash`, `event_set_hash`, generation), 출력 proof(Delta 경로·버전·행 수), 단계별 `counts`, `attempts`, 시작·완료 시각, code version. Spark 실행이면 `spark_application_id`도 남긴다. Bronze에는 `source_version_watermark`, Gold에는 `gold_version`·`input_hash`·`rule_version`, 게시에는 receipt 목록을 남긴다.
+- 출력이 있어도 manifest가 없으면 완료가 아니다. 같은 job을 다시 실행하면 Delta snapshot은 `txnAppId`와 내용 대조로, history 테이블은 키·hash로, 게시는 product job ID와 MySQL plan ID로 멱등 처리한다.
+
+### 묶음 단위 원격 호출
+
+Outbox 대조와 Kafka 발행은 이벤트마다 원격 호출하지 않고 `outbox_chunk`(기본 200건, 최대 1,000건)와 `outbox_chunk_bytes`(기본 32MiB) 중 먼저 닿는 한도로 묶는다. `prepare`는 묶음마다 원천 스냅샷을 일괄 저장하고 일괄 읽어 대조한 뒤에 Outbox 레코드를 같은 방식으로 저장한다. 원천이 Outbox보다 먼저라는 순서는 유지한다. `relay`는 묶음의 Outbox·원천·기존 ack를 키 일괄 조회로 확인하고, ack가 없는 메시지만 `send_many`로 함께 발행해 응답을 한 번 기다린 뒤 ack를 일괄 저장한다. 일부만 확인되면 확인된 ack는 저장하고 `KAFKA_DELIVERY_UNCONFIRMED`로 멈추며, 재실행은 확인되지 않은 메시지만 다시 보낸다. ack 저장 전에 실패하면 그 묶음 전체가 다시 발행될 수 있고, 같은 event ID의 중복은 Spark 입력 검사에서 하나로 접힌다. 게시 단계의 `delivery_output`·`publication_receipt`도 청크 단위 일괄 조회·저장이다.
+
+### 입력 고정과 재시도
+
+처리 시작 시 job별 `input_pin` 기록을 한 번 저장한다. 이 기록은 Silver가 참조할 앞선 완료 Bronze job 목록과 그 시점의 철회 목록을 고정한다. 재시도와 복구는 항상 이 기록을 읽는다. Silver 저장 뒤 단계 manifest 기록이 실패하고, 그 사이 다른 batch가 Bronze를 완료하거나 새 철회가 등록돼도 재시도 입력은 같다. 그래서 같은 job의 Silver 출력이 달라져 `LAKE_IMMUTABLE_CONFLICT`가 나지 않는다. `input_index`는 job ID별 append-only 행이므로 job 목록이 같으면 읽는 행도 같다. 고정 이후에 등록된 철회는 `batch-repair`로 반영한다. 이 고정은 로컬 파일 시험과 Spark 시험(`MemoryDelta`)으로만 확인했다.
+
+### 순서와 버전 보호
+
+같은 상품의 이벤트는 같은 Kafka partition에 들어가지만 Spark 이후의 순서는 가정하지 않는다. Silver는 Bronze가 완료된 모든 job의 이력을 묶어 정제하고, Gold는 관측 시각과 필드 규칙으로 현재값을 고른다. 게시 순서가 뒤집혀 오래된 batch가 나중에 게시되면 결과는 `LAST_GOOD_RETAINED`가 되고 최신 행을 덮지 않는다. 처리 잠금은 하나뿐이므로 Delta 대상 writer도 하나다.
+
+### 원천 철회와 재계산
+
+`batch-retract`는 원천 버전 하나를 철회 원장에 남긴다. 이후 모든 Silver는 그 버전을 제외한다. `batch-repair`는 지정 상품의 보존된 이력만으로 Silver·Gold를 다시 만든다. 정규화 결과는 재사용하므로 원천 본문을 다시 읽지 않는다. 남은 근거가 있으면 다시 계산한 값을 게시한다. 이때 MySQL에서는 철회된 버전의 필드 근거·출처·속성·이미지 연결을 비활성화하고, 버전 fence는 철회로 낮아진 최신 시각을 허용한다. 남은 근거가 없으면 상품을 `INACTIVE`/`SOURCE_RETRACTED`로 숨긴다. 철회 결과를 계산한 뒤 새 관측이 먼저 게시됐을 수 있으므로, 게시 시점에 현재 버전의 출처에 철회 대상이 아닌 근거가 남아 있으면 숨기지 않고 `LAST_GOOD_RETAINED`로 둔다. 행과 이력은 지우지 않는다. 가격 이력(`offer_snapshots`)과 과거 링크 관측 행은 철회 표시 열이 없어 그대로 남는다. 개인정보 삭제 요청은 이 철회와 다른 절차다.
+
+### 격리와 보존
+
+허용된 격리 원문은 일반 원천과 분리된 `quarantine_raw` 원장(서버에서는 Mongo `pipeline_v2_quarantine_raw` 컬렉션)에 둔다. Bronze 격리·metadata 테이블(`bronze_quarantine`, `bronze_metadata`)에는 event ID, 처분, 사유 코드, 수신 위치, 만료 시각만 남긴다. 이 테이블은 불변 stage snapshot이 아니어서 보존 정리로 지울 수 있다. 감사는 만료 전 metadata만 대조한다. 접근 권한 분리는 서버 DB 역할로 적용해야 한다. 코드는 읽기마다 `quarantine_access` 기록을 남긴다.

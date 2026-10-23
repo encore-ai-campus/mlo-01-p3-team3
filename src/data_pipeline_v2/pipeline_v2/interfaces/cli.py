@@ -9,6 +9,11 @@ from ..application.capture import capture
 
 
 def main(argv=None):
+    import sys
+    from .batch_cli import COMMANDS, main as batch_main
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if any(value in COMMANDS for value in arguments):
+        return batch_main(arguments)
     parser=argparse.ArgumentParser(description='새 데이터 파이프라인: 범위 고정·정제·직접 게시·복구')
     parser.add_argument('--config',type=Path,required=True)
     commands=parser.add_subparsers(dest='command',required=True)

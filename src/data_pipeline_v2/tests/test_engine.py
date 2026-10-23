@@ -210,6 +210,7 @@ class EngineTests(unittest.TestCase):
 
     def test_dependency_direction_has_no_old_orchestration_imports(self):
         allowed={'product_pipeline.silver.normalize','product_pipeline.silver.inputs','product_pipeline.bronze.contracts',
+            'product_pipeline.silver.schemas','product_pipeline.errors',
             'product_pipeline.contracts','product_pipeline.mongo','product_pipeline.publication.mysql',
             'product_pipeline.publication.policy','product_pipeline.publication.schema','product_pipeline.bronze.lease','product_pipeline.spark_storage'}
         for path in (HERE/'pipeline_v2').rglob('*.py'):
