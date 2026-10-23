@@ -230,11 +230,12 @@ class BatchRunner:
 
     def _deliveries(self, key, batch, gold, products):
         built = []
-        for product in products:
-            product_job = digest(dict(product=product['product_key'],body=digest(product)))
-            built.append(dict(contract_version=2,job_id=product_job,product_key=product['product_key'],
-                input_hash=gold['input_hash'],target=self.publisher.identity,
-                gold=dict(proofs=gold['proofs'],gold_version=gold['gold_version']),scope_id=batch,product=product))
+        with self.timing.measure('publish.build_requests',batch,counts={'products':len(products)}):
+            for product in products:
+                product_job = digest(dict(product=product['product_key'],body=digest(product)))
+                built.append(dict(contract_version=2,job_id=product_job,product_key=product['product_key'],
+                    input_hash=gold['input_hash'],target=self.publisher.identity,
+                    gold=dict(proofs=gold['proofs'],gold_version=gold['gold_version']),scope_id=batch,product=product))
         # One keyed read and one bulk write per bounded chunk, not a round trip per product.
         saved = self.store.get_many('delivery_output',[d['job_id'] for d in built])
         fresh = [(d['job_id'],d) for d in built if saved[d['job_id']] is None]
@@ -252,7 +253,8 @@ class BatchRunner:
                 if not published:
                     started, resolutions, receipts = stamp(), {}, []
                     with self.timing.measure('mysql.publication_total',batch) as counts:
-                        for products in self.processor.products(gold):
+                        # Lake read time is accumulated between yields, excluding the publication work.
+                        for products in self.timing.iterate('publish.lake_read',batch,self.processor.products(gold)):
                             # Materialized once per bounded chunk, outside service transactions.
                             requests = self._deliveries(key,batch,gold,products)
                             with self.timing.measure('mysql.publish_chunk',batch,counts={'products':len(requests)}):

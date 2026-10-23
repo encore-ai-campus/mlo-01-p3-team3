@@ -349,8 +349,22 @@ class SparkBatchProcessor:
 
     def products(self, stage):
         self._open()
-        frame = self.delta.load(stage['output']).select('product_key','payload_json')
         # This is the bounded service boundary, not a Driver normalization/reduction path.
+        # Tag the Gold read jobs (snapshot load included; rows run lazily between yields) for the
+        # event-log report.
+        context = self.spark.sparkContext
+        previous = {k:context.getLocalProperty(k) for k in ('pipeline.v2.scope_hash','pipeline.v2.stage')}
+        if self.timing.active_scope:
+            context.setLocalProperty('pipeline.v2.scope_hash',digest(self.timing.active_scope))
+        context.setLocalProperty('pipeline.v2.stage','publish.lake_read')
+        try:
+            frame = self.delta.load(stage['output']).select('product_key','payload_json')
+            yield from self._chunks(frame)
+        finally:
+            for name,value in previous.items():
+                context.setLocalProperty(name,value)
+
+    def _chunks(self, frame):
         chunk, amount = [], 0
         for value in frame.toLocalIterator(prefetchPartitions=False):
             size = len(value['payload_json'].encode())

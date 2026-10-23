@@ -63,5 +63,30 @@ class MongoBatchStoreTests(unittest.TestCase):
         self.assertEqual(self.store.get_list('source', ['one', 'two']), [dict(n=1), dict(n=2)])
 
 
+    def test_store_calls_are_spans_carrying_the_commands_they_issued(self):
+        import tempfile
+        from types import SimpleNamespace
+        from pipeline_v2.adapters.batch_store import CommandCounter
+        from pipeline_v2.adapters.timing import Timing
+        store, counter = self.store, CommandCounter()
+        store.monitor = counter
+        original = Collection.insert_many
+
+        def insert_many(collection, records, ordered=True):
+            # One wire command per bulk insert, as the pymongo monitor would report it.
+            counter.succeeded(SimpleNamespace(duration_micros=1500))
+            return original(collection, records, ordered)
+        with tempfile.TemporaryDirectory() as root:
+            store.timing = timing = Timing(root)
+            Collection.insert_many = insert_many
+            try:
+                with timing.measure('batch.phase.publish', 'b'):
+                    store.put_many('publication_receipt', [('one', dict(n=1)), ('two', dict(n=2))])
+            finally:
+                Collection.insert_many = original
+            stage = timing.summary('b', persist=False)['stages']['mongo.put_many.publication_receipt']
+        self.assertEqual(stage['counts'], dict(mongo_commands=1, mongo_round_trip_us=1500, mongo_failed_commands=0))
+
+
 if __name__ == '__main__':
     unittest.main()

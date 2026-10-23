@@ -108,6 +108,7 @@ def runtime(config, *, batch='runtime', writable=False, phase='all'):
                     from .adapters.kafka_batch import KafkaRangeReader
                     settings = config['store']
                     store = MongoBatchStore(os.environ[settings['uri_env']],settings['database'],settings['replica_set'])
+                    store.timing = timing
                     # Only the manifest's offset ranges are read; no group join, no offset commit.
                     broker = KafkaRangeReader(config['kafka'])
                     stack.callback(broker.close)
@@ -120,6 +121,7 @@ def runtime(config, *, batch='runtime', writable=False, phase='all'):
                     from .adapters.spark_batch import SparkBatchProcessor
                     settings = config['store']
                     store = MongoBatchStore(os.environ[settings['uri_env']],settings['database'],settings['replica_set'])
+                    store.timing = timing
                     # A publish-only worker reads Delta and fences MySQL with its own lease target.
                     lake = ServerLake(config,limits=type('MemoryLimit',(),{'history_bytes':limits.history_bytes})(),
                         writable=writable and phase != 'publish',timing=timing,

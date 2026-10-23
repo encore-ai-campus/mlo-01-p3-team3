@@ -92,20 +92,27 @@ class Timing:
 
     def iterate(self, stage, scope_id, values):
         # next() excludes work performed by the consumer between yields.
+        # Spans opened inside next() (for example a lazy session start) already credit the parent;
+        # their time is kept out of this metric's exclusive time and out of the parent credit.
         iterator = iter(values)
-        started, elapsed, count, error = stamp(), 0, 0, None
+        started, elapsed, nested, count, error = stamp(), 0, 0, 0, None
+
+        def parent():
+            stack = self._stack.get()
+            return stack[-1] if stack and stack[-1]['scope'] == scope_id and stack[-1]['thread'] == get_ident() else None
         try:
             while True:
+                owner = parent()
+                credited = owner['child_ns'] if owner else 0
                 begin = time.perf_counter_ns()
                 try:
                     value = next(iterator)
                 except StopIteration:
-                    elapsed += time.perf_counter_ns()-begin
                     return
-                except BaseException:
+                finally:
                     elapsed += time.perf_counter_ns()-begin
-                    raise
-                elapsed += time.perf_counter_ns()-begin
+                    if owner:
+                        nested += owner['child_ns']-credited
                 count += 1
                 yield value
         except BaseException as exc:
@@ -116,12 +123,12 @@ class Timing:
                 iterator.close()
             self._record(scope_id,seal(dict(schema_version=2,run_id=self.run_id,span_id=uuid4().hex,
                 parent_span_id=self.active_span_id,stage=stage,started_at=started,finished_at=stamp(),
-                elapsed_ms=max(0,elapsed)/1_000_000,exclusive_ms=max(0,elapsed)/1_000_000,
+                elapsed_ms=max(0,elapsed)/1_000_000,exclusive_ms=max(0,elapsed-nested)/1_000_000,
                 clock='monotonic_accumulated',outcome='ERROR' if error else 'OK',error_type=error,
                 scope_hash=self._scope_hash(scope_id),job_hash=None,partition=None,counts={'items':count})),durable=bool(error))
-            stack = self._stack.get()
-            if stack and stack[-1]['scope'] == scope_id:
-                stack[-1]['child_ns'] += max(0,elapsed)
+            owner = parent()
+            if owner:
+                owner['child_ns'] += max(0,elapsed-nested)
 
     def boundary(self, stage, scope_id, started_at, finished_at, *, identity, counts=None):
         start, end = utc(started_at), utc(finished_at)

@@ -79,3 +79,24 @@ class SparkMetricsTests(unittest.TestCase):
             self.assertEqual(result['task_p95_ms'],200)
             self.assertEqual(result['totals']['input_bytes'],50)
             self.assertFalse(result['partial_log'])
+
+    def test_jobs_are_grouped_by_stage_with_overlapping_wall_time_counted_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'events.json'
+            tag = lambda stage:{'pipeline.v2.scope_hash':digest('batch'),'pipeline.v2.stage':stage}
+            events = [
+                {'Event':'SparkListenerJobStart','Job ID':1,'Submission Time':100,'Stage IDs':[1],'Properties':tag('delta.snapshot.gold.write')},
+                {'Event':'SparkListenerJobStart','Job ID':2,'Submission Time':150,'Stage IDs':[2],'Properties':tag('delta.snapshot.gold.write')},
+                {'Event':'SparkListenerJobEnd','Job ID':1,'Completion Time':200},
+                {'Event':'SparkListenerJobEnd','Job ID':2,'Completion Time':300},
+                {'Event':'SparkListenerJobStart','Job ID':3,'Submission Time':400,'Stage IDs':[3],'Properties':tag('publish.lake_read')},
+                {'Event':'SparkListenerTaskEnd','Stage ID':1,'Stage Attempt ID':0,
+                 'Task Info':{'Task ID':1,'Launch Time':110,'Finish Time':190},
+                 'Task Metrics':{'Output Metrics':{'Bytes Written':70,'Records Written':7}}},
+            ]
+            path.write_text(''.join(json.dumps(e)+'\n' for e in events),encoding='utf-8')
+            result = report(path,'batch')
+            write_jobs = result['jobs_by_stage']['delta.snapshot.gold.write']
+            self.assertEqual((write_jobs['jobs'],write_jobs['job_wall_ms']),(2,200))
+            self.assertEqual(result['jobs_by_stage']['publish.lake_read']['unfinished_jobs'],1)
+            self.assertEqual(result['totals']['output_bytes'],70)

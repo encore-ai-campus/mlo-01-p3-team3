@@ -1,10 +1,41 @@
 """Durable control records and immutable source snapshots, portable file/Mongo backends."""
+from contextlib import nullcontext
+from functools import wraps
 from pathlib import Path
 from .files import read, write, immutable, locked
 from ..domain.contracts import digest, seal, verified, Invalid
 
 # Restricted quarantine copies have a retention deadline; every other record kind is append-only.
 DELETABLE = frozenset({'quarantine_raw'})
+
+
+class CommandCounter:
+    """pymongo command monitor: wire commands and their client-observed round trip, no extra calls."""
+    def __init__(self):
+        self.values = dict(mongo_commands=0, mongo_round_trip_us=0, mongo_failed_commands=0)
+
+    def succeeded(self, event):
+        self.values['mongo_commands'] += 1
+        self.values['mongo_round_trip_us'] += event.duration_micros
+
+    def failed(self, event):
+        self.values['mongo_commands'] += 1
+        self.values['mongo_failed_commands'] += 1
+        self.values['mongo_round_trip_us'] += event.duration_micros
+
+
+def measured(operation):
+    """Span per store call (method, record kind) carrying the commands it issued."""
+    def wrap(method):
+        @wraps(method)
+        def run(self, kind, *args, **kwargs):
+            timing = self.timing
+            span = (timing.measure('mongo.' + operation + '.' + kind, timing.active_scope or 'mongo',
+                counters=self.monitor.values) if timing else nullcontext())
+            with span:
+                return method(self, kind, *args, **kwargs)
+        return run
+    return wrap
 
 
 class FileBatchStore:
@@ -58,12 +89,28 @@ class FileBatchStore:
 
 
 class MongoBatchStore:
+    # Set by the bootstrap once its Timing exists; None keeps the store usable without metrics.
+    timing = None
+
     def __init__(self, uri, database, replica_set):
         from pymongo import MongoClient, ReadPreference
         from pymongo.read_concern import ReadConcern
         from pymongo.write_concern import WriteConcern
+        from pymongo import monitoring
+
+        counter = self.monitor = CommandCounter()
+
+        class Listener(monitoring.CommandListener):
+            def started(self, event):
+                pass
+
+            def succeeded(self, event):
+                counter.succeeded(event)
+
+            def failed(self, event):
+                counter.failed(event)
         self.client = MongoClient(uri, replicaSet=replica_set, tz_aware=True,
-            serverSelectionTimeoutMS=5000, socketTimeoutMS=30000, retryWrites=True)
+            serverSelectionTimeoutMS=5000, socketTimeoutMS=30000, retryWrites=True, event_listeners=[Listener()])
         self.database = self.client.get_database(database, read_preference=ReadPreference.PRIMARY,
             read_concern=ReadConcern('majority'), write_concern=WriteConcern(w='majority', j=True))
         self.identity = dict(kind='MONGO_BATCH_STORE', database=database, replica_set=replica_set)
@@ -77,11 +124,13 @@ class MongoBatchStore:
         # Keep small control scans separate from large immutable source snapshots.
         return self.database['pipeline_v2_' + kind]
 
+    @measured('get')
     def get(self, kind, key):
         import json
         record = self._collection(kind).find_one({'_id':self._key(kind, key)})
         return verified(json.loads(record['body_json']))['value'] if record else None
 
+    @measured('put')
     def put(self, kind, key, value):
         from ..domain.contracts import canonical
         from pymongo.errors import DuplicateKeyError
@@ -94,6 +143,7 @@ class MongoBatchStore:
                 raise Invalid('IMMUTABLE_BATCH_RECORD_CONFLICT')
         return value
 
+    @measured('put_many')
     def put_many(self, kind, items):
         """One unordered bulk insert; an existing key must already hold the same value."""
         from ..domain.contracts import canonical
@@ -117,6 +167,7 @@ class MongoBatchStore:
                 if stored != value:
                     raise Invalid('IMMUTABLE_BATCH_RECORD_CONFLICT')
 
+    @measured('mutate')
     def mutate(self, kind, key, change):
         import json
         from ..domain.contracts import canonical
@@ -140,10 +191,16 @@ class MongoBatchStore:
         raise Invalid('BATCH_CONTROL_CONTENTION')
 
     def values(self, kind):
+        if self.timing is None:
+            return self._values(kind)
+        return self.timing.iterate('mongo.values.' + kind, self.timing.active_scope or 'mongo', self._values(kind))
+
+    def _values(self, kind):
         import json
         for record in self._collection(kind).find({}, {'body_json':1}).batch_size(100):
             yield verified(json.loads(record['body_json']))['value']
 
+    @measured('get_many')
     def get_many(self, kind, keys):
         import json
         identities = {self._key(kind,key):key for key in keys}
@@ -152,6 +209,7 @@ class MongoBatchStore:
             result[identities[record['_id']]] = verified(json.loads(record['body_json']))['value']
         return result
 
+    @measured('get_list')
     def get_list(self, kind, keys):
         import json
         identities = [self._key(kind,key) for key in keys]
@@ -160,6 +218,7 @@ class MongoBatchStore:
             found[record['_id']] = verified(json.loads(record['body_json']))['value']
         return [found.get(identity) for identity in identities]
 
+    @measured('delete')
     def delete(self, kind, key):
         if kind not in DELETABLE:
             raise Invalid('BATCH_RECORD_NOT_DELETABLE')

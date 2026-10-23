@@ -46,6 +46,25 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(report['stages']['source']['total_ms'],3)
         self.assertEqual(report['stages']['source']['counts']['items'],2)
 
+    def test_spans_opened_inside_iteration_are_credited_to_the_parent_once(self):
+        now = [0]
+        timing = self.timing
+
+        def source():
+            # A lazy start inside the first next(): 30 ms in its own span, then 10 ms of reading.
+            with timing.measure('startup','batch'):
+                now[0] += 30_000_000
+            now[0] += 10_000_000
+            yield 1
+        with patch('pipeline_v2.adapters.timing.time.perf_counter_ns',side_effect=lambda:now[0]):
+            with timing.measure('publish','batch'):
+                for _ in timing.iterate('read','batch',source()):
+                    now[0] += 50_000_000  # consumer work, part of the parent's own time
+        stages = timing.summary('batch')['stages']
+        self.assertEqual((stages['read']['total_ms'],stages['read']['exclusive_ms']),(40,10))
+        # 90 ms total = 30 startup + 10 read + 50 own; startup is not subtracted twice.
+        self.assertEqual((stages['publish']['total_ms'],stages['publish']['exclusive_ms']),(90,50))
+
     def test_failure_flushes_without_exception_message(self):
         with self.assertRaises(ValueError):
             with self.timing.measure('failed','batch'):

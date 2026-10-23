@@ -210,7 +210,8 @@ class MySQLPublisher:
                         except StaleInput:
                             # An older finite batch never overwrites a newer published version.
                             resolution = 'LAST_GOOD_RETAINED'
-                    records = service_rows(db,group,key) if resolution == 'PUBLISHED' else []
+                    with self._stage('mysql.service_readback',scope,key):
+                        records = service_rows(db,group,key) if resolution == 'PUBLISHED' else []
                     db.update('pipeline_publications',dict(plan_id=key),dict(status='COMPLETED',completed_at=at,
                         gold_versions_json=canonical(dict(contract_version=3,proofs=delivery['gold']['proofs'],resolution=resolution,service_rows=records))))
                     receipts[key] = seal(dict(job_id=key,product_hash=body_hash,publication_id=saved['id'],resolution=resolution))

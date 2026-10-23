@@ -1,4 +1,5 @@
 """DataFrame-only Delta writes with immutable stage snapshots and a single fenced writer."""
+from contextlib import contextmanager
 from ..domain.contracts import digest, seal, verified, Invalid
 from .files import read
 
@@ -6,6 +7,23 @@ from .files import read
 class BatchDelta:
     def __init__(self, spark, root, fence, timing):
         self.spark, self.root, self.fence, self.timing = spark, root.rstrip('/')+'/finite-v1', fence, timing
+
+    @contextmanager
+    def _step(self, name):
+        """Time one sub-step and tag its Spark jobs with the same name for the event-log report.
+
+        Only existing work is wrapped; nothing is counted or re-read for the measurement. The first
+        action on a lazy frame also runs its upstream computation, so a step's time includes it.
+        """
+        stage = 'delta.' + name
+        context = self.spark.sparkContext
+        previous = context.getLocalProperty('pipeline.v2.stage')
+        with self.timing.measure(stage, self.timing.active_scope or 'delta') as counts:
+            context.setLocalProperty('pipeline.v2.stage', stage)
+            try:
+                yield counts
+            finally:
+                context.setLocalProperty('pipeline.v2.stage', previous)
 
     def _path(self, name):
         if not name.replace('_','').isalnum():
@@ -34,10 +52,11 @@ class BatchDelta:
     def history(self, name, products):
         from pyspark.sql import functions as F
         path = self._path(name)
-        if not self._exists(path):
-            return self.empty()
-        # Literal buckets enable partition pruning, then a distributed key join narrows the rows.
-        buckets = [r[0] for r in products.select(F.pmod(F.xxhash64('product_key'),F.lit(128)).cast('int')).distinct().collect()]
+        with self._step('history.' + name + '.read_plan'):
+            if not self._exists(path):
+                return self.empty()
+            # Literal buckets enable partition pruning, then a distributed key join narrows the rows.
+            buckets = [r[0] for r in products.select(F.pmod(F.xxhash64('product_key'),F.lit(128)).cast('int')).distinct().collect()]
         if not buckets:
             return self.empty()
         return self.spark.read.format('delta').load(path).filter(F.col('bucket').isin(buckets)).join(products,'product_key','left_semi')
@@ -66,24 +85,33 @@ class BatchDelta:
         path = self._path(name)
         encoded = self.encode(frame).persist()
         cached = [encoded]
+        step = 'history.' + name
         try:
-            if encoded.groupBy('row_key').agg(F.countDistinct('record_hash').alias('n')).filter('n > 1').limit(1).count():
-                raise Invalid('BATCH_OUTPUT_KEY_CONFLICT')
+            # First action on the cached frame: includes computing the rows being stored.
+            with self._step(step + '.key_check'):
+                if encoded.groupBy('row_key').agg(F.countDistinct('record_hash').alias('n')).filter('n > 1').limit(1).count():
+                    raise Invalid('BATCH_OUTPUT_KEY_CONFLICT')
             encoded = encoded.dropDuplicates(['row_key'])
-            if self._exists(path):
+            with self._step(step + '.exists'):
+                exists = self._exists(path)
+            if exists:
                 # Only the buckets this write touches are read, so partition pruning applies and the
                 # accumulated history is not scanned. One join serves both the conflict check and the
                 # new-row filter.
-                buckets = [r[0] for r in encoded.select('bucket').distinct().collect()]
-                old = self.spark.read.format('delta').load(path).filter(F.col('bucket').isin(buckets))
-                joined = self.join_existing(encoded,old).persist()
-                cached.append(joined)
-                if self.has_conflict(joined):
-                    raise Invalid('DELTA_IMMUTABLE_CONFLICT')
+                with self._step(step + '.conflict_join'):
+                    buckets = [r[0] for r in encoded.select('bucket').distinct().collect()]
+                    old = self.spark.read.format('delta').load(path).filter(F.col('bucket').isin(buckets))
+                    joined = self.join_existing(encoded,old).persist()
+                    cached.append(joined)
+                    if self.has_conflict(joined):
+                        raise Invalid('DELTA_IMMUTABLE_CONFLICT')
                 encoded = self.new_rows(joined)
             self.fence()
-            if not encoded.isEmpty():
-                encoded.write.format('delta').mode('append').partitionBy('bucket').save(path)
+            with self._step(step + '.empty_check'):
+                empty = encoded.isEmpty()
+            if not empty:
+                with self._step(step + '.write'):
+                    encoded.write.format('delta').mode('append').partitionBy('bucket').save(path)
             self.fence()
         finally:
             for frame in cached:
@@ -94,14 +122,24 @@ class BatchDelta:
         from delta.tables import DeltaTable
         path = self.root + '/runs/' + job_id + '/' + stage
         encoded = self.encode(frame).persist()
+        step = 'snapshot.' + stage
         try:
             self.fence()
-            recovering = self._exists(path)
+            with self._step(step + '.exists'):
+                recovering = self._exists(path)
             if not recovering:
-                (encoded.write.format('delta').mode('append').partitionBy('bucket')
-                    .option('txnAppId',job_id + ':' + stage).option('txnVersion',0).save(path))
+                # First action on the cached frame: includes computing the rows being stored.
+                with self._step(step + '.write'):
+                    (encoded.write.format('delta').mode('append').partitionBy('bucket')
+                        .option('txnAppId',job_id + ':' + stage).option('txnVersion',0).save(path))
             self.fence()
-            history = DeltaTable.forPath(self.spark,path).history(1).first().asDict(recursive=True)
+            with self._step(step + '.history_read') as counts:
+                history = DeltaTable.forPath(self.spark,path).history(1).first().asDict(recursive=True)
+                # Already read for the proof; file and byte counts come from the same commit record.
+                for metric, label in (('numFiles','output_files'),('numOutputBytes','output_bytes')):
+                    value = (history.get('operationMetrics') or {}).get(metric)
+                    if value is not None:
+                        counts[label] = int(value)
             version = int(history['version'])
             if recovering:
                 pinned = self.spark.read.format('delta').option('versionAsOf',version).load(path)
