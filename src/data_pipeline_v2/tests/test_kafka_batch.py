@@ -156,6 +156,9 @@ def fake_consumer_module(log):
         created = []
 
         def __init__(self, config):
+            # confluent-kafka refuses a consumer without a group id; mirror that.
+            if not config.get('group.id'):
+                raise ValueError('group.id must be set')
             self.config, self.position, self.polls, self.closed = config, None, 0, False
             Consumer.created.append(self)
 
@@ -188,7 +191,10 @@ class KafkaRangeReaderTests(unittest.TestCase):
         env = {'TEST_KAFKA_OPTIONS': json.dumps(options or {'bootstrap.servers': 'broker:9092'})}
         with patch.dict(sys.modules, {'confluent_kafka': module}), patch.dict(os.environ, env):
             made = KafkaRangeReader(dict(topic='topic', producer_options_env='TEST_KAFKA_OPTIONS'))
-        return made, module.Consumer.created[-1], module
+            # Construction alone opens no connection; prepare/submit never touch Kafka.
+            self.assertEqual(module.Consumer.created, [])
+            consumer = made.consumer
+        return made, consumer, module
 
     def manifest(self, start, end):
         return {'ranges': [dict(topic='topic', partition=0, start_offset=start, end_offset=end)]}
@@ -201,8 +207,9 @@ class KafkaRangeReaderTests(unittest.TestCase):
         self.assertEqual([r['offset'] for r in rows], [3, 4, 5, 6])
         self.assertEqual(rows[0]['key'], 'k3')
         self.assertEqual(consumer.config['enable.auto.commit'], False)
-        # No group: the principal has no group ACL and assign-only reads need none.
-        self.assertNotIn('group.id', consumer.config)
+        # A group id is mandatory for the client, but nothing is ever committed to it.
+        self.assertTrue(consumer.config['group.id'])
+        self.assertEqual(consumer.config['enable.auto.offset.store'], False)
         # The end offset is exclusive: one extra poll at most, never a read to the log's end.
         self.assertLessEqual(consumer.polls, 5)
         self.assertIsNone(consumer.position)

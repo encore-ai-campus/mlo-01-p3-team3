@@ -132,21 +132,31 @@ class KafkaRangeReader:
     """Bounded Python read of a delivery manifest's offset ranges (confluent-kafka).
 
     Partitions are assigned explicitly and nothing is committed, so no consumer group state exists;
-    the manifest is the only progress record, exactly like the Spark batch source. No group.id is
-    set: the principal has no group ACL, and librdkafka contacts the group coordinator whenever one
-    is configured, even for assign-only reads (GROUP_AUTHORIZATION_FAILED on 2026-10-23).
+    the manifest is the only progress record, exactly like the Spark batch source. confluent-kafka
+    refuses a consumer without group.id (ValueError), and librdkafka then contacts the group
+    coordinator even for assign-only reads; this principal has no group ACL, so coordinator errors
+    are expected and skipped while explicit-offset fetches proceed (2026-10-23).
     """
     # Coordinator-side errors that do not affect explicit-offset fetches from an assigned partition.
     GROUP_ONLY = frozenset({'GROUP_AUTHORIZATION_FAILED', 'COORDINATOR_NOT_AVAILABLE', 'NOT_COORDINATOR'})
 
     def __init__(self, config):
-        from confluent_kafka import Consumer
         options = json.loads(os.environ[config.get('reader_options_env') or config['producer_options_env']])
         if {'group.id','enable.auto.commit','auto.offset.reset'} & set(options):
             raise Invalid('KAFKA_READER_OPTIONS_FIXED')
-        self.consumer = Consumer({**options,'enable.auto.commit':False,'enable.auto.offset.store':False,
-            'auto.offset.reset':'error','enable.partition.eof':True})
+        self.options = {**options,'group.id':config.get('reader_group','pipeline-v2-range-reader'),
+            'enable.auto.commit':False,'enable.auto.offset.store':False,
+            'auto.offset.reset':'error','enable.partition.eof':True}
+        # Created on first read: prepare/submit/status never need a Kafka connection.
+        self._consumer = None
         self.ignored_group_errors = 0
+
+    @property
+    def consumer(self):
+        if self._consumer is None:
+            from confluent_kafka import Consumer
+            self._consumer = Consumer(self.options)
+        return self._consumer
 
     def rows(self, manifest):
         from confluent_kafka import TopicPartition, KafkaError
@@ -178,7 +188,8 @@ class KafkaRangeReader:
                 self.consumer.unassign()
 
     def close(self):
-        self.consumer.close()
+        if self._consumer is not None:
+            self._consumer.close()
 
 
 def read_kafka(spark, config, manifest, min_partitions):
