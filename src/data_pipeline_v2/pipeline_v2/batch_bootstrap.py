@@ -56,6 +56,10 @@ class LazyProducer:
     def send_many(self,pairs):
         return self._open().send_many(pairs)
 
+    @property
+    def failure_code(self):
+        return getattr(self.inner, 'failure_code', None)
+
     def close(self):
         if self.inner:
             self.inner.close()

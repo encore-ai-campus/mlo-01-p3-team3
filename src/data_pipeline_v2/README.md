@@ -11,6 +11,7 @@
 | 크롤 완료 유한 배치·NiFi 연결 | 이 README의 유한 배치 절, [NiFi 기동 계약](docs/nifi-contract.md) | `config/batch.*.example.json`, `pipeline_v2/interfaces/batch_cli.py`, `pipeline_v2/application/batch.py` |
 | 서버 이전·환경·중단·복구·반복 배포 | [서버 이전](docs/server-migration.md) | `config/*server.example.json`, `tools/release.py`, `tools/export_batch_input.py` |
 | 검증 범위와 성능 근거 | [검증 기록](docs/validation.md) | `tests/` |
+| 서버 계측 결과·병목·개선 계획 | [서버 계측 기록](docs/server-measurement-20261023.md) | `docs/verification/server_batch_20261023.json` |
 
 ## 실행 구조
 

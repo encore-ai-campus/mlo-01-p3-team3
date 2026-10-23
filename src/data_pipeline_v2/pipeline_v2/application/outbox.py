@@ -166,7 +166,7 @@ class Outbox:
                     self.store.put_many('ack', [([batch, generation, group[i]['event_id']], ack)
                         for i, ack in zip(missing, sent_acks) if ack is not None])
                     if any(ack is None for ack in sent_acks):
-                        raise Invalid('KAFKA_DELIVERY_UNCONFIRMED')
+                        raise Invalid(getattr(self.producer, 'failure_code', None) or 'KAFKA_DELIVERY_UNCONFIRMED')
                     for i, ack in zip(missing, sent_acks):
                         acks[i] = ack
                 for ack in acks:

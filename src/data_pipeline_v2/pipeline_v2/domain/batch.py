@@ -27,7 +27,8 @@ class BatchLimits:
     publication_bytes: int = 32 * 1024 * 1024
     spark_partitions: int = 3
     outbox_chunk: int = 200
-    outbox_chunk_bytes: int = 32 * 1024 * 1024
+    # At the measured ~0.2 MB/s uncompressed broker throughput, 8 MiB drains well inside the 120 s delivery timeout.
+    outbox_chunk_bytes: int = 8 * 1024 * 1024
 
     def __post_init__(self):
         if any(type(v) is not int or v < 1 for v in vars(self).values()):

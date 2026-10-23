@@ -1,6 +1,7 @@
 """Kafka producer and bounded Spark source. No consumer commit or streaming query."""
 import json
 import os
+import re
 from .files import locked, read, write
 from ..domain.batch import offsets
 from ..domain.contracts import canonical, digest, seal, verified, Invalid
@@ -51,8 +52,13 @@ class KafkaProducer:
             if fixed & set(options):
                 raise Invalid('KAFKA_RELIABILITY_OPTIONS_FIXED')
             self.kind = 'confluent'
-            self.producer = Producer({**options,'acks':'all','enable.idempotence':True,
-                'max.in.flight.requests.per.connection':1,'delivery.timeout.ms':30000})
+            # Queue wait counts toward delivery.timeout.ms, so the group size (outbox_chunk_bytes) and this
+            # timeout must be sized together against the measured broker throughput. JSON compresses well.
+            # Up to 5 requests in flight keeps per-partition order under idempotence (the broker's
+            # limit); one in flight paid a full replication round trip per request (~0.27 s/message).
+            self.producer = Producer({'compression.type':'lz4','linger.ms':20,'request.timeout.ms':30000,
+                'delivery.timeout.ms':120000,**options,'acks':'all','enable.idempotence':True,
+                'max.in.flight.requests.per.connection':5})
         else:
             from kafka import KafkaProducer as Legacy
             if {'acks','enable_idempotence','value_serializer','key_serializer'} & set(options):
@@ -72,7 +78,7 @@ class KafkaProducer:
         """Publish a bounded group together and wait once. Returns one ack per pair, None if unconfirmed.
 
         Only a broker acknowledgement with an offset counts as delivery. Per-key order is kept by the
-        idempotent single-in-flight producer, so a group is not weaker than one send per message.
+        idempotent producer (at most 5 in flight), so a group is not weaker than one send per message.
         """
         pairs = list(pairs)
         if self.kind == 'kafka-python':
@@ -101,11 +107,15 @@ class KafkaProducer:
                     # Local queue full: let delivery reports drain it instead of failing the group.
                     self.producer.poll(1)
             self.producer.poll(0)
-        self.producer.flush(60)
+        self.producer.flush(150)
         acks = []
+        self.failure_code = None
         for result in results:
             if result is None or result[0] is not None or result[1].offset() is None or result[1].offset() < 0:
                 acks.append(None)
+                # Only the Kafka error name is kept: a fixed symbolic code, never a message or payload.
+                name = result[0].name() if result is not None and result[0] is not None else 'NO_REPORT'
+                self.failure_code = self.failure_code or 'KAFKA_DELIVERY_' + re.sub(r'[^A-Z0-9]+', '_', str(name).upper()).strip('_')[:48]
             else:
                 message = result[1]
                 acks.append(dict(topic=message.topic(),partition=message.partition(),offset=message.offset()))
