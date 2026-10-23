@@ -5,10 +5,12 @@ from ..domain.contracts import digest, canonical, seal, verified, stamp, Invalid
 
 
 class Outbox:
-    def __init__(self, store, producer, timing, limits, admission, retention=None):
+    def __init__(self, store, producer, timing, limits, admission, retention=None, wire_payload=True):
         self.store, self.producer, self.timing = store, producer, timing
         self.limits, self.admission = limits, admission
         self.retention = retention or Retention()
+        # False: Kafka carries only the immutable source reference (consumer reads the ledger itself).
+        self.wire_payload = wire_payload
 
     def _admit(self, item, position, batch):
         """Row-level admission: one bad row never blocks the other rows of a complete crawl."""
@@ -159,7 +161,8 @@ class Outbox:
                 missing = [i for i, ack in enumerate(acks) if not ack]
                 if missing:
                     with self.timing.measure('kafka.publish_ack', batch, counts={'messages': len(missing)}):
-                        sent_acks = self.producer.send_many([(kafka_key(events[i]), wire_event(events[i], payloads[i]))
+                        sent_acks = self.producer.send_many([(kafka_key(events[i]),
+                            wire_event(events[i], payloads[i] if self.wire_payload else None))
                             for i in missing])
                     sent += len(missing)
                     # Ack loss before this write intentionally leads to identical event retransmission.

@@ -117,6 +117,12 @@ class LocalBatchProcessor:
         expires = self.retention.expiry(crawl['completed_at'], 'metadata')
         rows, metadata, changed, watermark = [], defaultdict(list), set(), None
         tally = defaultdict(int)
+        # One keyed bulk read for every new admitted event instead of a round trip per event.
+        fresh = sorted({e['source_ref'] for e in received.values()
+                        if e['event_type'] != REJECTED and e['event_id'] not in confirmed_indices})
+        with self.timing.measure('bronze.source_read', batch, counts={'items':len(fresh)}):
+            items = self.store.get_many('source', fresh) if fresh else {}
+            self.metrics['source_reads'] += len(fresh)
         for event in received.values():
             eid = event['event_id']
             if event['event_type'] == REJECTED:
@@ -137,9 +143,8 @@ class LocalBatchProcessor:
                 changed.add(event['product_key'])
                 tally['ACCEPTED_EXISTING'] += 1
                 continue
-            with self.timing.measure('bronze.source_read_and_classify', batch):
-                item = self.store.get('source', event['source_ref'])
-                self.metrics['source_reads'] += 1
+            with self.timing.measure('bronze.classify', batch):
+                item = items.get(event['source_ref'])
                 if item is None or digest(item) != event['payload_hash']:
                     raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
                 disposition, reason = classify(item, event)
@@ -195,34 +200,47 @@ class LocalBatchProcessor:
             for product, values in histories.items():
                 histories[product] = list({v['event']['event_id']:v for v in values}.values())
             normalized, proofs, policies, holds, limited = {}, [], {}, [], {}
+            # Reuse is decided from fixed identities first; only misses fetch a source body, in bulk.
+            plan = []
             for product, indices in histories.items():
                 policy = related_policy(self.policy, [v['dependencies'] for v in indices])
                 policies[product] = policy
                 normalized[product] = []
                 normal_policy = {k:policy[k] for k in ('mappings','rules')}
                 for index in sorted(indices,key=lambda v:(v['event']['source_version'],v['image_revision'])):
-                    event = index['event']
-                    identity = digest(dict(event=event['event_id'],policy=normal_policy,code=VERSION))
-                    result = self.store.get('normalized', identity)
-                    if result:
-                        self.metrics['reused'] += 1
-                    else:
-                        with self.timing.measure('silver.source_read', batch):
-                            item = self.store.get('source', event['source_ref'])
-                            self.metrics['source_reads'] += 1
-                            if item is None or digest(item) != event['payload_hash']:
-                                raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
-                        with self.timing.measure('silver.parse_and_validate', batch):
-                            result = parse_observation(item, policy)
-                        self.store.put('normalized', identity, result)
-                        self.metrics['normalized'] += 1
-                    if result['quality'] == 'VALID':
-                        normalized[product].append((index['image_revision'],result['normalized']))
-                    else:
-                        # Bronze reference only; the raw payload is not copied into Silver.
-                        holds.append(row(digest(dict(job=key,event=event['event_id'])),product,
-                            dict(event_id=event['event_id'],raw_document_id=event['raw_document_id'],
-                                reason=result['reason'],policy_hash=digest(normal_policy))))
+                    identity = digest(dict(event=index['event']['event_id'],policy=normal_policy,code=VERSION))
+                    plan.append((product, index, identity, policy, normal_policy))
+            cached = self.store.get_many('normalized', sorted({p[2] for p in plan})) if plan else {}
+            missing = sorted({p[1]['event']['source_ref'] for p in plan if not cached.get(p[2])})
+            with self.timing.measure('silver.source_read', batch, counts={'items':len(missing)}):
+                items = self.store.get_many('source', missing) if missing else {}
+                self.metrics['source_reads'] += len(missing)
+            produced = []
+            for product, index, identity, policy, normal_policy in plan:
+                event = index['event']
+                result = cached.get(identity)
+                if result:
+                    self.metrics['reused'] += 1
+                else:
+                    item = items.get(event['source_ref'])
+                    if item is None or digest(item) != event['payload_hash']:
+                        raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
+                    with self.timing.measure('silver.parse_and_validate', batch):
+                        result = parse_observation(item, policy)
+                    cached[identity] = result
+                    produced.append((identity, result))
+                    self.metrics['normalized'] += 1
+                if result['quality'] == 'VALID':
+                    normalized[product].append((index['image_revision'],result['normalized']))
+                else:
+                    # Bronze reference only; the raw payload is not copied into Silver.
+                    holds.append(row(digest(dict(job=key,event=event['event_id'])),product,
+                        dict(event_id=event['event_id'],raw_document_id=event['raw_document_id'],
+                            reason=result['reason'],policy_hash=digest(normal_policy))))
+            if produced:
+                with self.timing.measure('silver.normalized_store', batch, counts={'items':len(produced)}):
+                    self.store.put_many('normalized', produced)
+            for product in list(normalized):
                 # An image-state update replaces that raw observation, not unrelated history.
                 selected = {}
                 for revision, value in normalized[product]:

@@ -11,7 +11,9 @@ from .adapters.timing import Timing
 def configuration(path):
     path = Path(path).resolve()
     value = read(path)
-    if value.get('batch_config_version') != 1 or value.get('mode') not in {'local','server'}:
+    # server-python: one Python process on the master (Mongo ledger, real Kafka, local file lake,
+    # MySQL) for batch sizes where Spark's per-job and per-commit overhead dominates.
+    if value.get('batch_config_version') != 1 or value.get('mode') not in {'local','server','server-python'}:
         raise Invalid('FINITE_BATCH_CONFIG_REQUIRED')
     if not value.get('target'):
         raise Invalid('BATCH_TARGET_REQUIRED')
@@ -25,6 +27,16 @@ def configuration(path):
         roots = [Path(value[k]).resolve() for k in ('state_root','lake_root','publication_root','broker_root')]
         if any(a == b or a.is_relative_to(b) or b.is_relative_to(a) for i,a in enumerate(roots) for b in roots[i+1:]):
             raise Invalid('LOCAL_OUTPUTS_OVERLAP')
+    elif value['mode'] == 'server-python':
+        if 'replace-with-' in str(value):
+            raise Invalid('SERVER_PLACEHOLDERS_REQUIRED_TO_REPLACE')
+        if '://' in value.get('lake_root','') or value.get('single_coordinator') is not True:
+            raise Invalid('LOCAL_LAKE_AND_SINGLE_WRITER_REQUIRED')
+        if Path(value['lake_root']).resolve() == Path(value['state_root']).resolve():
+            raise Invalid('LOCAL_OUTPUTS_OVERLAP')
+        for key in ('store','mongo','mysql','kafka'):
+            if not value.get(key):
+                raise Invalid('BATCH_SERVER_CONFIG_REQUIRED')
     else:
         if 'replace-with-' in str(value):
             raise Invalid('SERVER_PLACEHOLDERS_REQUIRED_TO_REPLACE')
@@ -92,6 +104,17 @@ def runtime(config, *, batch='runtime', writable=False, phase='all'):
                     publisher = FilePublisher(config['publication_root'])
                     processor = LocalBatchProcessor(store,broker,FileLake(config['lake_root']),timing,limits,
                         config.get('policy',{}),retention)
+                elif config['mode'] == 'server-python':
+                    from .adapters.kafka_batch import KafkaRangeReader
+                    settings = config['store']
+                    store = MongoBatchStore(os.environ[settings['uri_env']],settings['database'],settings['replica_set'])
+                    # Only the manifest's offset ranges are read; no group join, no offset commit.
+                    broker = KafkaRangeReader(config['kafka'])
+                    stack.callback(broker.close)
+                    # The phase file locks are the writer fence: one process per phase on this host.
+                    publisher = MySQLPublisher(config['mysql'],fence=lambda:None,timing=timing)
+                    processor = LocalBatchProcessor(store,broker,FileLake(config['lake_root']),timing,limits,
+                        config.get('policy',{}),retention)
                 else:
                     from .adapters.spark_runtime import ServerLake
                     from .adapters.spark_batch import SparkBatchProcessor
@@ -113,7 +136,8 @@ def runtime(config, *, batch='runtime', writable=False, phase='all'):
                 runner = BatchRunner(store,processor,publisher,timing,limits,config.get('policy',{}),target,
                     lock=phase_lock(config),retention=retention,
                     kafka_retention_seconds=config.get('kafka',{}).get('retention_seconds'))
-                outbox = Outbox(store,producer,timing,limits,config['admission'],retention)
+                outbox = Outbox(store,producer,timing,limits,config['admission'],retention,
+                    wire_payload=config.get('kafka',{}).get('wire_payload',True))
                 yield runner,outbox
     finally:
         timing.flush()

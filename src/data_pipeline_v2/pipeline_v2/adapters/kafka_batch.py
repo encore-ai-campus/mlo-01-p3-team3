@@ -128,6 +128,59 @@ class KafkaProducer:
             self.producer.flush(30)
 
 
+class KafkaRangeReader:
+    """Bounded Python read of a delivery manifest's offset ranges (confluent-kafka).
+
+    Partitions are assigned explicitly and nothing is committed, so no consumer group state exists;
+    the manifest is the only progress record, exactly like the Spark batch source. No group.id is
+    set: the principal has no group ACL, and librdkafka contacts the group coordinator whenever one
+    is configured, even for assign-only reads (GROUP_AUTHORIZATION_FAILED on 2026-10-23).
+    """
+    # Coordinator-side errors that do not affect explicit-offset fetches from an assigned partition.
+    GROUP_ONLY = frozenset({'GROUP_AUTHORIZATION_FAILED', 'COORDINATOR_NOT_AVAILABLE', 'NOT_COORDINATOR'})
+
+    def __init__(self, config):
+        from confluent_kafka import Consumer
+        options = json.loads(os.environ[config.get('reader_options_env') or config['producer_options_env']])
+        if {'group.id','enable.auto.commit','auto.offset.reset'} & set(options):
+            raise Invalid('KAFKA_READER_OPTIONS_FIXED')
+        self.consumer = Consumer({**options,'enable.auto.commit':False,'enable.auto.offset.store':False,
+            'auto.offset.reset':'error','enable.partition.eof':True})
+        self.ignored_group_errors = 0
+
+    def rows(self, manifest):
+        from confluent_kafka import TopicPartition, KafkaError
+        for position in manifest['ranges']:
+            self.consumer.assign([TopicPartition(position['topic'],position['partition'],position['start_offset'])])
+            try:
+                expected = position['start_offset']
+                while expected < position['end_offset']:
+                    message = self.consumer.poll(30)
+                    if message is None:
+                        raise Invalid('KAFKA_OFFSET_UNAVAILABLE')
+                    if message.error() is not None:
+                        if message.error().code() == KafkaError._PARTITION_EOF:
+                            raise Invalid('KAFKA_OFFSET_UNAVAILABLE')
+                        name = re.sub(r'[^A-Z0-9]+','_',str(message.error().name()).upper()).strip('_')[:40]
+                        if name in self.GROUP_ONLY:
+                            self.ignored_group_errors += 1
+                            continue
+                        raise Invalid('KAFKA_READ_' + name)
+                    if message.offset() < position['start_offset']:
+                        continue
+                    if message.offset() >= position['end_offset']:
+                        break
+                    expected = message.offset() + 1
+                    yield dict(topic=message.topic(),partition=message.partition(),offset=message.offset(),
+                        key=message.key().decode('utf-8') if message.key() is not None else None,
+                        value=message.value().decode('utf-8'))
+            finally:
+                self.consumer.unassign()
+
+    def close(self):
+        self.consumer.close()
+
+
 def read_kafka(spark, config, manifest, min_partitions):
     starts, ends = offsets(manifest)
     if not manifest['ranges']:
