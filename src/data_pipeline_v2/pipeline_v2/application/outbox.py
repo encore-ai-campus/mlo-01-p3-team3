@@ -1,6 +1,6 @@
 """Crawl completion reconciliation and finite at-least-once Kafka delivery."""
 from ..domain.batch import (source_contract, event_for_item, rejected_event, outside_allowlist, inventory_hash,
-                            delivery_contract, kafka_key, wire_event, BATCH_SCHEMA, REJECTED, Retention)
+                            delivery_contract, kafka_key, wire_event, stable_item, BATCH_SCHEMA, REJECTED, Retention)
 from ..domain.contracts import digest, canonical, seal, verified, stamp, Invalid
 
 
@@ -72,11 +72,16 @@ class Outbox:
         dispositions = {}
         pending, pending_bytes = [], 0
         with self.timing.measure('outbox.reconcile_source', batch) as counts:
-            for position, item in enumerate(items):
+            for position, original in enumerate(items):
+                item = stable_item(original)
                 records += 1
                 if records > self.limits.max_events:
                     raise Invalid('CRAWL_EVENT_LIMIT')
                 event, payload, amount = self._admit(item, position, batch)
+                if event['event_type'] == REJECTED:
+                    # Held raw keeps its received form; only admitted events drop diagnostic fields.
+                    event, payload, amount = self._admit(original, position, batch)
+                    item = original
                 total_bytes += amount
                 if total_bytes > self.limits.max_input_bytes:
                     raise Invalid('CRAWL_INPUT_BYTE_LIMIT')

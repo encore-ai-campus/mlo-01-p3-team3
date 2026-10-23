@@ -110,10 +110,11 @@ class MongoBatchStore:
             if not errors or any(e.get('code') != 11000 for e in errors):
                 raise
             duplicates = {e['op']['_id'] for e in errors}
-            keys = [key for key, _ in items if self._key(kind, key) in duplicates]
-            existing = self.get_many(kind, keys)
-            for key, value in items:
-                if self._key(kind, key) in duplicates and existing[key] != value:
+            # Keys may be lists (composite keys), so compare by position, never as dict keys.
+            repeated = [(key, value) for key, value in items if self._key(kind, key) in duplicates]
+            existing = self.get_list(kind, [key for key, _ in repeated])
+            for (key, value), stored in zip(repeated, existing):
+                if stored != value:
                     raise Invalid('IMMUTABLE_BATCH_RECORD_CONFLICT')
 
     def mutate(self, kind, key, change):

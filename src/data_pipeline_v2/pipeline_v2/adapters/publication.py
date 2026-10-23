@@ -261,8 +261,13 @@ class MySQLPublisher:
             retained=[{k:v for k,v in prior_ref.items() if k!='retained_snapshot_refs'},*prior_ref.get('retained_snapshot_refs',[])]
             reference_body['retained_snapshot_refs']=list({r['plan_id']:r for r in retained}.values())
         reference=canonical(reference_body)
-        latest=(not baseline or bool(retracted) or
-            sql_time(max(r['collected_at'] for r in group['source_refs']))>=baseline['latest_as_of'])
+        incoming_latest=sql_time(max(r['collected_at'] for r in group['source_refs']))
+        if retracted and old:
+            # A retraction lowers the bar only by the evidence it removes. Evidence it did not see stays protected.
+            kept=[sql_time(r['collected_at']) for r in json.loads(old['source_refs_json']) if r['_id'] not in retracted]
+            latest=not kept or incoming_latest>=max(kept)
+        else:
+            latest=not baseline or incoming_latest>=baseline['latest_as_of']
         if not latest:raise StaleInput('STALE_PRODUCT_INPUT')
         prior_attributes=[r for r in (json.loads(old['attributes_json']) if old else []) if r.get('raw_document_id') not in retracted]
         if old and prior_ref.get('normalization_policy_hash') and prior_ref['normalization_policy_hash']!=group['normalization_policy_hash']:

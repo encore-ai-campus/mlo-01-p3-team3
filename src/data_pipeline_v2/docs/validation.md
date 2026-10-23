@@ -1,5 +1,17 @@
 # 로컬 검증 기록
 
+## 2026-10-23 부분 철회 최신성·Mongo 일괄 저장 중복·진단 필드 보완
+
+외부 검토에서 확인된 결함 3건을 수정했다. 각 시험은 수정 전 소스(`HEAD`)로 따로 실행해 해당 증상으로 실패하는 것을 확인했다.
+
+| 시험 | 수정 전 증상 |
+|---|---|
+| `test_partial_retraction_recompute_never_replaces_newer_published_evidence` | 부분 철회 재계산이 최신 게시본을 과거 결과로 되돌림(`PUBLISHED`가 나옴) |
+| `test_batch_store.py` (가짜 컬렉션) | 복합 키 중복 시 `TypeError: unhashable type: 'list'`. 같은 입력을 두 번째 접수할 때 걸림 |
+| `test_image_recheck_time_alone_is_the_same_event` | 확인 시각만 바뀐 재접수가 `IMMUTABLE_FILE_CONFLICT`로 실패 |
+
+`MongoBatchStore.put_many`는 실제 Mongo가 아니라 `insert_many`/`BulkWriteError`를 흉내 낸 메모리 컬렉션으로 시험했다. 서버의 쓰기 동작과 오류 형식은 아직 확인하지 않았다.
+
 ## 2026-10-23 원격 호출 묶음·Delta 중복 검사·Silver 재사용 개선
 
 전체 시험 **69개 실행, 69개 통과**(`PIPELINE_V2_TEST_SPARK=1`, 실제 로컬 Spark `local[2]`, `MemoryDelta`). **성능 개선 효과는 측정하지 않았다.** 아래는 호출 횟수와 읽기 범위를 줄이는 구조 변경이며, 시간 단축은 서버 계측으로 확인해야 한다. 이번에도 Mongo(`MongoBatchStore.put_many`), 실제 Kafka producer, 실제 Delta의 `append_history`는 실행하지 않았다.

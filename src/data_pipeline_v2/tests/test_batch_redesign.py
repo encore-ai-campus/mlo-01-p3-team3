@@ -298,6 +298,40 @@ class RedesignContractTests(unittest.TestCase):
             self.assertEqual(manifest['event_count'],5)
             self.assertEqual(runner.work(runner.submit('crawl-1')['job_id'])['status'],'COMPLETED')
 
+    def test_partial_retraction_recompute_never_replaces_newer_published_evidence(self):
+        o1, o2, o3 = self.history(3)
+        product = 'danawa:11'
+        with runtime(self.config) as (runner,outbox):
+            db = self.mysql_publisher(runner)
+            first = self.ready(runner,outbox,crawl=self.crawl_for('first',[o1,o2]),items=[o1,o2])['job_id']
+            runner.work(first)
+            runner.retract(dict(product_key=product,raw_document_id=o1['document']['_id'],reason='SOURCE_WITHDRAWN'))
+            repair = runner.repair([product])['job_id']
+            # Recomputed from the evidence that remained at that moment: without the third observation.
+            self.assertEqual(runner.work(repair,'process')['stages']['gold']['counts']['output_committed'],1)
+            newer = self.ready(runner,outbox,crawl=self.crawl_for('newer',[o3]),items=[o3])['job_id']
+            self.assertEqual(runner.work(newer)['stages']['publication']['resolutions'],{'PUBLISHED':1})
+            current = dict(db.rows['pipeline_product_versions'][0])
+            self.assertEqual(runner.work(repair,'publish')['stages']['publication']['resolutions'],{'LAST_GOOD_RETAINED':1})
+            self.assertEqual(db.rows['pipeline_product_versions'][0]['latest_as_of'],current['latest_as_of'])
+            self.assertEqual(db.rows['pipeline_product_versions'][0]['latest_evaluation'],current['latest_evaluation'])
+            self.assertEqual(runner.audit(repair)['status'],'AUDIT_OK')
+
+    def test_image_recheck_time_alone_is_the_same_event(self):
+        with runtime(self.config) as (runner,outbox):
+            first = self.ready(runner,outbox)['job_id']
+            runner.work(first)
+            writes = runner.publisher.writes
+            rechecked = copy.deepcopy(self.items)
+            for item in rechecked:
+                item['image_state']['image_state_checked_at'] = '2026-10-17T00:00:00.000Z'
+            source = outbox.prepare(dict(self.crawl,crawl_batch_id='recheck'),rechecked)
+            # Diagnostics changed, business content did not: same events, nothing to reprocess.
+            self.assertEqual(source['event_set_hash'],outbox.store.get('crawl','crawl-1')['event_set_hash'])
+            outbox.relay('recheck')
+            self.assertEqual(runner.work(runner.submit('recheck')['job_id'])['status'],'COMPLETED')
+            self.assertEqual(runner.publisher.writes,writes)
+
     def test_metric_storage_failure_does_not_undo_completed_publication(self):
         with runtime(self.config) as (runner,outbox):
             job = self.ready(runner,outbox)

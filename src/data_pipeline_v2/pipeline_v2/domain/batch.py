@@ -140,6 +140,19 @@ def event_for_item(item, crawl_batch_id, *, storage_allowed, quarantine_allowed,
         quarantine_allowed=quarantine_allowed is True)
 
 
+# Operational fields that change without any business change. They are diagnostics: the image state
+# fingerprint already excludes them, so they must not change event identity or payload hash either.
+VOLATILE_IMAGE_STATE = ('image_state_checked_at',)
+
+
+def stable_item(item):
+    """The admitted form of a source item, without diagnostic-only fields."""
+    state = item.get('image_state') if isinstance(item, dict) else None
+    if not isinstance(state, dict) or not any(k in state for k in VOLATILE_IMAGE_STATE):
+        return item
+    return dict(item, image_state={k: v for k, v in state.items() if k not in VOLATILE_IMAGE_STATE})
+
+
 def outside_allowlist(item, field_allowlist):
     """Top-level source fields outside the deployment allowlist block every persistent copy."""
     if field_allowlist is None:
