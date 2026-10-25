@@ -74,7 +74,15 @@ class Outbox:
         inventory, total_bytes, records, duplicates = {}, 0, 0, 0
         dispositions = {}
         pending, pending_bytes = [], 0
-        with self.timing.measure('outbox.reconcile_source', batch) as counts:
+        # Chunks have disjoint keys, so up to three are written at once (each waits for its own
+        # majority acknowledgement); SOURCE_COMPLETE is written only after every chunk finished.
+        import contextvars
+        from concurrent.futures import ThreadPoolExecutor
+        pool, writes = ThreadPoolExecutor(max_workers=3), []
+
+        def persist(chunk):
+            writes.append(pool.submit(contextvars.copy_context().run, self._persist, crawl, chunk))
+        with self.timing.measure('outbox.reconcile_source', batch) as counts, pool:
             for position, original in enumerate(items):
                 item = stable_item(original)
                 records += 1
@@ -109,10 +117,12 @@ class Outbox:
                 dispositions[disposition] = dispositions.get(disposition, 0) + 1
                 inventory[key] = dict(event_id=key, payload_hash=event['payload_hash'], product_key=event['product_key'])
                 if len(pending) >= self.limits.outbox_chunk or pending_bytes >= self.limits.outbox_chunk_bytes:
-                    self._persist(crawl, pending)
+                    persist(pending)
                     pending, pending_bytes = [], 0
             if pending:
-                self._persist(crawl, pending)
+                persist(pending)
+            for write in writes:
+                write.result()
             if records != crawl['event_count']:
                 raise Invalid('CRAWL_EVENT_COUNT_MISMATCH')
             source = seal(dict(schema_version=BATCH_SCHEMA, crawl=crawl, crawl_batch_id=batch,

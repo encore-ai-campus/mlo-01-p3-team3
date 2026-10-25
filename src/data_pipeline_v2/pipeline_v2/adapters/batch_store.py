@@ -109,7 +109,11 @@ class MongoBatchStore:
 
             def failed(self, event):
                 counter.failed(event)
-        self.client = MongoClient(uri, replicaSet=replica_set, tz_aware=True,
+        # Wire compression: source snapshots are large JSON. zstd when its module is installed,
+        # else the built-in zlib; the stored documents are unchanged.
+        import importlib.util
+        compressors = ','.join((['zstd'] if importlib.util.find_spec('zstandard') else []) + ['zlib'])
+        self.client = MongoClient(uri, replicaSet=replica_set, tz_aware=True, compressors=compressors,
             serverSelectionTimeoutMS=5000, socketTimeoutMS=30000, retryWrites=True, event_listeners=[Listener()])
         self.database = self.client.get_database(database, read_preference=ReadPreference.PRIMARY,
             read_concern=ReadConcern('majority'), write_concern=WriteConcern(w='majority', j=True))
