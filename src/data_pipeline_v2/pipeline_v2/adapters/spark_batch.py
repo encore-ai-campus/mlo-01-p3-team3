@@ -150,6 +150,15 @@ class SparkBatchProcessor:
             self.spark = self.server_lake.spark
             self.delta = BatchDelta(self.spark,self.server_lake.config['lake_root'],self.server_lake.check,self.timing)
 
+    def warm(self):
+        """Resident start: open Spark and start the Python workers on every executor (they are
+        reused), so a batch's first Python stage does not wait for them."""
+        self._open()
+        with self.timing.measure('serve.python_worker_warmup','runtime'):
+            context = self.spark.sparkContext
+            slots = max(context.defaultParallelism,1)*2
+            context.parallelize(range(slots),slots).map(lambda value:value).count()
+
     @contextmanager
     def action(self,name,batch):
         self._open()
@@ -431,6 +440,9 @@ class SparkBatchProcessor:
         spark, batch, key = self.spark, job['crawl_batch_id'], job['job_id']
         store_config, page_size = self.store_config, self.limits.source_page_size
         wire = (self.read_kafka or read_kafka)(spark,self.kafka_config,manifest,self.limits.spark_partitions).persist()
+        # Fill the cache with one read of the fixed range first; otherwise the stages that follow
+        # start together and each reads the range from the broker again.
+        wire.count()
         schema = 'crawl_batch_id string, event_id string, payload_hash string, product_key string'
         decoded = wire.withColumn('e',F.from_json('value',schema))
         selected = decoded.filter(F.col('e.crawl_batch_id') == batch)
@@ -440,8 +452,12 @@ class SparkBatchProcessor:
         try:
             if len({v[0] for v in inventory}) != len(inventory):
                 raise Invalid('KAFKA_EVENT_SET_MISMATCH')
-            flags = self.validate_range(decoded,batch,spark.createDataFrame(
-                inventory,'_expected_id string,_expected_hash string,_expected_product string'))
+            # The manifest inventory as one JSON literal expanded in the JVM: a Python-side
+            # DataFrame would wait for Python workers to start just to hold these few columns.
+            expected = spark.range(1).select(F.explode(F.from_json(F.lit(json.dumps(
+                [dict(_expected_id=a,_expected_hash=h,_expected_product=p) for a,h,p in inventory])),
+                'array<struct<_expected_id:string,_expected_hash:string,_expected_product:string>>')).alias('x')).select('x.*')
+            flags = self.validate_range(decoded,batch,expected)
             # Same precedence as the separate checks this one aggregate replaces.
             if flags['unclassifiable']:
                 raise Invalid('KAFKA_RANGE_UNCLASSIFIABLE_EVENT')

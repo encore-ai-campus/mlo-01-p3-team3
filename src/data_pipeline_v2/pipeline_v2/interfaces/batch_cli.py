@@ -101,7 +101,7 @@ def serve(args, parser, runner, outbox):
     inbox.mkdir(parents=True,exist_ok=True)
     answers.mkdir(parents=True,exist_ok=True)
     # Open Spark (session, executors, writer lease) before the first batch arrives, not inside it.
-    warm = getattr(runner.processor,'_open',None)
+    warm = getattr(runner.processor,'warm',None) or getattr(runner.processor,'_open',None)
     if warm:
         warm()
     # History compaction runs in the background only while the queue is idle (at start and after
