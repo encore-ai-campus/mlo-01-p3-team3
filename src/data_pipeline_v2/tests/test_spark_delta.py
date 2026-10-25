@@ -267,9 +267,34 @@ class RealDeltaBatchTests(unittest.TestCase):
         self.assertEqual(result['files_added'],buckets)
         self.assertIsNone(self.delta.compact('normalized_history'))
 
+    def test_v2_index_raw_moves_to_input_raw_by_origin_job_when_carried(self):
+        class V2(BatchDelta):
+            NAMESPACE, LEGACY, BUCKETS = 'finite-v2', ('finite-v1',), 16
+        old = V2(self.spark,self.lake,lambda:None,self.delta.timing)
+        item = dict(document=dict(_id='r1'),image_state={})
+        stored = [('k1','danawa:11',json.dumps(dict(event=dict(event_id='e1'),origin_job='job-a',item=item))),
+                  ('k2','danawa:12',json.dumps(dict(event=dict(event_id='e2'),origin_job='job-b')))]
+        old.append_history('input_index',self.encoded(stored))
+        products = self.spark.createDataFrame([('danawa:11',),('danawa:12',)],'product_key string')
+        index = {r[0]:json.loads(r[2]) for r in self.rows(self.delta.history('input_index',products))}
+        self.assertEqual(set(index),{'k1','k2'})
+        self.assertNotIn('item',index['k1'])
+        self.assertEqual(index['k1']['origin_job'],'job-a')
+        raw = {r['row_key']:json.loads(r['payload_json']) for r in self.delta.raw(['job-a','job-b']).collect()}
+        self.assertEqual(raw,{'k1':item})
+        # A job's own raw is appended to its partition; a retry adds only what is missing.
+        own = self.spark.createDataFrame([('k3','danawa:13','{"r":3}')],'row_key string,product_key string,payload_json string')
+        self.delta.append_raw('job-c',own,True)
+        self.delta.append_raw('job-c',own,False)
+        self.assertEqual([r['row_key'] for r in self.delta.raw(['job-c']).collect()],['k3'])
+        with self.assertRaisesRegex(Exception,'DELTA_IMMUTABLE_CONFLICT'):
+            self.delta.append_raw('job-c',self.spark.createDataFrame([('k3','danawa:13','{"r":999}')],
+                'row_key string,product_key string,payload_json string'),False)
+        self.assertEqual([r['row_key'] for r in self.delta.raw(['job-a','job-c'],{'k1'}).collect()],['k1'])
+
     def test_v1_history_is_carried_rebucketed_and_v1_proofs_still_load(self):
         class V1(BatchDelta):
-            NAMESPACE, LEGACY, BUCKETS = 'finite-v1', 'finite-v0', 128
+            NAMESPACE, LEGACY, BUCKETS = 'finite-v1', ('finite-v0',), 128
         old = V1(self.spark,self.lake,lambda:None,self.delta.timing)
         stored = [('k1','danawa:11','{"a":1}'),('k2','danawa:12','{"a":2}')]
         old.append_history('input_index',self.encoded(stored))

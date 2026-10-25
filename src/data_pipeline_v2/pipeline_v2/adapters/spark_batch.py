@@ -18,9 +18,10 @@ def open_store(config):
     return MongoBatchStore(os.environ[config['uri_env']],config['database'],config['replica_set'])
 
 
-def resolve_partition(rows, store_config, page_size, normalize=False, expires=None):
-    # Called in an Executor. Admitted payloads arrive with the Kafka event or the Bronze index,
-    # so the normal path needs no source DB; the bounded store lookup is only a fallback.
+def resolve_partition(rows, store_config, page_size, expires=None):
+    # Called in an Executor. Admitted payloads arrive with the Kafka event, so the normal path
+    # needs no source DB; the bounded store lookup is only a fallback. Yields (row_key,
+    # product_key, payload_json, disposition, raw_json): the admitted raw goes to its own table.
     store = None
     try:
         iterator = iter(rows)
@@ -38,9 +39,8 @@ def resolve_partition(rows, store_config, page_size, normalize=False, expires=No
                     store = open_store(store_config)
                 items = store.get_many('source',list(set(missing)))
             for record, event, item in zip(page,events,carried):
-                if not normalize:
-                    # The Kafka wire body, validated here instead of in a separate UDF stage.
-                    validate_event(event)
+                # The Kafka wire body, validated here instead of in a separate UDF stage.
+                validate_event(event)
                 event = {k:v for k,v in event.items() if k != 'payload'}
                 if event['event_type'] == REJECTED:
                     # Rejected rows carry no trusted product identity and never reach Silver.
@@ -48,35 +48,49 @@ def resolve_partition(rows, store_config, page_size, normalize=False, expires=No
                     disposition = event['disposition']
                     raw_store = 'quarantine_raw' if disposition == 'INPUT_QUARANTINE' else None
                     body = dict(intake_metadata(event,disposition,event['reason'],expires,raw_store),origin_job=record['origin_job'])
-                    yield (event['event_id'],'',canonical(body),disposition)
+                    yield (event['event_id'],'',canonical(body),disposition,None)
                     continue
                 item = item if item is not None else items.get(event['source_ref'])
                 if item is None or digest(item) != event['payload_hash']:
                     raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
-                if normalize:
-                    policy = json.loads(record['policy_json'])
-                    result = parse_observation(item,policy)
-                    body = dict(quality=result['quality'],reason=result['reason'],
-                        normalized_json=canonical(result['normalized']) if result['normalized'] is not None else None,
-                        raw_document_id=event['raw_document_id'],event_id=event['event_id'],
-                        image_revision=item['image_state']['image_state_revision'])
-                    yield (record['row_key'],event['product_key'],canonical(body))
+                disposition, reason = classify(item,event)
+                if disposition == 'ACCEPTED':
+                    # The index keeps what every batch reads (event, dependencies, revision); the
+                    # raw is kept once in input_raw, read only when a normalization is not reusable.
+                    body = dict(event={k:v for k,v in event.items() if k != 'crawl_batch_id'},
+                        dependencies=reference(item),image_revision=item['image_state']['image_state_revision'],
+                        origin_job=record['origin_job'])
+                    yield (record['row_key'],event['product_key'],canonical(body),disposition,canonical(item))
                 else:
-                    disposition, reason = classify(item,event)
-                    if disposition == 'ACCEPTED':
-                        # Bronze keeps the admitted raw payload once, for later Silver reuse misses.
-                        body = dict(event={k:v for k,v in event.items() if k != 'crawl_batch_id'},
-                            dependencies=reference(item),image_revision=item['image_state']['image_state_revision'],
-                            origin_job=record['origin_job'],item=item)
-                        yield (record['row_key'],event['product_key'],canonical(body),disposition)
-                    else:
-                        # The raw stays in the normal immutable source snapshot; only a reference is kept.
-                        body = dict(intake_metadata(event,disposition,reason,expires,
-                            'source' if disposition == 'INPUT_QUARANTINE' else None),origin_job=record['origin_job'])
-                        yield (event['event_id'],event['product_key'],canonical(body),disposition)
+                    # The raw stays in the normal immutable source snapshot; only a reference is kept.
+                    body = dict(intake_metadata(event,disposition,reason,expires,
+                        'source' if disposition == 'INPUT_QUARANTINE' else None),origin_job=record['origin_job'])
+                    yield (event['event_id'],event['product_key'],canonical(body),disposition,None)
     finally:
         if store is not None:
             store.close()
+
+
+def concurrently(calls):
+    """Run independent Spark writes at once. Each thread keeps the caller's timing context and
+    Spark local properties; the first failure is raised after every call has finished."""
+    import contextvars
+    from pyspark import InheritableThread
+    results, errors = {}, []
+
+    def run(name, call, context):
+        try:
+            results[name] = context.run(call)
+        except BaseException as exc:
+            errors.append(exc)
+    threads = [InheritableThread(target=run,args=(name,call,contextvars.copy_context())) for name,call in calls.items()]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if errors:
+        raise errors[0]
+    return results
 
 
 class SparkBatchProcessor:
@@ -191,7 +205,7 @@ class SparkBatchProcessor:
                         F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
                     resolved = spark.createDataFrame(events.rdd.mapPartitions(
                         lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
-                        'row_key string,product_key string,payload_json string,disposition string').persist()
+                        'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
                     try:
                         # One small aggregate decides which destinations need a write at all, and
                         # names the accepted products (the Bronze index is their only stored copy).
@@ -201,19 +215,23 @@ class SparkBatchProcessor:
                             F.sort_array(F.collect_set(delta.bucket('product_key'))).alias('buckets')).collect()
                         tally = {r['disposition']:(int(r['n']),r['watermark']) for r in found}
                         products, buckets = next(((list(r['products']),list(r['buckets'])) for r in found if r['disposition'] == 'ACCEPTED'),([],[]))
-                        accepted = resolved.filter(F.col('disposition') == 'ACCEPTED').drop('disposition')
+                        accepted = resolved.filter(F.col('disposition') == 'ACCEPTED')
                         if products:
+                            first = job['attempts'] == 1
                             with self.action('bronze.accepted.commit',batch):
                                 # One row per event (deduplicated above), so the in-batch key check is not needed.
                                 # Keys carry this job's id: on its first attempt none can be stored yet.
-                                delta.append_history('input_index',accepted,unique=dict(keys=tally['ACCEPTED'][0],
-                                    buckets=buckets,absent=job['attempts'] == 1))
+                                concurrently(dict(
+                                    index=lambda:delta.append_history('input_index',accepted.drop('disposition','raw_json'),
+                                        unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first)),
+                                    raw=lambda:delta.append_raw(key,accepted.select('row_key','product_key',
+                                        F.col('raw_json').alias('payload_json')),first)))
                         outputs = {}
                         for table in sorted(set(METADATA_TABLES.values())):
                             names = [d for d,t in METADATA_TABLES.items() if t == table and tally.get(d,(0,))[0]]
                             if not names:
                                 continue
-                            frame = resolved.filter(F.col('disposition').isin(names)).drop('disposition')
+                            frame = resolved.filter(F.col('disposition').isin(names)).drop('disposition','raw_json')
                             # Expiring metadata table: idempotent keyed append, one write per destination.
                             with self.action('bronze.'+table+'.commit',batch):
                                 delta.append_history(table,frame)
@@ -257,30 +275,67 @@ class SparkBatchProcessor:
                     'product_key',F.lit(0).alias('kind'),'row_key','payload_json')
                 cached = delta.history('normalized_history',frame,shared).select(
                     'product_key',F.lit(1).alias('kind'),'row_key','payload_json')
-                rows = (index.unionByName(cached).repartition(self.limits.spark_partitions,'product_key')
-                    .sortWithinPartitions('product_key','kind','row_key'))
-                with self.action('product.silver_gold',batch):
+                # The raw of this job's own observations is one input_raw partition; older raw is
+                # read only for the observations the pass reports missing (a policy change).
+                own = delta.raw([] if job['kind'] == 'REPAIR' else [key]).select('product_key',F.lit(2).alias('kind'),'row_key','payload_json')
+                base = index.unionByName(cached)
+
+                def run(raw):
+                    rows = (base.unionByName(raw).repartition(self.limits.spark_partitions,'product_key')
+                        .sortWithinPartitions('product_key','kind','row_key'))
                     out = spark.createDataFrame(rows.rdd.mapPartitions(lambda part:product_pass(part,context)),
                         'kind string,row_key string,product_key string,payload_json string').persist()
                     label = F.coalesce(F.get_json_object('payload_json','$.outcome'),F.get_json_object('payload_json','$.reason'))
                     tally = {(r['kind'],r['label']):int(r['n']) for r in out.groupBy('kind',label.alias('label')).agg(
                         F.count('*').alias('n')).collect()}
+                    return out, tally
+                with self.action('product.silver_gold',batch):
+                    out, tally = run(own)
+                if any(k == 'missing' for k,_ in tally):
+                    with self.action('product.raw_misses',batch):
+                        missing = out.filter(F.col('kind') == 'missing').select('row_key','product_key','payload_json').collect()
+                        affected = sorted({r['product_key'] for r in missing})
+                        extra = delta.raw({r['payload_json'] for r in missing},{r['row_key'] for r in missing}).persist()
+                        if extra.count() != len({r['row_key'] for r in missing}):
+                            raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
+                        # Only the affected products are computed again, now with their older raw.
+                        base = base.filter(F.col('product_key').isin(affected))
+                        again, retally = run(own.filter(F.col('product_key').isin(affected)).unionByName(
+                            extra.select('product_key',F.lit(2).alias('kind'),'row_key','payload_json')))
+                        extra.unpersist()
+                        if any(k == 'missing' for k,_ in retally):
+                            raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
+                        merged = out.filter(~F.col('product_key').isin(affected)).unionByName(again).persist()
+                        # The merged output is cached by this count before its inputs are released.
+                        tally = {(r['kind'],r['label']):int(r['n']) for r in merged.groupBy('kind',F.coalesce(
+                            F.get_json_object('payload_json','$.outcome'),F.get_json_object('payload_json','$.reason')).alias('label')).agg(
+                            F.count('*').alias('n')).collect()}
+                        out.unpersist()
+                        again.unpersist()
+                        out = merged
                 self._release_cache()
                 self._cached = (key,out)
                 count = lambda kind:sum(n for (k,_),n in tally.items() if k == kind)
                 kind = lambda name:out.filter(F.col('kind') == name).drop('kind')
-                if count('normalized'):
+                def normalized():
                     with self.action('silver.normalize_and_commit',batch):
                         # One row per identity by construction; buckets are a subset of the products' buckets.
                         # The pass read every stored row of these products and emits only identities not
                         # among them, and the writer lease admits no other append in between.
                         delta.append_history('normalized_history',kind('normalized'),
                             unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or [],absent=True))
-                outputs = {}
+
+                def gold_commit():
+                    with self.action('gold.commit',batch):
+                        return delta.snapshot(key,'gold',kind('gold'))
+                # Three independent tables: their writes and commits overlap instead of queueing.
+                writes = dict(gold=gold_commit)
+                if count('normalized'):
+                    writes['normalized'] = normalized
                 if count('hold'):
-                    outputs['holds'] = delta.snapshot(key,'silver_holds',kind('hold'))
-                with self.action('gold.commit',batch):
-                    proof = delta.snapshot(key,'gold',kind('gold'))
+                    writes['holds'] = lambda:delta.snapshot(key,'silver_holds',kind('hold'))
+                done = concurrently(writes)
+                proof, outputs = done['gold'], {k:v for k,v in done.items() if k == 'holds'}
             finally:
                 frame.unpersist()
             silver = dict(proofs=list(outputs.values()),outputs=outputs,counts=dict(valid=count('silver'),
@@ -361,6 +416,12 @@ class SparkBatchProcessor:
         self._open()
         with self.timing.measure('serve.history_compaction','maintenance'):
             return {name:self.delta.compact(name) for name in ('input_index','normalized_history')}
+
+    def cancel_maintenance(self):
+        # Only called while maintenance is the sole Spark work in this process; an interrupted
+        # OPTIMIZE never commits, so the tables stay as they were.
+        if self.spark is not None:
+            self.spark.sparkContext.cancelAllJobs()
 
     def close(self):
         self.server_lake.close()

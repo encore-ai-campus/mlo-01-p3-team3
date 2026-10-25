@@ -143,6 +143,30 @@ class RedesignContractTests(unittest.TestCase):
             runner.store.mutate('capacity','global',lambda old:dict(reservations={}))
             self.assertEqual(runner.backlog(rebuild=True)['jobs'][0]['job_id'],job)
 
+    def test_abandoning_a_stopped_job_releases_its_reservation_for_good(self):
+        from datetime import datetime, timedelta, timezone
+        config = dict(self.config,batch_limits={'pending_age_seconds':3600})
+        with runtime(config) as (runner,outbox):
+            job = self.ready(runner,outbox)['job_id']
+            later = datetime.now(timezone.utc)+timedelta(hours=2)
+            with self.assertRaisesRegex(Invalid,'STOP_EVIDENCE_REQUIRED'):
+                runner.abandon(job,' ','offsets expired')
+            # Only a stopped or never-started job can be closed this way.
+            runner.store.mutate('job',job,lambda old:dict(old,status='RUNNING'))
+            with self.assertRaisesRegex(Invalid,'BATCH_NOT_ABANDONABLE'):
+                runner.abandon(job,'driver pid gone','offsets expired')
+            runner.store.mutate('job',job,lambda old:dict(old,status='RECOVERY_REQUIRED'))
+            self.assertEqual(runner.abandon(job,'driver pid gone','offsets expired')['status'],'ABANDONED')
+            backlog = runner.backlog(now=later)
+            self.assertEqual((backlog['pending_batches'],backlog['saturated']),(0,False))
+            # The age limit no longer refuses new work.
+            runner._reserve('another',1,now=later)
+            # Neither a rebuild (from job records) nor a resubmit brings the closed job back.
+            self.assertEqual(runner.backlog(rebuild=True)['jobs'],[])
+            self.assertEqual(runner.submit('crawl-1')['status'],'ABANDONED')
+            with self.assertRaisesRegex(Invalid,'BATCH_NOT_ABANDONABLE'):
+                runner.abandon(job,'driver pid gone','offsets expired')
+
     def test_submit_conflict_releases_capacity_and_changed_delivery_stays_queued(self):
         with runtime(self.config) as (runner,outbox):
             job = self.ready(runner,outbox)
@@ -405,6 +429,54 @@ class RedesignContractTests(unittest.TestCase):
         self.assertEqual(run('batch-retention','--as-of','2026-11-16T01:00:00.000Z')[1]['quarantine_raw_deleted'],1)
         with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), patch('sys.stderr',io.StringIO()):
             main(common+['batch-work','--job',job,'--phase','bogus'])
+
+    def test_resident_worker_cancels_idle_compaction_when_a_request_arrives(self):
+        import threading
+        from types import SimpleNamespace
+        from pipeline_v2.adapters.files import write
+        from pipeline_v2.interfaces.batch_cli import build_parser, serve
+        spool = self.root/'spool'
+        events = dict(started=threading.Event(), cancelled=threading.Event())
+        passes = []
+
+        class Processor:
+            def compact(self):
+                passes.append('start')
+                events['started'].set()
+                if not events['cancelled'].wait(10):
+                    passes.append('done')
+                    return
+                events['cancelled'].clear()
+                raise RuntimeError('cancelled')
+
+            def cancel_maintenance(self):
+                events['cancelled'].set()
+        runner = SimpleNamespace(processor=Processor(),timing=SimpleNamespace(flush=lambda:None),
+            status=lambda job:dict(status='QUEUED',job_id=job))
+        parser = build_parser()
+        args = parser.parse_args(['--config','unused.json','batch-serve','--spool',str(spool),
+            '--poll-seconds','0.01','--compact-idle-seconds','0'])
+        worker = threading.Thread(target=lambda:self.__dict__.update(result=serve(args,parser,runner,None)))
+        worker.start()
+        try:
+            # Compaction starts at once on an idle queue; a request cancels it and is answered.
+            self.assertTrue(events['started'].wait(10))
+            write(spool/'inbox'/'1.json',dict(argv=['batch-status','--job','j1']))
+            for _ in range(500):
+                if (spool/'outbox'/'1.json').exists():
+                    break
+                threading.Event().wait(0.01)
+            self.assertEqual(read(spool/'outbox'/'1.json')['result'],dict(status='QUEUED',job_id='j1'))
+            # The cancelled pass runs again once the queue is idle.
+            for _ in range(500):
+                if len(passes) >= 2:
+                    break
+                threading.Event().wait(0.01)
+            self.assertEqual(passes[:2],['start','start'])
+        finally:
+            (spool/'stop').write_text('')
+            worker.join(30)
+        self.assertEqual(self.result,dict(status='STOPPED',served=1))
 
     def test_resident_worker_runs_spool_requests_in_one_runtime(self):
         import io

@@ -106,4 +106,32 @@ class DirectSQLTests(unittest.TestCase):
         self.assertEqual(json.loads(saved['field_status_json'])['manufacturer'],'CONFIRMED')
 
 
+
+class DirectMySQLIdentityTests(unittest.TestCase):
+    def transport(self):
+        from pipeline_v2.adapters.mysql import DirectMySQL
+        db = DirectMySQL.__new__(DirectMySQL)
+        db._read_cache, db.inserted = {}, []
+        db.insert = lambda table, values: db.inserted.append((table, values))
+        return db
+
+    def test_absent_insert_skips_the_lookup_and_serves_the_row_from_the_cache(self):
+        db = self.transport()
+        key = dict(product_id='p1', link_observation_key='l1', gold_evaluation_key='j1')
+        saved, created = db.identity_absent('product_link_observations', key, dict(source_url='u'))
+        self.assertTrue(created)
+        self.assertEqual([t for t, _ in db.inserted], ['product_link_observations'])
+        # Served from the transaction cache: no connection is touched.
+        self.assertEqual(db.get('product_link_observations', key), saved)
+
+    def test_absent_insert_falls_back_to_the_checked_path_on_a_duplicate(self):
+        import pymysql
+        db = self.transport()
+        def duplicate(table, values):
+            raise pymysql.err.IntegrityError(1062, 'Duplicate entry')
+        db.insert = duplicate
+        db.identity = lambda table, key, values: (dict(key, id='existing'), False)
+        saved, created = db.identity_absent('product_images', dict(product_id='p1'), dict(asset_id='a'))
+        self.assertEqual((saved['id'], created), ('existing', False))
+
 if __name__=='__main__':unittest.main()

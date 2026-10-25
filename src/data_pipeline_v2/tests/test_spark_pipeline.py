@@ -57,6 +57,20 @@ class MemoryDelta(BatchDelta):
             self.tables[path] = list(old.values()) + fresh
             self.commits += 1
 
+    def append_raw(self, job_id, frame, first):
+        stored = self.tables.setdefault(self._path('input_raw'),[])
+        known = {r[0]:r for r in stored}
+        for r in frame.collect():
+            value = (r['row_key'],r['product_key'],r['payload_json'],job_id)
+            if r['row_key'] in known and known[r['row_key']] != value:
+                raise Invalid('DELTA_IMMUTABLE_CONFLICT')
+            if r['row_key'] not in known:
+                stored.append(value)
+
+    def raw(self, jobs, keys=None):
+        rows = [r[:3] for r in self.tables.get(self._path('input_raw'),[]) if r[3] in set(jobs) and (keys is None or r[0] in keys)]
+        return self.spark.createDataFrame(rows,'row_key string,product_key string,payload_json string')
+
     def snapshot(self, job_id, stage, frame):
         path = self.root + '/runs/' + job_id + '/' + stage
         rows = [tuple(r) for r in self.encode(frame).collect()]
@@ -170,6 +184,20 @@ class SparkFinitePipelineTests(unittest.TestCase):
 
         purged = self.runner.retention_purge('2027-01-15T01:00:00.000Z')
         self.assertEqual((purged['quarantine_raw_deleted'],purged['metadata_deleted']),(1,1))
+
+    def test_a_product_whose_normalization_is_not_reusable_reads_its_older_raw(self):
+        first = self.runner.work(self.batch('spark-raw',self.items+[self.old,self.new]))
+        self.assertEqual(first['status'],'COMPLETED')
+        delta = self.processor.delta
+        path = delta._path('normalized_history')
+        # As after a policy change: no stored normalization matches the product's identities.
+        delta.tables[path] = [r for r in delta.tables[path] if r[1] != 'danawa:11']
+        self.assertNotIn('item',delta.tables[delta._path('input_index')][0][2])
+        repaired = self.runner.work(self.runner.repair(['danawa:11'])['job_id'])
+        self.assertEqual(repaired['status'],'COMPLETED')
+        # A repair has no raw of its own: both observations were parsed again from input_raw.
+        self.assertEqual(len([r for r in delta.tables[path] if r[1] == 'danawa:11']),2)
+        self.assertEqual(repaired['stages']['publication']['resolutions'],{'PUBLISHED':1})
 
     def test_oversized_history_holds_only_that_product(self):
         self.processor.limits = BatchLimits(spark_partitions=2,history_observations=1)

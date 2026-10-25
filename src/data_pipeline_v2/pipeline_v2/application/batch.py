@@ -12,6 +12,8 @@ from ..domain.batch import (delivery_contract, logical_job, batch_id, retraction
 from ..domain.contracts import digest, seal, stamp, verified, utc, Invalid
 
 ACTIVE = {'RUNNING', 'PUBLISHING', 'RECOVERY_REQUIRED'}
+# Terminal states: neither holds a capacity reservation.
+CLOSED = {'COMPLETED', 'ABANDONED'}
 
 
 def _age(value, now):
@@ -36,7 +38,7 @@ class BatchRunner:
             reservations = {}
             for reserved, value in dict((old or {}).get('reservations',{})).items():
                 registered = self.store.get('job',reserved)
-                if not (registered and registered['status'] == 'COMPLETED'):
+                if not (registered and registered['status'] in CLOSED):
                     reservations[reserved] = value
             if key not in reservations:
                 oldest = max((_age(v['reserved_at'],now) for v in reservations.values()), default=0)
@@ -59,7 +61,8 @@ class BatchRunner:
     def _register(self, key, amount, record, accept):
         with self.timing.measure('nifi.submit_registry',record['crawl_batch_id']):
             existing = self.store.get('job',key)
-            if existing and existing['status'] == 'COMPLETED':
+            if existing and existing['status'] in CLOSED:
+                # A closed job is never reserved again; resubmitting returns it unchanged.
                 return existing
             if existing:
                 accept(existing)
@@ -138,7 +141,7 @@ class BatchRunner:
         """Incomplete-job index from the capacity record; rebuild scans job records only on request."""
         now = now or datetime.now(timezone.utc)
         if rebuild:
-            open_jobs = {v['job_id']:v for v in self.store.values('job') if v['status'] != 'COMPLETED'}
+            open_jobs = {v['job_id']:v for v in self.store.values('job') if v['status'] not in CLOSED}
             def rebuilt(old):
                 current = dict((old or {}).get('reservations',{}))
                 return dict(reservations={k:current.get(k,dict(bytes=v['source_bytes'],reserved_at=v['submitted_at']))
@@ -292,6 +295,23 @@ class BatchRunner:
         except BaseException as exc:
             self._fail(key,'publish',exc)
             raise
+
+    def abandon(self, key, evidence, reason):
+        """Close a stopped or never-started job for good and release its capacity reservation.
+
+        Without this, one job whose Kafka offsets expired holds its reservation forever and the
+        pending-age limit eventually refuses every new submit. Committed Bronze history and stage
+        records stay: they are valid accepted input that later batches keep reading.
+        """
+        if not isinstance(evidence,str) or not evidence.strip() or not isinstance(reason,str) or not reason.strip():
+            raise Invalid('STOP_EVIDENCE_REQUIRED')
+        def abandon(old):
+            if not old or old['status'] not in {'RECOVERY_REQUIRED','QUEUED'}:
+                raise Invalid('BATCH_NOT_ABANDONABLE')
+            return dict(old,status='ABANDONED',abandon_evidence=evidence,abandon_reason=reason,abandoned_at=stamp())
+        job = self.store.mutate('job',key,abandon)
+        self._release(key)
+        return job
 
     def recover(self, key, evidence, generation=None):
         if not isinstance(evidence,str) or not evidence.strip():

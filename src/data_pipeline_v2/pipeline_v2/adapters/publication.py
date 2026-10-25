@@ -81,6 +81,25 @@ FIELD_SOURCES=[('name','display_name'),('model_name','model'),('manufacturer','m
     ('width_mm','width_mm'),('depth_mm','depth_mm'),('height_mm','height_mm'),('comparison_url','comparison_url')]
 
 
+def identity(db, absent, table, key, values):
+    """Business-key insert; skips the lookup when `absent` and the transport supports it."""
+    if absent and hasattr(db,'identity_absent'):
+        return db.identity_absent(table,key,values)
+    return db.identity(table,key,values)
+
+
+def offer_prices(group):
+    """Stable seller observations of the selected offers, kept as price history."""
+    identities={o['identity']['offer_key'] for o in group['offers']}
+    return [p for p in group['price_observations'] if p.get('offer_key') in identities
+            and p['currency']=='KRW' and p['numeric_status']=='CONFIRMED']
+
+
+def price_snapshot_key(price):
+    return 'direct-price:'+digest(dict(offer=price['offer_key'],raw=price['raw_document_id'],
+        condition=price['condition_fingerprint'],amount=price['amount']))
+
+
 class StaleInput(Invalid):
     pass
 
@@ -187,6 +206,7 @@ class MySQLPublisher:
                 db.prefetch('categories',[dict(id=UUID(g['category_id']).hex) for g in ready])
                 db.prefetch('assets',[dict(bucket=i['bucket'],object_key=i['object_key']) for g in ready for i in g['images']])
                 db.prefetch('offers',[dict(offer_key=o['identity']['offer_key']) for g in ready for o in g['offers']])
+                db.prefetch('offer_snapshots',[dict(snapshot_key=price_snapshot_key(p)) for g in ready for p in offer_prices(g)])
                 at = db.one('SELECT UTC_TIMESTAMP(3) AS stamp')['stamp']
                 for delivery in ordered:
                     key,group = delivery['job_id'],delivery['product']
@@ -292,10 +312,11 @@ class MySQLPublisher:
             quality_reason_codes=canonical(group['quality_reason_codes']),publication_status='DIRECT_PUBLISHED',
             publication_reason_codes='[]',embedding_json=(old or {}).get('embedding_json','null'),gold_snapshot_ref_json=reference,
             representative_image_id=(old or {}).get('representative_image_id'),updated_at=at)
+        created=False
         if old:
             db.update('products',dict(id=old['id']),values);product=dict(old,**values)
         else:
-            product,_=db.identity('products',dict(product_key=group['product_key']),dict(values,source_code=group['source_code'],
+            product,created=db.identity('products',dict(product_key=group['product_key']),dict(values,source_code=group['source_code'],
                 source_product_id=group['source_product_id'],created_at=at))
         images=[]
         with self._stage('mysql.asset_and_image_links',getattr(self,'_active_scope','sql-projection'),key):
@@ -306,7 +327,7 @@ class MySQLPublisher:
                 usage_policy_json=canonical(dict(workflow='DIRECT_ETL',policy_version='direct-catalog-1')),created_at=at,updated_at=at))
             if asset['checksum']!=image['sha256'] or asset['size_bytes']!=image['bytes']:raise Invalid('ASSET_CONTENT_CONFLICT')
             relation='direct-image:'+digest(dict(product_key=group['product_key'],raw=image['raw_document_id'],slot=image['image_slot'],version=image['source_version']))
-            linked,_=db.identity('product_images',dict(product_id=product['id'],source_code=group['source_code'],
+            linked,_=identity(db,created,'product_images',dict(product_id=product['id'],source_code=group['source_code'],
                 source_product_id=group['source_product_id'],image_variant=image['image_slot'],raw_document_id=image['raw_document_id'],
                 source_version=image['source_version']),dict(asset_id=asset['id'],display_order=image['order'],source_url=image['source_url'],
                 raw_payload_hash=image['raw_payload_hash'],raw_collected_at=sql_time(image['raw_collected_at']),linked_at=at,active=True,
@@ -323,7 +344,7 @@ class MySQLPublisher:
         with self._stage('mysql.offer_and_price_rows',getattr(self,'_active_scope','sql-projection'),key):
             self._offers(db,product,group,reference,at)
         with self._stage('mysql.link_observation_rows',getattr(self,'_active_scope','sql-projection'),key):
-            self._links(db,product,group,key,reference,at)
+            self._links(db,product,group,key,reference,at,absent=created)
         current=dict(field_versions_json=canonical(proofs),first_collected_at=values['first_collected_at'],
             latest_as_of=sql_time(max(r['collected_at'] for r in group['source_refs'])),latest_evaluation=key)
         if baseline:db.update('pipeline_product_versions',dict(product_key=group['product_key']),current)
@@ -346,11 +367,9 @@ class MySQLPublisher:
                     saved['latest_raw_document_id'] in set(group.get('retracted_raw_document_ids') or [])):
                 db.update('offers',dict(id=saved['id']),{k:v for k,v in values.items() if k not in {'product_id','created_at'}})
         # All stable seller observations survive as history, not just the selected current price.
-        identities={o['identity']['offer_key']:o['identity'] for o in group['offers']}
-        for price in group['price_observations']:
-            if price.get('offer_key') not in identities or price['currency']!='KRW' or price['numeric_status']!='CONFIRMED':continue
+        for price in offer_prices(group):
             offer=db.get('offers',dict(offer_key=price['offer_key']))
-            key='direct-price:'+digest(dict(offer=price['offer_key'],raw=price['raw_document_id'],condition=price['condition_fingerprint'],amount=price['amount']))
+            key=price_snapshot_key(price)
             values=dict(offer_id=offer['id'],raw_document_id=price['raw_document_id'],price_amount=int(price['amount']),currency='KRW',
                 purchase_url=None,availability='UNKNOWN',collected_at=sql_time(price['observed_at']),pricing_terms_json=price['condition_json'],
                 gold_snapshot_ref_json=reference,created_at=at)
@@ -384,12 +403,13 @@ class MySQLPublisher:
             db.update('pipeline_product_versions',dict(product_key=group['product_key']),dict(latest_evaluation=key))
         return 'WITHDRAWN'
 
-    def _links(self, db, product, group, key, reference, at):
+    def _links(self, db, product, group, key, reference, at, absent=False):
         for link in group['links']:
             values=dict(link_kind=link['link_kind'],source_url=link['source_url'],offer_key=link['offer_key'],
                 usable=bool(link['link_kind']=='COMPARISON' and link['source_url']==group['comparison_url']),
                 raw_document_id=link['raw_document_id'],evidence_json=link['evidence_json'],gold_snapshot_ref_json=reference,created_at=at)
-            saved,_=db.identity('product_link_observations',dict(product_id=product['id'],link_observation_key=link['link_observation_key'],gold_evaluation_key=key),values)
+            # A product created in this transaction has no link rows yet.
+            saved,_=identity(db,absent,'product_link_observations',dict(product_id=product['id'],link_observation_key=link['link_observation_key'],gold_evaluation_key=key),values)
             if saved['source_url']!=values['source_url']:raise Invalid('LINK_OBSERVATION_CONFLICT')
 
     def audit(self, delivery, receipt):

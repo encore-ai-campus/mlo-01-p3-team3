@@ -96,6 +96,32 @@ class DirectMySQL(MySQL):
         self._invalidate(table,key)
         return super().update(table,key,values)
 
+    def identity(self,table,key,values):
+        saved, created = super().identity(table,key,values)
+        self._remember(table,key,saved,created)
+        return saved, created
+
+    def identity_absent(self,table,key,values):
+        """Business-key insert when the caller knows no row can exist yet (its parent was created
+        in this transaction): the lookup is skipped; a duplicate falls back to the checked path."""
+        import pymysql
+        from uuid import uuid4
+        row = {**values,**key,'id':uuid4().hex}
+        try:
+            self.insert(table,row)
+        except pymysql.err.IntegrityError as exc:
+            if exc.args[0] != 1062:
+                raise
+            return self.identity(table,key,values)
+        self._remember(table,key,row,True)
+        return row, True
+
+    def _remember(self,table,key,saved,created):
+        # A row inserted in this transaction is served from the cache to later locking reads.
+        cache = getattr(self,'_read_cache',None)
+        if created and cache is not None:
+            cache[(table,canonical(key),True)] = saved
+
     def preflight(self):
         server=self.one('SELECT @@version AS version, @@global.read_only AS ro, @@global.super_read_only AS sro')
         if server['ro'] or server['sro'] or not re.match(r'^(8|9)\.',server['version']):raise Invalid('MYSQL_PRIMARY_VERSION_REQUIRED')

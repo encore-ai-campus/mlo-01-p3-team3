@@ -10,7 +10,8 @@ from ..adapters.timing import Timing
 from ..domain.contracts import Invalid
 
 COMMANDS = {'batch-prepare','batch-relay','batch-submit','batch-work','batch-status','batch-recover','batch-audit',
-            'batch-backlog','batch-retract','batch-repair','batch-retention','batch-quarantine-read','batch-serve','metrics','spark-metrics'}
+            'batch-backlog','batch-retract','batch-repair','batch-retention','batch-quarantine-read','batch-serve','batch-abandon',
+            'metrics','spark-metrics'}
 READ_ONLY = {'metrics','spark-metrics','batch-status','batch-backlog'}
 
 
@@ -59,6 +60,8 @@ def dispatch(args, runner, outbox):
         result = runner.work(args.job,args.phase)
     elif args.command == 'batch-recover':
         result = runner.recover(args.job,args.stop_evidence,args.generation)
+    elif args.command == 'batch-abandon':
+        result = runner.abandon(args.job,args.stop_evidence,args.reason)
     elif args.command == 'batch-backlog':
         result = runner.backlog(rebuild=args.rebuild)
     elif args.command == 'batch-retract':
@@ -101,30 +104,41 @@ def serve(args, parser, runner, outbox):
     warm = getattr(runner.processor,'_open',None)
     if warm:
         warm()
-    # History compaction runs only after the queue has been idle for a while (at start and after
-    # processed batches), so a batch's process and publish requests are never split by it.
+    # History compaction runs in the background only while the queue is idle (at start and after
+    # processed batches). A request that arrives meanwhile cancels it, so no batch waits for it.
+    import threading
     compact = getattr(runner.processor,'compact',None)
+    cancel = getattr(runner.processor,'cancel_maintenance',None)
+    state = {}
 
     def maintain():
         try:
             compact()
+            state['outcome'] = 'DONE'
         except Exception as exc:
-            write(args.spool/'compaction-failed.json',dict(error_code=error_code(exc)))
+            state['outcome'] = 'CANCELLED' if state.get('cancelled') else 'FAILED'
+            if not state.get('cancelled'):
+                write(args.spool/'compaction-failed.json',dict(error_code=error_code(exc)))
         finally:
             runner.timing.flush()
-    if compact:
-        # Before the first request too: tables left fragmented by earlier runs are read by it.
-        maintain()
-    dirty, last, served = False, time.monotonic(), 0
+    dirty, last, served, worker = compact is not None, time.monotonic() - args.compact_idle_seconds, 0, None
     while not (args.spool/'stop').exists():
         pending = sorted(inbox.glob('*.json'))
+        if worker is not None and not worker.is_alive():
+            # A cancelled pass is tried again on the next idle period; a failed one waits for new work.
+            dirty, worker = dirty or state.get('outcome') == 'CANCELLED', None
         if not pending:
-            if dirty and time.monotonic() - last >= args.compact_idle_seconds:
-                dirty = False
-                maintain()
-                continue
+            if worker is None and dirty and time.monotonic() - last >= args.compact_idle_seconds:
+                dirty, state = False, {}
+                worker = threading.Thread(target=maintain,daemon=True)
+                worker.start()
             time.sleep(args.poll_seconds)
             continue
+        if worker is not None:
+            state['cancelled'] = True
+            cancel()
+            worker.join()
+            dirty, worker = dirty or state.get('outcome') != 'DONE', None
         request, started = pending[0], time.monotonic()
         try:
             argv = read(request)['argv']
@@ -145,6 +159,10 @@ def serve(args, parser, runner, outbox):
         write(answers/request.name,dict(request=request.stem,wall_ms=round((time.monotonic()-started)*1000,1),result=result))
         request.unlink()
         served += 1
+    if worker is not None:
+        state['cancelled'] = True
+        cancel()
+        worker.join()
     return dict(status='STOPPED',served=served)
 
 
@@ -159,9 +177,12 @@ def build_parser():
         command = commands.add_parser(name)
         command.add_argument('--batch',required=True)
         command.add_argument('--generation',type=int,default=0)
-    for name in ('batch-work','batch-status','batch-recover','batch-audit'):
+    for name in ('batch-work','batch-status','batch-recover','batch-audit','batch-abandon'):
         command = commands.add_parser(name)
         command.add_argument('--job',required=True)
+        if name == 'batch-abandon':
+            command.add_argument('--stop-evidence',required=True)
+            command.add_argument('--reason',required=True)
         if name == 'batch-recover':
             command.add_argument('--stop-evidence',required=True)
             command.add_argument('--generation',type=int)

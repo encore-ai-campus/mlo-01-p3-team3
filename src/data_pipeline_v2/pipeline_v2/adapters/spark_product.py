@@ -216,101 +216,101 @@ def sha(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-INDEX, CACHED = 0, 1
+INDEX, CACHED, RAW = 0, 1, 2
 
 
 def product_pass(rows, context):
     """Executor function over rows sorted by (product_key, kind, row_key).
 
-    Rows are the product's Bronze index entries (kind 0) and its cached normalized rows (kind 1).
+    Rows are the product's Bronze index entries (kind 0), its cached normalized rows (kind 1) and
+    the admitted raw of index entries (kind 2, keyed by the index row key) that may need parsing.
     Yields (kind, row_key, product_key, payload_json) for new normalized rows, holds, policies
-    (a count marker only) and Gold. Rules match the earlier Silver/Gold DataFrame plan.
+    (a count marker only) and Gold. Rules match the earlier Silver/Gold DataFrame plan. A product
+    whose needed raw was not supplied yields only `missing` rows (index row key, origin job) and
+    is computed again by the caller with that raw.
     """
     from .batch_local import parse_observation
-    from .spark_batch import open_store
-    layout, store = schema(), None
+    layout = schema()
     key, limits = context['job_id'], context['limits']
-    try:
-        for product, group in groupby(rows, key=lambda r:r['product_key']):
-            index, cached = {}, {}
-            for row in group:
-                if row['kind'] == INDEX:
-                    value = json.loads(row['payload_json'])
-                    # Same event text is one observation (the plan's dropDuplicates on product and event).
-                    index.setdefault(canonical(value['event']), value)
-                else:
-                    cached[row['row_key']] = row['payload_json']
-            retracted = set(context['retractions'].get(product, ()))
-            kept = [v for v in index.values() if v['event']['raw_document_id'] not in retracted]
-            if index and not kept:
-                if retracted:
-                    # Every retained observation of this product was explicitly retracted.
-                    yield ('gold', sha(key+':'+product), product, dumps(withdrawal_payload(product, retracted)))
-                    yield ('withdrawn', sha(key+':'+product), product, '')
+    for product, group in groupby(rows, key=lambda r:r['product_key']):
+        index, cached, raw = {}, {}, {}
+        for row in group:
+            if row['kind'] == INDEX:
+                value = json.loads(row['payload_json'])
+                # Same event text is one observation (the plan's dropDuplicates on product and event).
+                index.setdefault(canonical(value['event']), dict(value,_row_key=row['row_key']))
+            elif row['kind'] == CACHED:
+                cached[row['row_key']] = row['payload_json']
+            else:
+                raw[row['row_key']] = row['payload_json']
+        retracted = set(context['retractions'].get(product, ()))
+        kept = [v for v in index.values() if v['event']['raw_document_id'] not in retracted]
+        if index and not kept:
+            if retracted:
+                # Every retained observation of this product was explicitly retracted.
+                yield ('gold', sha(key+':'+product), product, dumps(withdrawal_payload(product, retracted)))
+                yield ('withdrawn', sha(key+':'+product), product, '')
+            continue
+        if not kept:
+            continue
+        size = sum(len(canonical(v['dependencies'])) for v in kept if v.get('dependencies') is not None)
+        if len(kept) > limits['history_observations'] or size > limits['history_bytes']:
+            # An oversized history holds that product only; the batch and other products go on.
+            yield ('hold', sha(key+':history:'+product), product,
+                   dumps(dict(reason='PRODUCT_HISTORY_LIMIT',observations=len(kept),bytes=size)))
+            continue
+        policy = related_policy(context['policy'], [v['dependencies'] for v in kept])
+        normal = {k:policy[k] for k in ('mappings','rules')}
+        policy_hash = digest(dict(version=VERSION,**{k:policy.get(k,[]) for k in ('mappings','rules')}))
+        desired = {}
+        for value in kept:
+            desired.setdefault(digest(dict(event=value['event']['event_id'],policy=normal,code=VERSION)), value)
+        selected = {k:cached[k] for k in desired if k in cached}
+        # Older index rows may still carry the raw inline (copied from the v2 namespace).
+        needed = {k:v for k,v in desired.items() if k not in cached}
+        missing = [v for v in needed.values() if v.get('item') is None and v['_row_key'] not in raw]
+        if missing:
+            for value in missing:
+                yield ('missing', value['_row_key'], product, value.get('origin_job') or '')
+            continue
+        yield ('policy', sha(product), product, '')
+        for identity, value in needed.items():
+            event = value['event']
+            item = value.get('item') or json.loads(raw[value['_row_key']])
+            if digest(item) != event['payload_hash']:
+                raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
+            result = parse_observation(item, policy)
+            body = canonical(dict(quality=result['quality'],reason=result['reason'],
+                normalized_json=canonical(result['normalized']) if result['normalized'] is not None else None,
+                raw_document_id=event['raw_document_id'],event_id=event['event_id'],
+                image_revision=item['image_state']['image_state_revision']))
+            yield ('normalized', identity, event['product_key'], body)
+            selected[identity] = body
+        latest_by_raw = {}
+        for row_key in sorted(selected):
+            payload = selected[row_key]
+            value = json.loads(payload)
+            if value.get('quality') == 'QUALITY_HOLD':
+                yield ('hold', row_key, product, payload)
                 continue
-            if not kept:
+            if value.get('quality') != 'VALID':
                 continue
-            size = sum(len(canonical(v['dependencies'])) for v in kept if v.get('dependencies') is not None)
-            if len(kept) > limits['history_observations'] or size > limits['history_bytes']:
-                # An oversized history holds that product only; the batch and other products go on.
-                yield ('hold', sha(key+':history:'+product), product,
-                       dumps(dict(reason='PRODUCT_HISTORY_LIMIT',observations=len(kept),bytes=size)))
-                continue
-            policy = related_policy(context['policy'], [v['dependencies'] for v in kept])
-            normal = {k:policy[k] for k in ('mappings','rules')}
-            policy_hash = digest(dict(version=VERSION,**{k:policy.get(k,[]) for k in ('mappings','rules')}))
-            yield ('policy', sha(product), product, '')
-            desired = {}
-            for value in kept:
-                desired.setdefault(digest(dict(event=value['event']['event_id'],policy=normal,code=VERSION)), value)
-            selected = {k:cached[k] for k in desired if k in cached}
-            missing = [v['event']['source_ref'] for k,v in desired.items() if k not in cached and v.get('item') is None]
-            items = {}
-            if missing:
-                store = store or open_store(context['store_config'])
-                items = store.get_many('source', sorted(set(missing)))
-            for identity, value in desired.items():
-                if identity in cached:
-                    continue
-                event = value['event']
-                item = value.get('item') or items.get(event['source_ref'])
-                if item is None or digest(item) != event['payload_hash']:
-                    raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
-                result = parse_observation(item, policy)
-                body = canonical(dict(quality=result['quality'],reason=result['reason'],
-                    normalized_json=canonical(result['normalized']) if result['normalized'] is not None else None,
-                    raw_document_id=event['raw_document_id'],event_id=event['event_id'],
-                    image_revision=item['image_state']['image_state_revision']))
-                yield ('normalized', identity, event['product_key'], body)
-                selected[identity] = body
-            latest_by_raw = {}
-            for row_key in sorted(selected):
-                payload = selected[row_key]
-                value = json.loads(payload)
-                if value.get('quality') == 'QUALITY_HOLD':
-                    yield ('hold', row_key, product, payload)
-                    continue
-                if value.get('quality') != 'VALID':
-                    continue
-                revision = value.get('image_revision')
-                revision = int(revision) if revision is not None else None
-                # image_revision DESC NULLS LAST, then row_key: the first row per raw document wins.
-                rank = (revision is None, -(revision or 0), row_key)
-                raw = value.get('raw_document_id')
-                if raw not in latest_by_raw or rank < latest_by_raw[raw][0]:
-                    latest_by_raw[raw] = (rank, row_key, payload, value)
-            chosen = list(latest_by_raw.values())
-            size = sum(len(v[2]) for v in chosen)
-            if chosen and size > limits['history_bytes']:
-                yield ('hold', sha(key+':history:'+product), product,
-                       dumps(dict(reason='PRODUCT_HISTORY_LIMIT',observations=len(chosen),bytes=size)))
-                continue
-            for _, row_key, payload, _ in chosen:
-                yield ('silver', row_key, product, '')
-            if chosen:
-                output = gold(product, [v[3]['normalized_json'] for v in chosen], policy_hash, context['policy'].get('gold',{}),
-                    sorted(retracted) if retracted else None, layout)
-                yield ('gold', sha(key+':'+product), product, dumps(output))
-    finally:
-        if store is not None:
-            store.close()
+            revision = value.get('image_revision')
+            revision = int(revision) if revision is not None else None
+            # image_revision DESC NULLS LAST, then row_key: the first row per raw document wins.
+            rank = (revision is None, -(revision or 0), row_key)
+            raw = value.get('raw_document_id')
+            if raw not in latest_by_raw or rank < latest_by_raw[raw][0]:
+                latest_by_raw[raw] = (rank, row_key, payload, value)
+        chosen = list(latest_by_raw.values())
+        size = sum(len(v[2]) for v in chosen)
+        if chosen and size > limits['history_bytes']:
+            yield ('hold', sha(key+':history:'+product), product,
+                   dumps(dict(reason='PRODUCT_HISTORY_LIMIT',observations=len(chosen),bytes=size)))
+            continue
+        for _, row_key, payload, _ in chosen:
+            yield ('silver', row_key, product, '')
+        if chosen:
+            output = gold(product, [v[3]['normalized_json'] for v in chosen], policy_hash, context['policy'].get('gold',{}),
+                sorted(retracted) if retracted else None, layout)
+            yield ('gold', sha(key+':'+product), product, dumps(output))

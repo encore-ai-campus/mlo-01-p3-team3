@@ -1,5 +1,6 @@
 """DataFrame-only Delta writes with immutable stage snapshots and a single fenced writer."""
 from contextlib import contextmanager
+import threading
 from ..domain.contracts import digest, seal, verified, Invalid
 from .files import read
 
@@ -7,10 +8,11 @@ from .files import read
 class BatchDelta:
     def __init__(self, spark, root, fence, timing):
         self.spark, self.root, self.fence, self.timing = spark, root.rstrip('/')+'/'+self.NAMESPACE, fence, timing
-        self.legacy = root.rstrip('/')+'/'+self.LEGACY
+        self.legacy = [root.rstrip('/')+'/'+name for name in self.LEGACY]
         # Tables known to exist in this process. Tables are never dropped (purge deletes rows), so a
         # positive answer stays true; a negative one is asked again because a later write creates it.
         self.known = set()
+        self._carry_lock = threading.Lock()
 
     @contextmanager
     def _step(self, name):
@@ -44,26 +46,88 @@ class BatchDelta:
         return self._carry(path)
 
     def _carry(self, path):
-        """First use of a history table in this namespace: copy the v1 table, rebucketed, once.
+        """First use of a history table in this namespace: copy the newest older one, once.
 
-        One Delta commit creates the table, so a crash leaves either no table (copied again next
-        time) or the whole copy. Only the single fenced writer copies; stage snapshots stay where
-        their proofs point.
+        input_index rows are split on the way: the raw `item` goes to input_raw (partitioned by
+        origin job) and the index keeps the small rest. The raw table is written first and the
+        index commit marks the copy done, so a crash in between only repeats the copy (the raw
+        copy overwrites). Stage snapshots stay where their proofs point.
         """
         from delta.tables import DeltaTable
-        from pyspark.sql import functions as F
         name = path[len(self.root)+1:]
-        old = self.legacy + '/' + name
-        if '/' in name or not DeltaTable.isDeltaTable(self.spark,old):
+        if '/' in name or name == 'input_raw':
             return False
+        with self._carry_lock:
+            if path in self.known:
+                return True
+            old = next((r + '/' + name for r in self.legacy if DeltaTable.isDeltaTable(self.spark,r + '/' + name)),None)
+            if old is None:
+                return False
+            self.fence()
+            with self._step('history.' + name + '.carry'):
+                frame = self.spark.read.format('delta').load(old).select('row_key','product_key','payload_json')
+                if name == 'input_index':
+                    frame = self._split_raw(frame)
+                self.encode(frame).repartition('bucket').write.format('delta').mode('append').partitionBy('bucket').save(path)
+            self.fence()
+            self.known.add(path)
+            return True
+
+    def _split_raw(self, frame):
+        import json
+        from pyspark.sql import functions as F
+        from ..domain.contracts import canonical
+
+        def split(rows):
+            for row in rows:
+                value = json.loads(row['payload_json'])
+                item = value.pop('item',None)
+                yield (row['row_key'],row['product_key'],canonical(value),canonical(item) if item is not None else None,value.get('origin_job'))
+        parts = self.spark.createDataFrame(frame.rdd.mapPartitions(split),
+            'row_key string,product_key string,payload_json string,raw_json string,job string').persist()
+        raw = parts.filter(F.col('raw_json').isNotNull()).select('row_key','product_key',F.col('raw_json').alias('payload_json'),'job')
+        (raw.withColumn('record_hash',F.sha2('payload_json',256)).write.format('delta').mode('overwrite')
+            .partitionBy('job').save(self._path('input_raw')))
+        self.known.add(self._path('input_raw'))
+        return parts.select('row_key','product_key','payload_json')
+
+    def append_raw(self, job_id, frame, first):
+        """Admitted raw of one job into input_raw, partitioned by job: a batch reads only its own
+        partition. Keys carry the job id, so a first attempt appends without a lookup; a retry
+        compares the job's stored rows and appends only the missing ones."""
+        from pyspark.sql import functions as F
+        path = self._path('input_raw')
+        # A carry from an older namespace writes input_raw first; let it finish before appending.
+        self._exists(self._path('input_index'))
+        encoded = frame.select('row_key','product_key','payload_json').withColumn(
+            'record_hash',F.sha2('payload_json',256)).withColumn('job',F.lit(job_id))
         self.fence()
-        with self._step('history.' + name + '.carry_v1'):
-            (self.spark.read.format('delta').load(old).select('row_key','product_key','payload_json','record_hash')
-                .withColumn('bucket',self.bucket('product_key')).repartition('bucket').write.format('delta').mode('append')
-                .partitionBy('bucket').save(path))
+        with self._step('raw.write'):
+            if not first and self._exists(path):
+                stored = self.spark.read.format('delta').load(path).filter(F.col('job') == job_id).select(
+                    'row_key',F.col('record_hash').alias('_old'))
+                joined = encoded.join(stored,'row_key','left').persist()
+                try:
+                    if joined.filter(F.col('_old').isNotNull() & (F.col('_old') != F.col('record_hash'))).limit(1).count():
+                        raise Invalid('DELTA_IMMUTABLE_CONFLICT')
+                    joined.filter(F.col('_old').isNull()).drop('_old').write.format('delta').mode('append').partitionBy('job').save(path)
+                finally:
+                    joined.unpersist()
+            else:
+                encoded.write.format('delta').mode('append').partitionBy('job').save(path)
         self.fence()
         self.known.add(path)
-        return True
+
+    def raw(self, jobs, keys=None):
+        """Raw rows of these jobs (partition pruned), optionally only these row keys."""
+        from pyspark.sql import functions as F
+        path = self._path('input_raw')
+        if not jobs or not self._exists(path):
+            return self.spark.createDataFrame([],'row_key string,product_key string,payload_json string')
+        frame = self.spark.read.format('delta').load(path).filter(F.col('job').isin(sorted(jobs)))
+        if keys is not None:
+            frame = frame.join(self.spark.createDataFrame([(k,) for k in sorted(keys)],'row_key string'),'row_key','left_semi')
+        return frame.select('row_key','product_key','payload_json')
 
     def _version(self, path):
         from delta.tables import DeltaTable
@@ -73,10 +137,10 @@ class BatchDelta:
         return self.spark.createDataFrame([], 'row_key string, product_key string, payload_json string, record_hash string, bucket int')
 
     encoded_columns = ('row_key','product_key','payload_json','record_hash','bucket')
-    # finite-v2: single product pass outputs and 16 history buckets. A write touches at most 16
-    # files instead of about one per product. v1 history tables (128 buckets) are copied in once on
-    # first use; v1 stage snapshots are still loaded where their proofs point.
-    NAMESPACE, LEGACY, BUCKETS = 'finite-v2', 'finite-v1', 16
+    # finite-v3: the admitted raw lives in input_raw, not in the index every batch reads.
+    # (v2: single product pass, 16 history buckets; v1: 128 buckets.) Older history tables are
+    # copied in once on first use, newest first; older stage snapshots load where their proofs point.
+    NAMESPACE, LEGACY, BUCKETS = 'finite-v3', ('finite-v2','finite-v1'), 16
 
     @classmethod
     def bucket(cls, column):
@@ -239,7 +303,7 @@ class BatchDelta:
 
     def load(self, proof):
         verified(proof)
-        if not any(proof['target_hash'] == digest(root) and proof['path'].startswith(root+'/runs/') for root in (self.root,self.legacy)):
+        if not any(proof['target_hash'] == digest(root) and proof['path'].startswith(root+'/runs/') for root in (self.root,*self.legacy)):
             raise Invalid('DELTA_STAGE_TARGET_CONFLICT')
         frame = self.spark.read.format('delta').option('versionAsOf',proof['version']).load(proof['path'])
         return frame
