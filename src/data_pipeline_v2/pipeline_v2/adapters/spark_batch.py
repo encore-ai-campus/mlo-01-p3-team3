@@ -71,30 +71,6 @@ def resolve_partition(rows, store_config, page_size, expires=None):
             store.close()
 
 
-def background(call):
-    """Start one Spark call in its own thread (keeping the timing context and Spark local
-    properties); `join()` waits for it and raises its error."""
-    import contextvars
-    from pyspark import InheritableThread
-    state, context = {}, contextvars.copy_context()
-
-    def run():
-        try:
-            state['result'] = context.run(call)
-        except BaseException as exc:
-            state['error'] = exc
-    thread = InheritableThread(target=run)
-    thread.start()
-
-    class Handle:
-        def join(self):
-            thread.join()
-            if 'error' in state:
-                raise state['error']
-            return state.get('result')
-    return Handle()
-
-
 def deferred(call):
     """A call run on the first `join()` (and only once); later joins return or raise its outcome."""
     state = {}
@@ -253,13 +229,15 @@ class SparkBatchProcessor:
                         with self.action('bronze.accepted.commit',batch):
                             # One row per event (deduplicated above), so the in-batch key check is not needed.
                             # Keys carry this job's id: on its first attempt none can be stored yet.
-                            delta.append_history('input_index',accepted.drop('disposition','raw_json'),
-                                unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first))
+                            # The registry is written beside it and both finish before the Bronze record:
+                            # a later job that pins this Bronze always finds these products registered.
+                            # A failure in between leaves a registered product without rows, which
+                            # only makes a later batch read (empty) history: the safe direction.
+                            concurrently(dict(
+                                index=lambda:delta.append_history('input_index',accepted.drop('disposition','raw_json'),
+                                    unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first)),
+                                registry=lambda:delta.register(set(products)-set(prior))))
                         self._release_handoff()
-                        # Only after the index rows: the registry never names a product without
-                        # history. It runs beside the product pass and is joined before the Gold
-                        # record, so the next batch (same writer) sees these products.
-                        self._registering = background(lambda:delta.register(set(products)-set(prior)))
                         # Silver/Gold take this raw from the cache. Its commit starts only after
                         # publication (finalize), so it never shares the executors with them.
                         self._handoff = dict(job=key,frames=[wire,resolved],raw=raw_of(resolved),
@@ -364,7 +342,7 @@ class SparkBatchProcessor:
                         missing = out.filter(F.col('kind') == 'missing').select('row_key','product_key','payload_json').collect()
                         affected = sorted({r['product_key'] for r in missing})
                         extra = delta.raw({r['payload_json'] for r in missing},{r['row_key'] for r in missing}).persist()
-                        if extra.count() != len({r['row_key'] for r in missing}):
+                        if extra.select('row_key').distinct().count() != len({r['row_key'] for r in missing}):
                             raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
                         # Only the affected products are computed again, now with their older raw.
                         base = base.filter(F.col('product_key').isin(affected))
@@ -406,13 +384,6 @@ class SparkBatchProcessor:
                 proof, outputs = done['gold'], {k:v for k,v in done.items() if k == 'holds'}
             finally:
                 frame.unpersist()
-            # The registry names these products before the Gold record exists; a retry (no Bronze
-            # in this process) registers again, which adds only what is missing.
-            registering = getattr(self,'_registering',None)
-            if registering and getattr(self,'_handoff',None) and self._handoff['job'] == key:
-                registering.join()
-            elif job['kind'] != 'REPAIR' and 'prior_products' in b:
-                delta.register(set(b['products'])-set(b['prior_products']))
             silver = dict(proofs=list(outputs.values()),outputs=outputs,counts=dict(valid=count('silver'),
                 quality_hold=count('hold'),history_limit=tally.get(('hold','PRODUCT_HISTORY_LIMIT'),0),
                 products=count('policy'),withdrawn=count('withdrawn')))
@@ -424,8 +395,6 @@ class SparkBatchProcessor:
         except BaseException:
             self._release_handoff()
             raise
-        finally:
-            self._registering = None
         # The raw commit runs after publication; finalize() runs it.
         if not self.store.get('stage',[key,'silver']):
             # Derived from the Gold record alone, so writing it again after a crash is identical.
@@ -488,19 +457,57 @@ class SparkBatchProcessor:
         return resolved.filter(F.col('disposition') == 'ACCEPTED').select('row_key','product_key',F.col('raw_json').alias('payload_json'))
 
     def _complete_raw(self, job, manifest, accepted):
-        """Make this job's raw partition whole: re-read the fixed range only if rows are missing."""
-        stored = self.delta.raw([job['job_id']])
-        if stored.count() >= accepted:
-            return stored
-        crawl = self.store.get('crawl',job['crawl_batch_id'])['crawl']
-        with self.action('bronze.raw_recovery',job['crawl_batch_id']):
-            wire, resolved = self._read_range(job,manifest,self.retention.expiry(crawl['completed_at'],'metadata'))
+        """Make this job's raw partition whole. The source records the outbox stored at intake
+        are the copy (checked against each event's payload hash), so this works after the Kafka
+        offsets expired. Only the Delta writer may write; any other worker reports it pending."""
+        from pyspark.sql import functions as F
+        handoff = getattr(self,'_handoff',None)
+        if handoff and handoff['job'] == job['job_id']:
+            # This process still holds the job's own deferred raw commit: run it first, so the
+            # source copy only fills what that commit did not store (never the same rows twice).
             try:
-                self.delta.append_raw(job['job_id'],self._raw_of(resolved),False)
+                handoff['commit'].join()
+            except BaseException:
+                pass
             finally:
-                resolved.unpersist()
-                wire.unpersist()
-        return self.delta.raw([job['job_id']])
+                self._release_handoff()
+        stored = self.delta.raw([job['job_id']])
+        # Completeness by distinct keys, not row count.
+        if stored.select('row_key').distinct().count() >= accepted:
+            return stored
+        if not getattr(self.server_lake,'writable',True):
+            raise Invalid('RAW_COMMIT_PENDING')
+        with self.action('bronze.raw_recovery',job['crawl_batch_id']):
+            have = {r[0] for r in stored.select('row_key').collect()}
+            index = [r for r in self.delta.job_index(job['job_id']).collect() if r['row_key'] not in have]
+            # Bounded pages (the configured source page size), as the intake reads them.
+            size = self.limits.source_page_size
+            for start in range(0,len(index),size):
+                page = index[start:start+size]
+                events = [json.loads(r['payload_json'])['event'] for r in page]
+                items = self.store.get_many('source',sorted({e['source_ref'] for e in events}))
+                rows = []
+                for row, event in zip(page,events):
+                    item = items.get(event['source_ref'])
+                    if item is None or digest(item) != event['payload_hash']:
+                        raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
+                    rows.append((row['row_key'],row['product_key'],canonical(item)))
+                self.delta.append_raw(job['job_id'],self.spark.createDataFrame(rows,
+                    'row_key string,product_key string,payload_json string'),False)
+        stored = self.delta.raw([job['job_id']])
+        if stored.select('row_key').distinct().count() < accepted:
+            raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
+        return stored
+
+    def complete_raw(self, job):
+        """Writer-side: make a job's raw whole (before abandoning it, or for a job whose
+        publish-only worker reported RAW_COMMIT_PENDING)."""
+        if job['kind'] == 'REPAIR':
+            return
+        bronze = self.store.get('stage',[job['job_id'],'bronze'])
+        if bronze and bronze.get('counts',{}).get('accepted'):
+            self._open()
+            self._complete_raw(job,None,bronze['counts']['accepted'])
 
     def finalize(self, job):
         """Before a job is marked complete: its raw commit (deferred past publication, which does
@@ -520,9 +527,7 @@ class SparkBatchProcessor:
         bronze = self.store.get('stage',[job['job_id'],'bronze'])
         if not bronze or not bronze.get('counts',{}).get('accepted'):
             return
-        from ..domain.batch import delivery_contract
-        manifest = delivery_contract(self.store.get('delivery',[job['crawl_batch_id'],job['generation']]))
-        self._complete_raw(job,manifest,bronze['counts']['accepted'])
+        self._complete_raw(job,None,bronze['counts']['accepted'])
 
     def _release_handoff(self):
         handoff, self._handoff = getattr(self,'_handoff',None), None

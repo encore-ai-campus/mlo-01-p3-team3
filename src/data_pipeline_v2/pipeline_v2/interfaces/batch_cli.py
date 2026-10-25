@@ -230,7 +230,7 @@ def main(argv=None):
             from ..adapters.spark_metrics import report
             result = report(args.event_log,args.scope)
         else:
-            writable = args.command in {'batch-work','batch-audit','batch-retention','batch-serve'}
+            writable = args.command in {'batch-work','batch-audit','batch-retention','batch-serve','batch-abandon'}
             if config['mode'] == 'server' and args.command not in READ_ONLY and not args.apply:
                 raise Invalid('SERVER_EXECUTION_REQUIRES_APPLY')
             event_scope = getattr(args,'batch',getattr(args,'job',args.command))

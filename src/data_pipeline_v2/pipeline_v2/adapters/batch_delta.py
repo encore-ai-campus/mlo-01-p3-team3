@@ -76,6 +76,7 @@ class BatchDelta:
 
     def _split_raw(self, frame):
         import json
+        from delta.tables import DeltaTable
         from pyspark.sql import functions as F
         from ..domain.contracts import canonical
 
@@ -87,8 +88,15 @@ class BatchDelta:
         parts = self.spark.createDataFrame(frame.rdd.mapPartitions(split),
             'row_key string,product_key string,payload_json string,raw_json string,job string').persist()
         raw = parts.filter(F.col('raw_json').isNotNull()).select('row_key','product_key',F.col('raw_json').alias('payload_json'),'job')
-        (raw.withColumn('record_hash',F.sha2('payload_json',256)).write.format('delta').mode('overwrite')
-            .partitionBy('job').save(self._path('input_raw')))
+        jobs = sorted({r[0] for r in raw.select('job').distinct().collect()})
+        writer = raw.withColumn('record_hash',F.sha2('payload_json',256)).write.format('delta').partitionBy('job')
+        if jobs and DeltaTable.isDeltaTable(self.spark,self._path('input_raw')):
+            # A repeated carry replaces only the carried jobs' partitions, never another job's raw.
+            listed = ','.join("'" + j.replace("'","''") + "'" for j in jobs)
+            writer = writer.mode('overwrite').option('replaceWhere','job IN (' + listed + ')')
+        else:
+            writer = writer.mode('append')
+        writer.save(self._path('input_raw'))
         self.known.add(self._path('input_raw'))
         return parts.select('row_key','product_key','payload_json')
 
@@ -158,6 +166,15 @@ class BatchDelta:
                 encoded.write.format('delta').mode('append').partitionBy('job').save(path)
         self.fence()
         self.known.add(path)
+
+    def job_index(self, job_id):
+        """This job's own index rows (row_key, product_key, payload_json); a recovery scan."""
+        from pyspark.sql import functions as F
+        path = self._path('input_index')
+        if not self._exists(path):
+            return self.spark.createDataFrame([],'row_key string,product_key string,payload_json string')
+        return (self.spark.read.format('delta').load(path).filter(
+            F.get_json_object('payload_json','$.origin_job') == job_id).select('row_key','product_key','payload_json'))
 
     def raw(self, jobs, keys=None):
         """Raw rows of these jobs (partition pruned), optionally only these row keys."""

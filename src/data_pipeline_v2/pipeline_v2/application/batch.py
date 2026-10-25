@@ -188,6 +188,11 @@ class BatchRunner:
                 if phase in {'all','process'} and job['status'] == 'QUEUED':
                     with self.lock('process'):
                         job = self._process(key)
+                if phase == 'process' and job['status'] == 'GOLD_COMMITTED' and hasattr(self.processor,'complete_raw'):
+                    # A writer run of a processed job completes a raw commit a publish-only worker
+                    # could not (RAW_COMMIT_PENDING); a no-op when the raw is whole.
+                    with self.lock('process'):
+                        self.processor.complete_raw(job)
                 if phase in {'all','publish'} and job['status'] == 'GOLD_COMMITTED':
                     with self.lock('publish'):
                         job = self._publish(key)
@@ -307,6 +312,13 @@ class BatchRunner:
         """
         if not isinstance(evidence,str) or not evidence.strip() or not isinstance(reason,str) or not reason.strip():
             raise Invalid('STOP_EVIDENCE_REQUIRED')
+        job = self.store.get('job',key)
+        if job and job['status'] in {'RECOVERY_REQUIRED','QUEUED'}:
+            complete = getattr(self.processor,'complete_raw',None)
+            if complete:
+                # A closed job's Bronze stays readable input for later jobs, so its raw must be
+                # whole first; this refuses to close if the source copy cannot provide it.
+                complete(job)
         def abandon(old):
             if not old or old['status'] not in {'RECOVERY_REQUIRED','QUEUED'}:
                 raise Invalid('BATCH_NOT_ABANDONABLE')

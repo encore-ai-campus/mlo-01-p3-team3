@@ -68,10 +68,19 @@ class MemoryDelta(BatchDelta):
         known = {r[0]:r for r in stored}
         for r in frame.collect():
             value = (r['row_key'],r['product_key'],r['payload_json'],job_id)
+            if first:
+                # Like BatchDelta: a first attempt appends without looking (duplicates show).
+                stored.append(value)
+                continue
             if r['row_key'] in known and known[r['row_key']] != value:
                 raise Invalid('DELTA_IMMUTABLE_CONFLICT')
             if r['row_key'] not in known:
                 stored.append(value)
+
+    def job_index(self, job_id):
+        import json
+        rows = [r[:3] for r in self.tables.get(self._path('input_index'),[]) if json.loads(r[2]).get('origin_job') == job_id]
+        return self.spark.createDataFrame(rows,'row_key string,product_key string,payload_json string')
 
     def raw(self, jobs, keys=None):
         rows = [r[:3] for r in self.tables.get(self._path('input_raw'),[]) if r[3] in set(jobs) and (keys is None or r[0] in keys)]
@@ -224,6 +233,46 @@ class SparkFinitePipelineTests(unittest.TestCase):
         self.assertEqual(report['status'],'COMPLETED')
         # The retry read the fixed range again and stored exactly the accepted raw.
         self.assertEqual(len(delta.tables[delta._path('input_raw')]),report['stages']['bronze']['counts']['accepted'])
+
+    def test_a_failed_registry_write_leaves_no_bronze_record_for_later_jobs_to_pin(self):
+        from unittest.mock import patch
+        delta = self.processor.delta
+        def broken(self, products):
+            raise Invalid('REGISTRY_WRITE_FAILED')
+        with patch.object(type(delta),'register',broken):
+            job = self.batch('spark-registry',self.items)
+            with self.assertRaisesRegex(Invalid,'REGISTRY_WRITE_FAILED'):
+                self.runner.work(job)
+        # No Bronze record: no later job pins this job's rows while the registry lacks them.
+        self.assertIsNone(self.processor.store.get('stage',[job,'bronze']))
+        self.runner.recover(job,'test process stopped')
+        self.assertEqual(self.runner.work(job)['status'],'COMPLETED')
+        self.assertTrue({'danawa:12','danawa:13'} <= delta.registry)
+
+    def test_abandoning_a_job_first_completes_its_raw_from_the_source_records(self):
+        from unittest.mock import patch
+        delta = self.processor.delta
+        def broken(self, job_id, frame, first):
+            raise Invalid('RAW_COMMIT_FAILED')
+        with patch.object(type(delta),'append_raw',broken):
+            job = self.batch('spark-abandon',self.items)
+            with self.assertRaisesRegex(Invalid,'RAW_COMMIT_FAILED'):
+                self.runner.work(job)
+        accepted = self.processor.store.get('stage',[job,'bronze'])['counts']['accepted']
+        self.assertEqual(self.runner.abandon(job,'test process stopped','test')['status'],'ABANDONED')
+        # The Bronze later jobs keep reading has its raw, rebuilt from the intake source copy.
+        self.assertEqual(len([r for r in delta.tables[delta._path('input_raw')] if r[3] == job]),accepted)
+
+    def test_a_process_only_run_stores_each_raw_row_once(self):
+        delta = self.processor.delta
+        job = self.batch('spark-process-only',self.items)
+        self.assertEqual(self.runner.work(job,phase='process')['status'],'GOLD_COMMITTED')
+        # A process-only worker ends by releasing its deferred raw commit (close()).
+        self.processor._release_handoff()
+        rows = [r[0] for r in delta.tables[delta._path('input_raw')] if r[3] == job]
+        self.assertEqual(len(rows),len(set(rows)))
+        self.assertEqual(len(rows),self.processor.store.get('stage',[job,'bronze'])['counts']['accepted'])
+        self.assertEqual(self.runner.work(job,phase='publish')['status'],'COMPLETED')
 
     def test_oversized_history_holds_only_that_product(self):
         self.processor.limits = BatchLimits(spark_partitions=2,history_observations=1)
