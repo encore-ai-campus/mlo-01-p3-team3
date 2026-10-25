@@ -57,10 +57,10 @@ class MemoryDelta(BatchDelta):
             self.tables[path] = list(old.values()) + fresh
             self.commits += 1
 
-    def registered(self, products, shared=None):
-        return {r[0] for r in products.collect()} & self.__dict__.setdefault('registry',set())
+    def registered(self, products):
+        return set(products) & self.__dict__.setdefault('registry',set())
 
-    def register(self, products, buckets):
+    def register(self, products):
         self.__dict__.setdefault('registry',set()).update(products)
 
     def append_raw(self, job_id, frame, first):

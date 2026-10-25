@@ -71,6 +71,30 @@ def resolve_partition(rows, store_config, page_size, expires=None):
             store.close()
 
 
+def background(call):
+    """Start one Spark call in its own thread (keeping the timing context and Spark local
+    properties); `join()` waits for it and raises its error."""
+    import contextvars
+    from pyspark import InheritableThread
+    state, context = {}, contextvars.copy_context()
+
+    def run():
+        try:
+            state['result'] = context.run(call)
+        except BaseException as exc:
+            state['error'] = exc
+    thread = InheritableThread(target=run)
+    thread.start()
+
+    class Handle:
+        def join(self):
+            thread.join()
+            if 'error' in state:
+                raise state['error']
+            return state.get('result')
+    return Handle()
+
+
 def deferred(call):
     """A call run on the first `join()` (and only once); later joins return or raise its outcome."""
     state = {}
@@ -214,18 +238,19 @@ class SparkBatchProcessor:
                     if products:
                         first = job['attempts'] == 1
                         # Read before this job's rows exist: which products already had history.
-                        prior = sorted(delta.registered(spark.createDataFrame([(p,) for p in products],'product_key string'),
-                            dict(buckets=buckets)))
+                        prior = sorted(delta.registered(products))
                         with self.action('bronze.accepted.commit',batch):
                             # One row per event (deduplicated above), so the in-batch key check is not needed.
                             # Keys carry this job's id: on its first attempt none can be stored yet.
                             delta.append_history('input_index',accepted.drop('disposition','raw_json'),
                                 unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first))
-                            # Only after the index rows: the registry never names a product without history.
-                            delta.register(set(products)-set(prior),buckets)
+                        self._release_handoff()
+                        # Only after the index rows: the registry never names a product without
+                        # history. It runs beside the product pass and is joined before the Gold
+                        # record, so the next batch (same writer) sees these products.
+                        self._registering = background(lambda:delta.register(set(products)-set(prior)))
                         # Silver/Gold take this raw from the cache. Its commit starts only after
                         # publication (finalize), so it never shares the executors with them.
-                        self._release_handoff()
                         self._handoff = dict(job=key,frames=[wire,resolved],raw=raw_of(resolved),
                             index=accepted.select('row_key','product_key','payload_json'),
                             commit=deferred(lambda:delta.append_raw(key,raw_of(resolved),first)))
@@ -370,6 +395,13 @@ class SparkBatchProcessor:
                 proof, outputs = done['gold'], {k:v for k,v in done.items() if k == 'holds'}
             finally:
                 frame.unpersist()
+            # The registry names these products before the Gold record exists; a retry (no Bronze
+            # in this process) registers again, which adds only what is missing.
+            registering = getattr(self,'_registering',None)
+            if registering and getattr(self,'_handoff',None) and self._handoff['job'] == key:
+                registering.join()
+            elif job['kind'] != 'REPAIR' and 'prior_products' in b:
+                delta.register(set(b['products'])-set(b['prior_products']))
             silver = dict(proofs=list(outputs.values()),outputs=outputs,counts=dict(valid=count('silver'),
                 quality_hold=count('hold'),history_limit=tally.get(('hold','PRODUCT_HISTORY_LIMIT'),0),
                 products=count('policy'),withdrawn=count('withdrawn')))
@@ -381,6 +413,8 @@ class SparkBatchProcessor:
         except BaseException:
             self._release_handoff()
             raise
+        finally:
+            self._registering = None
         # The raw commit runs after publication; finalize() runs it.
         if not self.store.get('stage',[key,'silver']):
             # Derived from the Gold record alone, so writing it again after a crash is identical.

@@ -13,6 +13,7 @@ class BatchDelta:
         # positive answer stays true; a negative one is asked again because a later write creates it.
         self.known = set()
         self._carry_lock = threading.Lock()
+        self._seen = None
 
     @contextmanager
     def _step(self, name):
@@ -55,7 +56,7 @@ class BatchDelta:
         """
         from delta.tables import DeltaTable
         name = path[len(self.root)+1:]
-        if '/' in name or name in {'input_raw','product_registry'}:
+        if '/' in name or name in {'input_raw','product_registry','products_seen'}:
             return False
         with self._carry_lock:
             if path in self.known:
@@ -91,40 +92,45 @@ class BatchDelta:
         self.known.add(self._path('input_raw'))
         return parts.select('row_key','product_key','payload_json')
 
-    def registered(self, products, shared=None):
-        """Products that already have history: one small row per product in product_registry.
+    def registered(self, products):
+        """Products (of these keys) that already have history.
 
-        A batch reads the history tables only for these; a product seen for the first time has
-        nothing stored. The registry is built once from input_index when it does not exist yet.
+        The single writer keeps the whole key set in memory: it is loaded once from the
+        products_seen table and only this process adds to it, so a batch asks no Spark job.
+        The table is built once from the older product_registry or, failing that, input_index.
         """
-        from pyspark.sql import functions as F
-        path = self._path('product_registry')
-        if not self._exists(path):
-            index = self._path('input_index')
-            if not self._exists(index):
-                return set()
-            self.fence()
-            with self._step('registry.build'):
-                keys = self.spark.read.format('delta').load(index).select('product_key').distinct()
-                self.encode(self._registry_rows(keys)).repartition('bucket').write.format('delta').mode('append').partitionBy('bucket').save(path)
-            self.fence()
-            self.known.add(path)
-        with self._step('registry.read'):
-            return {r[0] for r in self.history('product_registry',products,shared).select('product_key').distinct().collect()}
+        if self._seen is None:
+            from pyspark.sql import functions as F
+            path = self._path('products_seen')
+            if not self._exists(path):
+                older = next((self._path(n) for n in ('product_registry','input_index') if self._exists(self._path(n))),None)
+                if older is None:
+                    self._seen = set()
+                    return set()
+                self.fence()
+                with self._step('registry.build'):
+                    keys = self.spark.read.format('delta').load(older).select('product_key').distinct()
+                    keys.coalesce(1).write.format('delta').mode('append').save(path)
+                self.fence()
+                self.known.add(path)
+            with self._step('registry.load'):
+                self._seen = {r[0] for r in self.spark.read.format('delta').load(path).select('product_key').collect()}
+        return set(products) & self._seen
 
-    @staticmethod
-    def _registry_rows(keys):
-        from pyspark.sql import functions as F
-        # Presence only: the same row for a product whoever registers it, so repeats never conflict.
-        return keys.select(F.sha2('product_key',256).alias('row_key'),'product_key',F.lit('{}').alias('payload_json'))
-
-    def register(self, products, buckets):
-        """Record products whose history now exists (called after their index rows commit)."""
+    def register(self, products):
+        """Record products whose history now exists (after their index rows commit). The caller
+        has just checked they are not registered, under the writer lease: no lookup is needed."""
+        products = sorted(set(products) - (self._seen or set()))
         if not products:
             return
-        frame = self.spark.createDataFrame([(p,) for p in sorted(products)],'product_key string')
-        # A retry may register a product again: the stored-key join keeps the append idempotent.
-        self.append_history('product_registry',self._registry_rows(frame),unique=dict(keys=len(products),buckets=buckets))
+        self.fence()
+        with self._step('registry.write'):
+            (self.spark.createDataFrame([(p,) for p in products],'product_key string').coalesce(1)
+                .write.format('delta').mode('append').save(self._path('products_seen')))
+        self.fence()
+        self.known.add(self._path('products_seen'))
+        if self._seen is not None:
+            self._seen.update(products)
 
     def append_raw(self, job_id, frame, first):
         """Admitted raw of one job into input_raw, partitioned by job: a batch reads only its own
