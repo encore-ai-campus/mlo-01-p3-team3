@@ -406,6 +406,51 @@ class RedesignContractTests(unittest.TestCase):
         with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), patch('sys.stderr',io.StringIO()):
             main(common+['batch-work','--job',job,'--phase','bogus'])
 
+    def test_resident_worker_runs_spool_requests_in_one_runtime(self):
+        import io
+        import hashlib
+        import threading
+        from contextlib import redirect_stdout
+        from pipeline_v2.adapters.files import write
+        from pipeline_v2.interfaces.cli import main
+        write(self.root/'input.json',self.items)
+        crawl = dict(self.crawl_for('served',self.items),input_sha256=hashlib.sha256((self.root/'input.json').read_bytes()).hexdigest())
+        write(self.root/'config.json',self.config)
+        write(self.root/'crawl.json',crawl)
+        spool = self.root/'spool'
+        def answer(name, argv):
+            write(spool/'inbox'/(name+'.json'),dict(argv=[str(v) for v in argv]))
+            path = spool/'outbox'/(name+'.json')
+            for _ in range(600):
+                if path.exists() and not (spool/'inbox'/(name+'.json')).exists():
+                    return read(path)
+                threading.Event().wait(0.05)
+            self.fail('no answer for '+name)
+        output = io.StringIO()
+        worker = threading.Thread(target=lambda:self.__dict__.update(served=main(
+            ['--config',str(self.root/'config.json'),'batch-serve','--spool',str(spool),'--poll-seconds','0.02'])))
+        with redirect_stdout(output):
+            worker.start()
+            try:
+                self.assertEqual(answer('1',['batch-prepare','--manifest',self.root/'crawl.json','--input',self.root/'input.json'])
+                    ['result']['status'],'SOURCE_COMPLETE')
+                self.assertEqual(answer('2',['batch-relay','--batch','served'])['result']['status'],'COMPLETE')
+                job = answer('3',['batch-submit','--batch','served'])['result']['job_id']
+                self.assertEqual(answer('4',['batch-work','--job',job])['result']['status'],'COMPLETED')
+                # A failing request answers with its code and the worker keeps serving.
+                self.assertEqual(answer('5',['batch-status','--job','missing'])['result'],
+                    dict(status='FAILED',error_code='BATCH_JOB_NOT_FOUND'))
+                self.assertEqual(answer('6',['batch-serve','--spool',spool])['result']['error_code'],'SERVE_COMMAND_UNSUPPORTED')
+                # Missing required arguments: argparse exits, but only this request fails.
+                with patch('sys.stderr',io.StringIO()):
+                    self.assertEqual(answer('7',['batch-work'])['result']['error_code'],'SERVE_REQUEST_INVALID')
+                self.assertEqual(answer('8',['batch-status','--job',job])['result']['status'],'COMPLETED')
+            finally:
+                (spool/'stop').write_text('')
+                worker.join(30)
+        self.assertEqual(self.served,0)
+        self.assertEqual(json.loads(output.getvalue().splitlines()[-1]),dict(status='STOPPED',served=8))
+
 
 if __name__ == '__main__':
     unittest.main()

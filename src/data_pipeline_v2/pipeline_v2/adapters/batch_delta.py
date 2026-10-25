@@ -6,7 +6,11 @@ from .files import read
 
 class BatchDelta:
     def __init__(self, spark, root, fence, timing):
-        self.spark, self.root, self.fence, self.timing = spark, root.rstrip('/')+'/finite-v1', fence, timing
+        self.spark, self.root, self.fence, self.timing = spark, root.rstrip('/')+'/'+self.NAMESPACE, fence, timing
+        self.legacy = root.rstrip('/')+'/'+self.LEGACY
+        # Tables known to exist in this process. Tables are never dropped (purge deletes rows), so a
+        # positive answer stays true; a negative one is asked again because a later write creates it.
+        self.known = set()
 
     @contextmanager
     def _step(self, name):
@@ -32,7 +36,34 @@ class BatchDelta:
 
     def _exists(self, path):
         from delta.tables import DeltaTable
-        return DeltaTable.isDeltaTable(self.spark,path)
+        if path in self.known:
+            return True
+        if DeltaTable.isDeltaTable(self.spark,path):
+            self.known.add(path)
+            return True
+        return self._carry(path)
+
+    def _carry(self, path):
+        """First use of a history table in this namespace: copy the v1 table, rebucketed, once.
+
+        One Delta commit creates the table, so a crash leaves either no table (copied again next
+        time) or the whole copy. Only the single fenced writer copies; stage snapshots stay where
+        their proofs point.
+        """
+        from delta.tables import DeltaTable
+        from pyspark.sql import functions as F
+        name = path[len(self.root)+1:]
+        old = self.legacy + '/' + name
+        if '/' in name or not DeltaTable.isDeltaTable(self.spark,old):
+            return False
+        self.fence()
+        with self._step('history.' + name + '.carry_v1'):
+            (self.spark.read.format('delta').load(old).select('row_key','product_key','payload_json','record_hash')
+                .withColumn('bucket',self.bucket('product_key')).write.format('delta').mode('append')
+                .partitionBy('bucket').save(path))
+        self.fence()
+        self.known.add(path)
+        return True
 
     def _version(self, path):
         from delta.tables import DeltaTable
@@ -42,21 +73,34 @@ class BatchDelta:
         return self.spark.createDataFrame([], 'row_key string, product_key string, payload_json string, record_hash string, bucket int')
 
     encoded_columns = ('row_key','product_key','payload_json','record_hash','bucket')
+    # finite-v2: single product pass outputs and 16 history buckets. A write touches at most 16
+    # files instead of about one per product. v1 history tables (128 buckets) are copied in once on
+    # first use; v1 stage snapshots are still loaded where their proofs point.
+    NAMESPACE, LEGACY, BUCKETS = 'finite-v2', 'finite-v1', 16
+
+    @classmethod
+    def bucket(cls, column):
+        from pyspark.sql import functions as F
+        return F.pmod(F.xxhash64(column),F.lit(cls.BUCKETS)).cast('int')
 
     def encode(self, frame):
         from pyspark.sql import functions as F
         return (frame.select('row_key','product_key','payload_json')
             .withColumn('record_hash',F.sha2('payload_json',256))
-            .withColumn('bucket',F.pmod(F.xxhash64('product_key'),F.lit(128)).cast('int')))
+            .withColumn('bucket',self.bucket('product_key')))
 
-    def history(self, name, products):
+    def history(self, name, products, shared=None):
+        """History rows of these products. Pass the same `shared` dict to reuse one bucket list."""
         from pyspark.sql import functions as F
         path = self._path(name)
+        shared = {} if shared is None else shared
         with self._step('history.' + name + '.read_plan'):
             if not self._exists(path):
                 return self.empty()
             # Literal buckets enable partition pruning, then a distributed key join narrows the rows.
-            buckets = [r[0] for r in products.select(F.pmod(F.xxhash64('product_key'),F.lit(128)).cast('int')).distinct().collect()]
+            if 'buckets' not in shared:
+                shared['buckets'] = [r[0] for r in products.select(self.bucket('product_key')).distinct().collect()]
+            buckets = shared['buckets']
         if not buckets:
             return self.empty()
         return self.spark.read.format('delta').load(path).filter(F.col('bucket').isin(buckets)).join(products,'product_key','left_semi')
@@ -69,49 +113,64 @@ class BatchDelta:
             F.col('record_hash').alias('_old_hash')),['bucket','row_key'],'left')
 
     @staticmethod
-    def has_conflict(joined):
+    def conflict_flag():
         """Same key already stored with different content or owner: never an overwrite."""
         from pyspark.sql import functions as F
-        return bool(joined.filter(F.col('_old_hash').isNotNull() & ((F.col('record_hash') != F.col('_old_hash')) |
-            (F.col('product_key') != F.col('_old_product')))).limit(1).count())
+        return F.col('_old_hash').isNotNull() & ((F.col('record_hash') != F.col('_old_hash')) |
+            (F.col('product_key') != F.col('_old_product')))
+
+    @classmethod
+    def has_conflict(cls, joined):
+        return bool(joined.filter(cls.conflict_flag()).limit(1).count())
 
     @classmethod
     def new_rows(cls, joined):
         from pyspark.sql import functions as F
         return joined.filter(F.col('_old_hash').isNull()).select(*cls.encoded_columns)
 
-    def append_history(self, name, frame):
+    def append_history(self, name, frame, unique=None):
+        """Keyed immutable append. `unique` = dict(keys=, buckets=) when the caller built the frame
+        with one row per row_key and already counted it: the in-batch key check is then skipped."""
         from pyspark.sql import functions as F
         path = self._path(name)
         encoded = self.encode(frame).persist()
         cached = [encoded]
         step = 'history.' + name
         try:
-            # First action on the cached frame: includes computing the rows being stored.
-            with self._step(step + '.key_check'):
-                if encoded.groupBy('row_key').agg(F.countDistinct('record_hash').alias('n')).filter('n > 1').limit(1).count():
-                    raise Invalid('BATCH_OUTPUT_KEY_CONFLICT')
-            encoded = encoded.dropDuplicates(['row_key'])
+            if unique is None:
+                # First action on the cached frame: includes computing the rows being stored. One
+                # aggregate gives the in-batch key conflict, the touched buckets and the distinct key count.
+                with self._step(step + '.key_check'):
+                    keys = (encoded.groupBy('row_key').agg(F.countDistinct('record_hash').alias('n'),F.first('bucket').alias('bucket'))
+                        .agg(F.max((F.col('n') > 1).cast('int')).alias('conflict'),F.count('*').alias('keys'),
+                             F.collect_set('bucket').alias('buckets')).first())
+                    if keys['conflict']:
+                        raise Invalid('BATCH_OUTPUT_KEY_CONFLICT')
+                encoded = encoded.dropDuplicates(['row_key'])
+            else:
+                keys = unique
+            fresh = keys['keys']
             with self._step(step + '.exists'):
                 exists = self._exists(path)
-            if exists:
+            if exists and fresh:
                 # Only the buckets this write touches are read, so partition pruning applies and the
-                # accumulated history is not scanned. One join serves both the conflict check and the
-                # new-row filter.
+                # accumulated history is not scanned. One join and one aggregate serve the conflict
+                # check and the new-row count; the new-row filter reuses the cached join.
                 with self._step(step + '.conflict_join'):
-                    buckets = [r[0] for r in encoded.select('bucket').distinct().collect()]
-                    old = self.spark.read.format('delta').load(path).filter(F.col('bucket').isin(buckets))
+                    old = self.spark.read.format('delta').load(path).filter(F.col('bucket').isin(sorted(keys['buckets'])))
                     joined = self.join_existing(encoded,old).persist()
                     cached.append(joined)
-                    if self.has_conflict(joined):
+                    found = joined.agg(F.max(self.conflict_flag().cast('int')).alias('conflict'),
+                        F.sum(F.col('_old_hash').isNull().cast('int')).alias('fresh')).first()
+                    if found['conflict']:
                         raise Invalid('DELTA_IMMUTABLE_CONFLICT')
                 encoded = self.new_rows(joined)
+                fresh = found['fresh'] or 0
             self.fence()
-            with self._step(step + '.empty_check'):
-                empty = encoded.isEmpty()
-            if not empty:
+            if fresh:
                 with self._step(step + '.write'):
                     encoded.write.format('delta').mode('append').partitionBy('bucket').save(path)
+                self.known.add(path)
             self.fence()
         finally:
             for frame in cached:
@@ -129,9 +188,13 @@ class BatchDelta:
                 recovering = self._exists(path)
             if not recovering:
                 # First action on the cached frame: includes computing the rows being stored.
+                # A snapshot is always read whole at a pinned version, so it is not partitioned by
+                # bucket: that wrote about one file per product. One file per write task instead;
+                # bucket stays a column, and earlier bucket-partitioned snapshots still load.
                 with self._step(step + '.write'):
-                    (encoded.write.format('delta').mode('append').partitionBy('bucket')
+                    (encoded.write.format('delta').mode('append')
                         .option('txnAppId',job_id + ':' + stage).option('txnVersion',0).save(path))
+                self.known.add(path)
             self.fence()
             with self._step(step + '.history_read') as counts:
                 history = DeltaTable.forPath(self.spark,path).history(1).first().asDict(recursive=True)
@@ -156,7 +219,7 @@ class BatchDelta:
 
     def load(self, proof):
         verified(proof)
-        if proof['target_hash'] != digest(self.root) or not proof['path'].startswith(self.root+'/runs/'):
+        if not any(proof['target_hash'] == digest(root) and proof['path'].startswith(root+'/runs/') for root in (self.root,self.legacy)):
             raise Invalid('DELTA_STAGE_TARGET_CONFLICT')
         frame = self.spark.read.format('delta').option('versionAsOf',proof['version']).load(proof['path'])
         return frame

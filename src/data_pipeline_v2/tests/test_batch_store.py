@@ -57,6 +57,23 @@ class MongoBatchStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, 'IMMUTABLE_BATCH_RECORD_CONFLICT'):
             self.store.put_many('observation_identity', [(['danawa:11', 'v1'], dict(raw='changed'))])
 
+    def test_write_concern_error_fails_even_when_other_errors_are_identical_duplicates(self):
+        self.store.put_many('source', [('one', dict(n=1))])
+        original = Collection.insert_many
+
+        def unconfirmed(collection, records, ordered=True):
+            # The new row is inserted but not majority-confirmed; the old one is a plain duplicate.
+            try:
+                original(collection, records, ordered)
+            except BulkWriteError as exc:
+                raise BulkWriteError(dict(exc.details, writeConcernErrors=[dict(code=64, errmsg='waiting for replication timed out')]))
+        Collection.insert_many = unconfirmed
+        try:
+            with self.assertRaises(BulkWriteError):
+                self.store.put_many('source', [('one', dict(n=1)), ('two', dict(n=2))])
+        finally:
+            Collection.insert_many = original
+
     def test_new_records_in_the_same_call_are_still_stored(self):
         self.store.put_many('source', [('one', dict(n=1))])
         self.store.put_many('source', [('one', dict(n=1)), ('two', dict(n=2))])

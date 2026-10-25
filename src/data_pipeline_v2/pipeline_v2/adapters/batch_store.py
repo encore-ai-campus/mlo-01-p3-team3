@@ -157,7 +157,9 @@ class MongoBatchStore:
             self._collection(kind).insert_many(records, ordered=False)
         except BulkWriteError as exc:
             errors = exc.details.get('writeErrors', [])
-            if not errors or any(e.get('code') != 11000 for e in errors):
+            # A write concern error leaves the inserted rows unconfirmed (they may roll back), so
+            # it always fails the call even when the other errors are only identical duplicates.
+            if exc.details.get('writeConcernErrors') or not errors or any(e.get('code') != 11000 for e in errors):
                 raise
             duplicates = {e['op']['_id'] for e in errors}
             # Keys may be lists (composite keys), so compare by position, never as dict keys.

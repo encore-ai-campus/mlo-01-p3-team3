@@ -11,6 +11,9 @@ class Outbox:
         self.retention = retention or Retention()
         # False: Kafka carries only the immutable source reference (consumer reads the ledger itself).
         self.wire_payload = wire_payload
+        # Admitted payloads of the batch prepared last in this process, keyed by source_ref; their
+        # hashes were computed from these objects, so a relay in the same process sends them as is.
+        self.prepared = (None, {})
 
     def _admit(self, item, position, batch):
         """Row-level admission: one bad row never blocks the other rows of a complete crawl."""
@@ -43,10 +46,11 @@ class Outbox:
             raise Invalid('QUARANTINE_RECONCILIATION_FAILED')
 
     def _persist(self, crawl, pending):
-        """Write one bounded chunk: source snapshots first, outbox second, each read back in bulk.
+        """Write one bounded chunk: source snapshots first, outbox second.
 
-        Re-running reconciles a crash between the two. SOURCE_COMPLETE is written only after every
-        chunk is read back and matches.
+        Re-running reconciles a crash between the two. Every write is an immutable keyed insert
+        acknowledged by a majority with journal, and an existing key must already hold the same
+        value (`put_many`), so the chunk is not read back. SOURCE_COMPLETE is written last.
         """
         batch = crawl['crawl_batch_id']
         for event, payload in pending:
@@ -60,16 +64,13 @@ class Outbox:
             self.store.put_many('observation_identity', [([e['product_key'], e['source_version']],
                 dict(raw_document_id=e['raw_document_id'], document_hash=p['document']['document_hash'])) for e, p in admitted])
             self.store.put_many('source_identity', [(e['event_id'], dict(payload_hash=e['payload_hash'])) for e, _ in admitted])
-            stored = self.store.get_many('source', [e['source_ref'] for e, _ in admitted])
-            if any(stored[e['source_ref']] != p for e, p in admitted):
-                raise Invalid('SOURCE_OUTBOX_RECONCILIATION_FAILED')
+            self.prepared[1].update((e['source_ref'], p) for e, p in admitted)
         self.store.put_many('outbox', [([batch, e['event_id']], e) for e, _ in pending])
-        if self.store.get_list('outbox', [[batch, e['event_id']] for e, _ in pending]) != [e for e, _ in pending]:
-            raise Invalid('SOURCE_OUTBOX_RECONCILIATION_FAILED')
 
     def prepare(self, crawl, items):
         source_contract(crawl)
         batch = crawl['crawl_batch_id']
+        self.prepared = (batch, {})
         inventory, total_bytes, records, duplicates = {}, 0, 0, 0
         dispositions = {}
         pending, pending_bytes = [], 0
@@ -143,7 +144,11 @@ class Outbox:
                 for expected, event in zip(group, events):
                     if not event or event['payload_hash'] != expected['payload_hash']:
                         raise Invalid('OUTBOX_SOURCE_MISSING_OR_CHANGED')
-                sources = self.store.get_many('source', [e['source_ref'] for e in events if e['event_type'] != REJECTED])
+                kept = self.prepared[1] if self.prepared[0] == batch else {}
+                sources = dict(kept)
+                wanted = [e['source_ref'] for e in events if e['event_type'] != REJECTED and e['source_ref'] not in kept]
+                if wanted:
+                    sources.update(self.store.get_many('source', wanted))
                 held = self.store.get_many('quarantine_raw', [e['event_id'] for e in events
                     if e['event_type'] == REJECTED and e['source_ref'] is not None])
                 payloads = []
@@ -153,7 +158,8 @@ class Outbox:
                         stored = record and record['payload']
                     else:
                         stored = sources[event['source_ref']]
-                    if expected['payload_hash'] is not None and digest(stored) != expected['payload_hash']:
+                    fresh = event['event_type'] == REJECTED or event['source_ref'] not in kept
+                    if fresh and expected['payload_hash'] is not None and digest(stored) != expected['payload_hash']:
                         raise Invalid('OUTBOX_SOURCE_MISSING_OR_CHANGED')
                     # Quarantined raw stays in its restricted store; only admitted payloads are sent.
                     payloads.append(None if event['event_type'] == REJECTED else stored)

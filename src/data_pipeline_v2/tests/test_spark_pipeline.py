@@ -39,13 +39,13 @@ class MemoryDelta(BatchDelta):
     def _frame(self, rows):
         return self.spark.createDataFrame(rows,self.SCHEMA)
 
-    def history(self, name, products):
+    def history(self, name, products, shared=None):
         path = self._path(name)
         if path not in self.tables:
             return self.empty()
         return self._frame(self.tables[path]).join(products,'product_key','left_semi')
 
-    def append_history(self, name, frame):
+    def append_history(self, name, frame, unique=None):
         path = self._path(name)
         rows = {r[0]:tuple(r) for r in self.encode(frame).collect()}
         old = {r[0]:r for r in self.tables.get(path,[])}
@@ -179,6 +179,31 @@ class SparkFinitePipelineTests(unittest.TestCase):
         self.assertEqual((counts['history_limit'],counts['quality_hold'],counts['valid']),(1,1,2))
         self.assertEqual(report['stages']['publication']['resolutions'],{'PUBLISHED':2})
         self.assertEqual(self.runner.audit(report['job_id'])['status'],'AUDIT_OK')
+
+    def test_kafka_range_validation_flags_each_violation_in_one_aggregate(self):
+        import json
+        from pyspark.sql import functions as F
+        schema = 'crawl_batch_id string, event_id string, payload_hash string, product_key string'
+        def body(event, batch='b1', product='danawa:1', payload='h1', extra=''):
+            return json.dumps(dict(crawl_batch_id=batch,event_id=event,payload_hash=payload,product_key=product,x=extra))
+        def flags(records, expected):
+            decoded = self.spark.createDataFrame(records,'key string, value string').withColumn('e',F.from_json('value',schema))
+            frame = self.spark.createDataFrame(expected,'_expected_id string,_expected_hash string,_expected_product string')
+            row = SparkBatchProcessor.validate_range(decoded,'b1',frame)
+            return {k:row[k] for k in ('unclassifiable','key_mismatch','conflict','mismatch')}
+        clean = {'unclassifiable':0,'key_mismatch':0,'conflict':0,'mismatch':0}
+        expected = [('e1','h1','danawa:1'),('e2','h2','danawa:2')]
+        good = [('danawa:1',body('e1')),('danawa:2',body('e2',product='danawa:2',payload='h2'))]
+        # Another batch interleaved in the range and an exact redelivery are both fine.
+        self.assertEqual(flags(good+[good[0],('danawa:9',body('o1',batch='b0',product='danawa:9'))],expected),clean)
+        self.assertEqual(flags(good+[('x','not json')],expected),dict(clean,unclassifiable=1))
+        self.assertEqual(flags([('danawa:7',body('e1'))]+good[1:],expected),dict(clean,key_mismatch=1))
+        self.assertEqual(flags(good+[('danawa:1',body('e1',extra='changed'))],expected),dict(clean,conflict=1))
+        self.assertEqual(flags(good[:1],expected),dict(clean,mismatch=1))
+        self.assertEqual(flags(good+[('danawa:3',body('e3',product='danawa:3'))],expected),dict(clean,mismatch=1))
+        self.assertEqual(flags([('danawa:1',body('e1',payload='other'))]+good[1:],expected),dict(clean,mismatch=1))
+        self.assertEqual(flags([],expected),dict(clean,mismatch=1))
+        self.assertEqual(flags([],[]),clean)
 
     def test_history_append_reads_only_touched_buckets_and_keeps_rows_immutable(self):
         delta = self.processor.delta

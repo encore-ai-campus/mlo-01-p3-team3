@@ -38,6 +38,9 @@ def resolve_partition(rows, store_config, page_size, normalize=False, expires=No
                     store = open_store(store_config)
                 items = store.get_many('source',list(set(missing)))
             for record, event, item in zip(page,events,carried):
+                if not normalize:
+                    # The Kafka wire body, validated here instead of in a separate UDF stage.
+                    validate_event(event)
                 event = {k:v for k,v in event.items() if k != 'payload'}
                 if event['event_type'] == REJECTED:
                     # Rejected rows carry no trusted product identity and never reach Silver.
@@ -106,6 +109,34 @@ class SparkBatchProcessor:
                 for name,value in previous.items():
                     context.setLocalProperty(name,value)
 
+    @staticmethod
+    def validate_range(decoded, batch, expected):
+        """All Kafka range checks in one aggregate: each check was a separate job before.
+
+        Rows of other batches only feed the unclassifiable flag. Per event: distinct wire bodies
+        (conflict) and its hash/product, then a full join with the manifest inventory (unique ids)
+        counts events missing on either side or carrying a different hash/product.
+        """
+        from pyspark.sql import functions as F
+        mine = F.col('e.crawl_batch_id') == batch
+        events = decoded.groupBy(F.when(mine,F.col('e.event_id')).alias('_event_id')).agg(
+            F.max(F.col('e.crawl_batch_id').isNull().cast('int')).alias('unclassifiable'),
+            F.max((mine & ~F.col('key').eqNullSafe(F.coalesce('e.product_key','e.event_id'))).cast('int')).alias('key_mismatch'),
+            F.sum(mine.cast('int')).alias('rows'),
+            F.countDistinct(F.when(mine,F.col('value'))).alias('bodies'),
+            F.countDistinct(F.when(mine,F.struct('e.payload_hash','e.product_key'))).alias('identities'),
+            F.first(F.when(mine,F.col('e.payload_hash')),ignorenulls=True).alias('_hash'),
+            F.first(F.when(mine,F.col('e.product_key')),ignorenulls=True).alias('_product'))
+        joined = events.join(expected,F.col('_event_id') == F.col('_expected_id'),'full_outer')
+        present = F.coalesce(F.col('rows'),F.lit(0)) > 0
+        mismatch = (present & F.col('_expected_id').isNull()) | (~present & F.col('_expected_id').isNotNull()) | (
+            present & F.col('_expected_id').isNotNull() & ((F.col('identities') > 1) |
+            ~F.col('_hash').eqNullSafe(F.col('_expected_hash')) | ~F.col('_product').eqNullSafe(F.col('_expected_product'))))
+        return joined.agg(F.coalesce(F.max('unclassifiable'),F.lit(0)).alias('unclassifiable'),
+            F.coalesce(F.max('key_mismatch'),F.lit(0)).alias('key_mismatch'),
+            F.coalesce(F.max((F.col('bodies') > 1).cast('int')),F.lit(0)).alias('conflict'),
+            F.coalesce(F.max(mismatch.cast('int')),F.lit(0)).alias('mismatch')).first()
+
     def _stage(self,job,name,produce,parent=None):
         saved = self.store.get('stage',[job['job_id'],name])
         if saved:
@@ -119,9 +150,8 @@ class SparkBatchProcessor:
             return result
 
     def process(self,job,manifest):
-        from pyspark.sql import functions as F, Window
+        from pyspark.sql import functions as F
         from .kafka_batch import read_kafka
-        from .spark_gold import build_gold
         self._open()
         spark, delta, batch, key = self.spark,self.delta,job['crawl_batch_id'],job['job_id']
         pin = pinned_inputs(self.store, key)
@@ -140,42 +170,42 @@ class SparkBatchProcessor:
                     selected = decoded.filter(F.col('e.crawl_batch_id') == batch)
                     # Do not silently skip undecodable records in a selected physical range.
                     # Other batches may interleave; malformed records cannot be assigned safely.
-                    flags = decoded.agg(
-                        F.max(F.col('e.crawl_batch_id').isNull().cast('int')).alias('unclassifiable'),
-                        F.max((F.col('e.crawl_batch_id') == batch).cast('int') *
-                              (~F.col('key').eqNullSafe(F.coalesce('e.product_key','e.event_id'))).cast('int')).alias('key_mismatch')).first()
+                    inventory = [(v['event_id'],v['payload_hash'],v['product_key']) for v in manifest['inventory']]
+                    if len({v[0] for v in inventory}) != len(inventory):
+                        raise Invalid('KAFKA_EVENT_SET_MISMATCH')
+                    flags = self.validate_range(decoded,batch,spark.createDataFrame(
+                        inventory,'_expected_id string,_expected_hash string,_expected_product string'))
+                    # Same precedence as the separate checks this one aggregate replaces.
                     if flags['unclassifiable']:
                         raise Invalid('KAFKA_RANGE_UNCLASSIFIABLE_EVENT')
                     if flags['key_mismatch']:
                         raise Invalid('KAFKA_KEY_MISMATCH')
-                    if selected.groupBy('e.event_id').agg(F.countDistinct('value').alias('n')).filter('n > 1').limit(1).count():
+                    if flags['conflict']:
                         raise Invalid('EVENT_ID_CONFLICT')
-                    actual = selected.select('e.event_id','e.payload_hash','e.product_key').dropDuplicates()
-                    expected = spark.createDataFrame(
-                        [(v['event_id'],v['payload_hash'],v['product_key']) for v in manifest['inventory']],
-                        'event_id string,payload_hash string,product_key string')
-                    if actual.exceptAll(expected).limit(1).count() or expected.exceptAll(actual).limit(1).count():
+                    if flags['mismatch']:
                         raise Invalid('KAFKA_EVENT_SET_MISMATCH')
-
-                    @F.udf('boolean')
-                    def valid(value):
-                        validate_event(json.loads(value))
-                        return True
                     # dropDuplicates resolves top-level names only; lift the nested event id first.
-                    events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).filter(valid('value')).select(
+                    # Events are validated inside resolve_partition, not by a separate Python UDF stage.
+                    events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
                         F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
                         F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
                     resolved = spark.createDataFrame(events.rdd.mapPartitions(
                         lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
                         'row_key string,product_key string,payload_json string,disposition string').persist()
                     try:
-                        # One small aggregate decides which destinations need a write at all.
-                        tally = {r['disposition']:(int(r['n']),r['watermark']) for r in resolved.groupBy('disposition').agg(
-                            F.count('*').alias('n'),F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark')).collect()}
+                        # One small aggregate decides which destinations need a write at all, and
+                        # names the accepted products (the Bronze index is their only stored copy).
+                        found = resolved.groupBy('disposition').agg(F.count('*').alias('n'),
+                            F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
+                            F.sort_array(F.collect_set('product_key')).alias('products'),
+                            F.sort_array(F.collect_set(delta.bucket('product_key'))).alias('buckets')).collect()
+                        tally = {r['disposition']:(int(r['n']),r['watermark']) for r in found}
+                        products, buckets = next(((list(r['products']),list(r['buckets'])) for r in found if r['disposition'] == 'ACCEPTED'),([],[]))
                         accepted = resolved.filter(F.col('disposition') == 'ACCEPTED').drop('disposition')
-                        with self.action('bronze.accepted.commit',batch):
-                            proof = delta.snapshot(key,'bronze_accepted',accepted)
-                        delta.append_history('input_index',accepted)
+                        if products:
+                            with self.action('bronze.accepted.commit',batch):
+                                # One row per event (deduplicated above), so the in-batch key check is not needed.
+                                delta.append_history('input_index',accepted,unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets))
                         outputs = {}
                         for table in sorted(set(METADATA_TABLES.values())):
                             names = [d for d,t in METADATA_TABLES.items() if t == table and tally.get(d,(0,))[0]]
@@ -186,8 +216,8 @@ class SparkBatchProcessor:
                             with self.action('bronze.'+table+'.commit',batch):
                                 delta.append_history(table,frame)
                             outputs[table] = dict(delta.digest_rows(frame),expires_at=expires)
-                        counts = dict(accepted=proof['count'],**{d.lower():v[0] for d,v in tally.items() if d != 'ACCEPTED'})
-                        return dict(proofs=[proof],outputs=dict(accepted=proof),metadata_outputs=outputs,counts=counts,
+                        counts = dict(accepted=tally.get('ACCEPTED',(0,))[0],**{d.lower():v[0] for d,v in tally.items() if d != 'ACCEPTED'})
+                        return dict(format=2,proofs=[],products=products,buckets=buckets,metadata_outputs=outputs,counts=counts,
                             input=dict(delivery_hash=manifest['content_hash'],event_set_hash=manifest['event_set_hash'],
                                 generation=manifest['generation']),
                             source_version_watermark=tally.get('ACCEPTED',(0,None))[1])
@@ -200,152 +230,73 @@ class SparkBatchProcessor:
         else:
             b = self._stage(job,'bronze',bronze)
 
-        def silver():
-            if job['kind'] == 'REPAIR':
-                products = spark.createDataFrame([(p,) for p in job['products']],'product_key string')
-            else:
-                products = delta.load(b['outputs']['accepted']).select('product_key').distinct()
-            # Reused by the history lookups below; computed once instead of once per use.
-            products = products.persist()
-            # The retraction register is a small control set; it is joined, never looped per product.
-            retractions = [tuple(v) for v in pin['retractions']]
-            retracted = spark.createDataFrame(retractions,'product_key string,raw_document_id string').join(products,'product_key','left_semi')
-            index = delta.history('input_index',products).filter(
-                F.get_json_object('payload_json','$.origin_job').isin(allowed))
-            # get_json_object retains nested dependency JSON without schema inference or driver data reads.
-            index_base = index = index.select('product_key',
-                F.get_json_object('payload_json','$.event').alias('event_json'),
-                F.get_json_object('payload_json','$.event.raw_document_id').alias('raw_document_id'),
-                F.get_json_object('payload_json','$.dependencies').alias('dependencies_json'),
-                F.get_json_object('payload_json','$.image_revision').cast('long').alias('image_revision'),
-                F.get_json_object('payload_json','$.item').alias('item_json')).dropDuplicates(['product_key','event_json']).persist()
-            seen = index.select('product_key').distinct()
-            if retractions:
-                index = index.join(retracted,['product_key','raw_document_id'],'left_anti')
-            counts = index.groupBy('product_key').agg(F.count('*').alias('n'),
-                F.sum(F.length('dependencies_json')).alias('bytes'))
-            # An oversized history holds that product only; the batch and other products go on.
-            over = counts.filter((F.col('n') > self.limits.history_observations) |
-                                 (F.col('bytes') > self.limits.history_bytes)).persist()
-            index = index.join(over.select('product_key'),'product_key','left_anti')
-            seen = seen.join(over.select('product_key'),'product_key','left_anti')
+        if (b.get('outputs') or {}).get('accepted') or (self.store.get('stage',[key,'silver']) and not self.store.get('stage',[key,'gold'])):
+            # Stage records written before the single product pass cannot be resumed by it.
+            raise Invalid('BATCH_STAGE_FORMAT_CHANGED')
 
-            def limit_holds(frame, count):
-                return frame.select(F.sha2(F.concat(F.lit(key+':history:'),'product_key'),256).alias('row_key'),'product_key',
-                    F.to_json(F.struct(F.lit('PRODUCT_HISTORY_LIMIT').alias('reason'),count.alias('observations'),
-                        F.col('bytes').alias('bytes'))).alias('payload_json'))
-            global_policy = self.policy
-
-            @F.udf('string')
-            def policy_for(dependencies):
-                return canonical(related_policy(global_policy,[json.loads(v) for v in dependencies]))
-
-            @F.udf('string')
-            def policy_hash(policy_json):
-                value = json.loads(policy_json)
-                return digest(dict(version=VERSION,**{k:value.get(k,[]) for k in ('mappings','rules')}))
-
-            @F.udf('string')
-            def identity(event_json,policy_json):
-                event, policy = json.loads(event_json),json.loads(policy_json)
-                return digest(dict(event=event['event_id'],policy={k:policy[k] for k in ('mappings','rules')},code=VERSION))
-
-            policies = (index.groupBy('product_key').agg(F.collect_list('dependencies_json').alias('_deps'))
-                .withColumn('policy_json',policy_for('_deps')).drop('_deps')
-                .withColumn('normalization_policy_hash',policy_hash('policy_json'))).persist()
-            desired = index.join(policies,'product_key').withColumn('row_key',identity('event_json','policy_json'))
-            cached = delta.history('normalized_history',products)
-            # Reuse is decided from fixed identities before any source body is fetched.
-            needed = desired.join(cached.select('row_key'),'row_key','left_anti')
-            new = spark.createDataFrame(needed.select('row_key','event_json','item_json','policy_json').rdd.mapPartitions(
-                lambda rows:resolve_partition(rows,store_config,page_size,normalize=True)),
-                'row_key string,product_key string,payload_json string').persist()
+        def output():
+            from .spark_product import product_pass
+            products = job['products'] if job['kind'] == 'REPAIR' else b['products']
+            wanted = set(products)
+            retractions = {}
+            for product, raw in pin['retractions']:
+                if product in wanted:
+                    retractions.setdefault(product,[]).append(raw)
+            context = dict(job_id=key,policy=self.policy,store_config=store_config,retractions=retractions,
+                limits=dict(history_observations=self.limits.history_observations,history_bytes=self.limits.history_bytes))
+            frame = spark.createDataFrame([(p,) for p in products],'product_key string').persist()
             try:
-                with self.action('silver.normalize_and_commit',batch):
-                    delta.append_history('normalized_history',new)
-                    reusable = cached.join(desired.select('row_key'),'row_key','left_semi').select('row_key','product_key','payload_json')
-                    selected = reusable.unionByName(new).dropDuplicates(['row_key'])
-                    selected = selected.withColumn('quality',F.get_json_object('payload_json','$.quality'))
-                    holds = selected.filter("quality = 'QUALITY_HOLD'").drop('quality')
-                    proofs, outputs = [], {}
-                    selected = selected.filter("quality = 'VALID'").withColumn('raw_id',F.get_json_object('payload_json','$.raw_document_id'))
-                    selected = selected.withColumn('image_revision',F.get_json_object('payload_json','$.image_revision').cast('long'))
-                    latest = Window.partitionBy('product_key','raw_id').orderBy(F.col('image_revision').desc(),'row_key')
-                    selected = selected.withColumn('_rank',F.row_number().over(latest)).filter('_rank = 1')
-                    limits = selected.groupBy('product_key').agg(F.sum(F.length('payload_json')).alias('bytes'),
-                        F.count('*').alias('n'))
-                    late = limits.filter(F.col('bytes') > self.limits.history_bytes)
-                    selected = selected.join(late.select('product_key'),'product_key','left_anti')
-                    # Bronze event reference and reason only; the raw payload is never copied.
-                    holds = holds.unionByName(limit_holds(over,F.col('n'))).unionByName(limit_holds(late,F.col('n')))
-                    if not holds.isEmpty():
-                        outputs['holds'] = delta.snapshot(key,'silver_holds',holds)
-                    outputs['silver'] = delta.snapshot(key,'silver',selected.select('row_key','product_key','payload_json'))
-                    policy_rows = policies.select(F.sha2('product_key',256).alias('row_key'),'product_key',
-                        F.to_json(F.struct('policy_json','normalization_policy_hash')).alias('payload_json'))
-                    outputs['policies'] = delta.snapshot(key,'policies',policy_rows)
-                    if retractions:
-                        lists = retracted.groupBy('product_key').agg(
-                            F.sort_array(F.collect_set('raw_document_id')).alias('retracted_raw_document_ids'))
-                        outputs['retractions'] = delta.snapshot(key,'retractions',lists.select(
-                            F.sha2('product_key',256).alias('row_key'),'product_key',
-                            F.to_json(F.struct('retracted_raw_document_ids')).alias('payload_json')))
-                        # Every retained observation of these products was explicitly retracted.
-                        withdrawn = (seen.join(index.select('product_key').distinct(),'product_key','left_anti')
-                            .join(lists,'product_key'))
-                        if not withdrawn.isEmpty():
-                            outputs['withdrawals'] = delta.snapshot(key,'withdrawals',withdrawn.select(
-                                F.sha2('product_key',256).alias('row_key'),'product_key',
-                                F.to_json(F.struct('retracted_raw_document_ids')).alias('payload_json')))
-                limited = 0
-                if 'holds' in outputs:
-                    limited = delta.load(outputs['holds']).filter(
-                        F.get_json_object('payload_json','$.reason') == 'PRODUCT_HISTORY_LIMIT').count()
-                counts = dict(valid=outputs['silver']['count'],quality_hold=outputs['holds']['count'] if 'holds' in outputs else 0,
-                    history_limit=limited,
-                    products=outputs['policies']['count'],withdrawn=outputs['withdrawals']['count'] if 'withdrawals' in outputs else 0)
-                return dict(proofs=list(outputs.values()),outputs=outputs,counts=counts)
+                # One shuffle by product: its Bronze index entries and its cached normalized rows meet
+                # in one Executor function that applies every Silver and Gold rule for that product.
+                # Bronze already listed the products' buckets; a repair computes them once here.
+                shared = {} if job['kind'] == 'REPAIR' else dict(buckets=b['buckets'])
+                index = delta.history('input_index',frame,shared).filter(
+                    F.get_json_object('payload_json','$.origin_job').isin(allowed)).select(
+                    'product_key',F.lit(0).alias('kind'),'row_key','payload_json')
+                cached = delta.history('normalized_history',frame,shared).select(
+                    'product_key',F.lit(1).alias('kind'),'row_key','payload_json')
+                rows = (index.unionByName(cached).repartition(self.limits.spark_partitions,'product_key')
+                    .sortWithinPartitions('product_key','kind','row_key'))
+                with self.action('product.silver_gold',batch):
+                    out = spark.createDataFrame(rows.rdd.mapPartitions(lambda part:product_pass(part,context)),
+                        'kind string,row_key string,product_key string,payload_json string').persist()
+                    label = F.coalesce(F.get_json_object('payload_json','$.outcome'),F.get_json_object('payload_json','$.reason'))
+                    tally = {(r['kind'],r['label']):int(r['n']) for r in out.groupBy('kind',label.alias('label')).agg(
+                        F.count('*').alias('n')).collect()}
+                self._release_cache()
+                self._cached = (key,out)
+                count = lambda kind:sum(n for (k,_),n in tally.items() if k == kind)
+                kind = lambda name:out.filter(F.col('kind') == name).drop('kind')
+                if count('normalized'):
+                    with self.action('silver.normalize_and_commit',batch):
+                        # One row per identity by construction; buckets are a subset of the products' buckets.
+                        delta.append_history('normalized_history',kind('normalized'),
+                            unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or []))
+                outputs = {}
+                if count('hold'):
+                    outputs['holds'] = delta.snapshot(key,'silver_holds',kind('hold'))
+                with self.action('gold.commit',batch):
+                    proof = delta.snapshot(key,'gold',kind('gold'))
             finally:
-                new.unpersist()
-                policies.unpersist()
-                over.unpersist()
-                index_base.unpersist()
-                products.unpersist()
-        s = self._stage(job,'silver',silver,parent=b['content_hash'])
+                frame.unpersist()
+            silver = dict(proofs=list(outputs.values()),outputs=outputs,counts=dict(valid=count('silver'),
+                quality_hold=count('hold'),history_limit=tally.get(('hold','PRODUCT_HISTORY_LIMIT'),0),
+                products=count('policy'),withdrawn=count('withdrawn')))
+            outcomes = {label.lower():n for (k,label),n in tally.items() if k == 'gold'}
+            return dict(format=2,proofs=[proof],output=proof,gold_version=digest([proof]),input_hash=job['event_set_hash'],
+                rule_version=VERSION,counts=dict(products=proof['count'],**outcomes),silver=silver)
+        g = self._stage(job,'gold',output,parent=b['content_hash'])
+        if not self.store.get('stage',[key,'silver']):
+            # Derived from the Gold record alone, so writing it again after a crash is identical.
+            self.store.put('stage',[key,'silver'],seal(dict(g['silver'],stage='silver',status='COMPLETE',job_id=key,
+                parent=b['content_hash'],attempts=g['attempts'],started_at=g['started_at'],completed_at=g['completed_at'],
+                code_version=g['code_version'],spark_application_id=g['spark_application_id'])))
+        return g
 
-        def gold():
-            outputs = s['outputs']
-            history = delta.load(outputs['silver']).select('product_key',
-                F.get_json_object('payload_json','$.normalized_json').alias('normalized_json'))
-            policy = delta.load(outputs['policies']).select('product_key',
-                F.get_json_object('payload_json','$.normalization_policy_hash').alias('normalization_policy_hash'))
-            retracted = None
-            if 'retractions' in outputs:
-                retracted = delta.load(outputs['retractions']).select('product_key',F.from_json(
-                    F.get_json_object('payload_json','$.retracted_raw_document_ids'),'array<string>').alias('retracted_raw_document_ids'))
-            with self.action('gold.native_join_window_aggregate',batch):
-                output = build_gold(history,policy,self.policy.get('gold',{}),retracted)
-                cached_frames = output._pipeline_cached_frames
-                try:
-                    if 'withdrawals' in outputs:
-                        source = F.split('product_key',':')
-                        withdrawn = delta.load(outputs['withdrawals']).select('product_key',F.to_json(F.struct(
-                            'product_key',source.getItem(0).alias('source_code'),source.getItem(1).alias('source_product_id'),
-                            F.lit(True).alias('withdrawn'),F.from_json(F.get_json_object('payload_json','$.retracted_raw_document_ids'),
-                                'array<string>').alias('retracted_raw_document_ids'),
-                            F.lit(False).alias('catalog_ready'),F.lit(False).alias('recommendation_ready'),
-                            F.lit('SOURCE_RETRACTED').alias('outcome'),F.lit(VERSION).alias('policy_version'))).alias('payload_json'))
-                        output = output.unionByName(withdrawn)
-                    rows = output.withColumn('row_key',F.sha2(F.concat(F.lit(key+':'),F.col('product_key')),256))
-                    proof = delta.snapshot(key,'gold',rows)
-                finally:
-                    for cached in cached_frames:
-                        cached.unpersist()
-                outcomes = {r['outcome'].lower():int(r['n']) for r in delta.load(proof).groupBy(
-                    F.get_json_object('payload_json','$.outcome').alias('outcome')).agg(F.count('*').alias('n')).collect()}
-            return dict(proofs=[proof],output=proof,gold_version=digest([proof]),input_hash=job['event_set_hash'],
-                rule_version=VERSION,counts=dict(products=proof['count'],**outcomes))
-        return self._stage(job,'gold',gold,parent=s['content_hash'])
+    def _release_cache(self):
+        cached, self._cached = getattr(self,'_cached',None), None
+        if cached:
+            cached[1].unpersist()
 
     def products(self, stage):
         self._open()
@@ -357,9 +308,17 @@ class SparkBatchProcessor:
         if self.timing.active_scope:
             context.setLocalProperty('pipeline.v2.scope_hash',digest(self.timing.active_scope))
         context.setLocalProperty('pipeline.v2.stage','publish.lake_read')
+        cached = getattr(self,'_cached',None)
         try:
-            frame = self.delta.load(stage['output']).select('product_key','payload_json')
+            if cached and cached[0] == stage['job_id']:
+                # Processed in this session: the Gold rows just committed are still cached.
+                from pyspark.sql import functions as F
+                frame = cached[1].filter(F.col('kind') == 'gold').select('product_key','payload_json')
+            else:
+                frame = self.delta.load(stage['output']).select('product_key','payload_json')
             yield from self._chunks(frame)
+            if cached:
+                self._release_cache()
         finally:
             for name,value in previous.items():
                 context.setLocalProperty(name,value)

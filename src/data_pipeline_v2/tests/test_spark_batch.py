@@ -57,6 +57,67 @@ class NativeGoldTests(unittest.TestCase):
             self.assertEqual(sorted(actual[name],key=canonical),sorted(expected[name],key=canonical),name)
 
 
+    def test_per_product_gold_matches_native_gold_payload_exactly(self):
+        import copy
+        from pipeline_v2.adapters import spark_product
+        root = Path(self.temp.name)/'parity'
+        root.mkdir()
+        source = fixtures.inputs(root,products=3,observations=2)
+        normalized = {}
+        for item in source:
+            value = normalize(item,fixtures.POLICY)
+            normalized.setdefault('danawa:'+value['raw_ref']['source_product_id'],[]).append(value)
+        # A synthetic product exercising equal-time conflicts, offers, comparison links and image ties.
+        first, second = (copy.deepcopy(v) for v in normalized['danawa:11'][:2])
+        for value in (first, second):
+            value['raw_ref']['source_product_id'] = '14'
+        second['raw_ref']['_id'] = 'ffffffffffffffffffffffff'
+        at = first['tables']['product_observations'][0]['observed_at']
+        conflict = copy.deepcopy(first['tables']['product_observations'][0])
+        conflict.update(display_name='other name',raw_document_id='ffffffffffffffffffffffff')
+        second['tables']['product_observations'] = [conflict]
+        offer = dict(first['tables']['price_observations'][0])
+        offers = []
+        for index, (key, when, raw) in enumerate([('o1',at,'a'),('o1',at,'b'),('o2',None,'c'),('o2','2026-10-15T01:00:00.000Z','d')]):
+            identity = {k:None for k in offer}
+            identity.update(offer_key=key,observed_at=when,raw_document_id=raw,seller_name='s%d' % index)
+            offers.append(identity)
+        first['tables']['normalized_offers'] = offers
+        prices = []
+        for key, when, raw, amount in [('o1',at,'a','100'),('o1',at,'b','200'),('o1','2026-10-14T00:00:00.000Z','a','90'),('o2',at,'c','300')]:
+            price = dict(offer,offer_key=key,observed_at=when,raw_document_id=raw,amount=amount,currency='KRW',numeric_status='CONFIRMED')
+            prices.append(price)
+        first['tables']['price_observations'] = first['tables']['price_observations'] + prices
+        # Newest link time, so it is not an equal-time conflict with the fixture's own comparison link.
+        link = dict(first['tables']['link_observations'][0],link_kind='COMPARISON',structure_status='VALID',source_url='https://x/1',
+            observed_at='2026-10-15T09:00:00.000Z')
+        first['tables']['link_observations'] = first['tables']['link_observations'] + [link]
+        twin = dict(first['direct_images'][0],raw_document_id='000000000000000000000000',url='https://images.example/twin.png')
+        clash = dict(first['direct_images'][0],image_slot='gallery-1',sha256='different')
+        first['direct_images'] = first['direct_images'] + [twin,clash,dict(clash,sha256='another')]
+        normalized['danawa:14'] = [first,second]
+
+        policy_hash = digest(dict(version=VERSION,**{k:fixtures.POLICY[k] for k in ('mappings','rules')}))
+        retracted = {'danawa:12':['r2','r1']}
+        history = self.spark.createDataFrame([(p,canonical(v)) for p,values in normalized.items() for v in values],
+            'product_key string,normalized_json string')
+        policies = self.spark.createDataFrame([(p,policy_hash) for p in normalized],'product_key string,normalization_policy_hash string')
+        lists = self.spark.createDataFrame([(p,sorted(v)) for p,v in retracted.items()],'product_key string,retracted_raw_document_ids array<string>')
+        layout = spark_product.schema()
+        for gold_policy in ({},{'require_image':True,'require_comparison_link':True}):
+            native = {r['product_key']:json.loads(r['payload_json']) for r in build_gold(history,policies,gold_policy,lists).collect()}
+            self.assertEqual(set(native),set(normalized))
+            # The synthetic cases are actually exercised, not vacuously equal.
+            synthetic = native['danawa:14']
+            self.assertTrue(synthetic['offers'])
+            self.assertEqual(synthetic['comparison_url'],'https://x/1')
+            self.assertIsNone(synthetic['display_name'])
+            self.assertEqual(native['danawa:12']['retracted_raw_document_ids'],['r1','r2'])
+            for product, values in normalized.items():
+                mine = spark_product.gold(product,[canonical(v) for v in values],policy_hash,gold_policy,retracted.get(product),layout)
+                self.assertEqual(json.loads(spark_product.dumps(mine)),native[product],product)
+
+
 class SparkMetricsTests(unittest.TestCase):
     def test_offline_report_counts_attempts_and_never_leaks_sql_or_executor_values(self):
         with tempfile.TemporaryDirectory() as directory:
