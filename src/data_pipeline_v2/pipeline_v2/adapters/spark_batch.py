@@ -151,13 +151,15 @@ class SparkBatchProcessor:
             self.delta = BatchDelta(self.spark,self.server_lake.config['lake_root'],self.server_lake.check,self.timing)
 
     def warm(self):
-        """Resident start: open Spark and start the Python workers on every executor (they are
-        reused), so a batch's first Python stage does not wait for them."""
+        """Resident start: open Spark, start the Python workers on every executor (they are
+        reused) and load the product registry, so a batch's first stages do not wait for them."""
         self._open()
         with self.timing.measure('serve.python_worker_warmup','runtime'):
             context = self.spark.sparkContext
             slots = max(context.defaultParallelism,1)*2
             context.parallelize(range(slots),slots).map(lambda value:value).count()
+        # The product registry is loaded once per worker process; do it before any batch.
+        self.delta.registered([])
 
     @contextmanager
     def action(self,name,batch):
