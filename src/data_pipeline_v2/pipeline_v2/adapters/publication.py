@@ -345,6 +345,9 @@ class MySQLPublisher:
             self._offers(db,product,group,reference,at)
         with self._stage('mysql.link_observation_rows',getattr(self,'_active_scope','sql-projection'),key):
             self._links(db,product,group,key,reference,at,absent=created)
+        if hasattr(db,'flush'):
+            # This product's buffered child rows are written before its readback and versions.
+            db.flush()
         current=dict(field_versions_json=canonical(proofs),first_collected_at=values['first_collected_at'],
             latest_as_of=sql_time(max(r['collected_at'] for r in group['source_refs'])),latest_evaluation=key)
         if baseline:db.update('pipeline_product_versions',dict(product_key=group['product_key']),current)

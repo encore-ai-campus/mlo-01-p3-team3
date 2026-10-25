@@ -239,12 +239,9 @@ class BatchRunner:
                 built.append(dict(contract_version=2,job_id=product_job,product_key=product['product_key'],
                     input_hash=gold['input_hash'],target=self.publisher.identity,
                     gold=dict(proofs=gold['proofs'],gold_version=gold['gold_version']),scope_id=batch,product=product))
-        # One keyed read and one bulk write per bounded chunk, not a round trip per product.
-        saved = self.store.get_many('delivery_output',[d['job_id'] for d in built])
-        fresh = [(d['job_id'],d) for d in built if saved[d['job_id']] is None]
-        if fresh:
-            self.store.put_many('delivery_output',fresh)
-        return [dict(saved[d['job_id']] or d,scope_id=batch) for d in built]
+        # A request is a pure function of the immutable Gold record and product, so it is rebuilt
+        # identically on a retry; the receipt stores it. No separate request record is written.
+        return built
 
     def _publish(self, key):
         job = self._claim(key,'GOLD_COMMITTED','PUBLISHING')

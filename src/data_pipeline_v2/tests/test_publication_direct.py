@@ -111,27 +111,39 @@ class DirectMySQLIdentityTests(unittest.TestCase):
     def transport(self):
         from pipeline_v2.adapters.mysql import DirectMySQL
         db = DirectMySQL.__new__(DirectMySQL)
-        db._read_cache, db.inserted = {}, []
-        db.insert = lambda table, values: db.inserted.append((table, values))
+        db._read_cache, db._pending, db.executed = {}, {}, []
+        db.execute = lambda sql, args=(): db.executed.append((sql, args)) or 1
         return db
 
-    def test_absent_insert_skips_the_lookup_and_serves_the_row_from_the_cache(self):
+    def test_absent_rows_wait_in_a_buffer_and_go_in_one_insert_per_table(self):
         db = self.transport()
-        key = dict(product_id='p1', link_observation_key='l1', gold_evaluation_key='j1')
-        saved, created = db.identity_absent('product_link_observations', key, dict(source_url='u'))
-        self.assertTrue(created)
-        self.assertEqual([t for t, _ in db.inserted], ['product_link_observations'])
-        # Served from the transaction cache: no connection is touched.
-        self.assertEqual(db.get('product_link_observations', key), saved)
+        links = [dict(product_id='p1', link_observation_key='l%d' % i, gold_evaluation_key='j1') for i in range(3)]
+        saved = [db.identity_absent('product_link_observations', key, dict(source_url='u')) for key in links]
+        db.identity_absent('product_images', dict(product_id='p1', source_code='danawa', source_product_id='1',
+            image_variant='representative', raw_document_id='r', source_version='v'), dict(asset_id='a'))
+        self.assertTrue(all(created for _, created in saved))
+        self.assertEqual(db.executed, [])
+        # Served from the transaction cache before the write.
+        self.assertEqual(db.get('product_link_observations', links[0]), saved[0][0])
+        db.flush()
+        self.assertEqual([sql.split('(')[0].strip() for sql, _ in db.executed],
+            ['INSERT INTO `product_link_observations`', 'INSERT INTO `product_images`'])
+        self.assertEqual(db.executed[0][0].count('),('), 2)
+        self.assertEqual(db._pending, {})
 
-    def test_absent_insert_falls_back_to_the_checked_path_on_a_duplicate(self):
+    def test_a_duplicate_in_a_buffered_insert_is_checked_row_by_row(self):
         import pymysql
+        from pipeline_v2.domain.contracts import Invalid
         db = self.transport()
-        def duplicate(table, values):
+        def duplicate(sql, args=()):
             raise pymysql.err.IntegrityError(1062, 'Duplicate entry')
-        db.insert = duplicate
+        db.execute = duplicate
+        key = dict(product_id='p1', link_observation_key='l1', gold_evaluation_key='j1')
+        db.identity_absent('product_link_observations', key, dict(source_url='u'))
         db.identity = lambda table, key, values: (dict(key, id='existing'), False)
-        saved, created = db.identity_absent('product_images', dict(product_id='p1'), dict(asset_id='a'))
-        self.assertEqual((saved['id'], created), ('existing', False))
+        # The caller already holds the buffered id, so another stored row is a conflict.
+        with self.assertRaisesRegex(Invalid, 'MYSQL_DEFERRED_INSERT_CONFLICT'):
+            db.flush()
+
 
 if __name__=='__main__':unittest.main()

@@ -36,9 +36,10 @@ class DirectMySQL(MySQL):
     def transaction(self):
         with self._timed('mysql.transaction.begin'):
             self.connection.begin()
-        self._read_cache = {}
+        self._read_cache, self._pending = {}, {}
         try:
             yield self
+            self.flush()
             with self._timed('mysql.transaction.commit'):
                 self.connection.commit()
         except BaseException:
@@ -53,6 +54,9 @@ class DirectMySQL(MySQL):
         identity = (table,canonical(key),locking)
         if cache is not None and identity in cache:
             return cache[identity]
+        if getattr(self,'_pending',None):
+            # A read that reaches the database sees every buffered row first.
+            self.flush()
         return super().get(table,key,locking=locking)
 
     def prefetch(self,table,keys):
@@ -93,6 +97,9 @@ class DirectMySQL(MySQL):
             raise
 
     def update(self,table,key,values):
+        if getattr(self,'_pending',None):
+            # Buffered rows exist before any UPDATE (it may target them or reference them).
+            self.flush()
         self._invalidate(table,key)
         return super().update(table,key,values)
 
@@ -103,18 +110,43 @@ class DirectMySQL(MySQL):
 
     def identity_absent(self,table,key,values):
         """Business-key insert when the caller knows no row can exist yet (its parent was created
-        in this transaction): the lookup is skipped; a duplicate falls back to the checked path."""
-        import pymysql
+        in this transaction): the lookup is skipped and the row waits in a per-table buffer that
+        `flush()` writes as one multi-row INSERT. A duplicate falls back to the checked path."""
         from uuid import uuid4
         row = {**values,**key,'id':uuid4().hex}
-        try:
-            self.insert(table,row)
-        except pymysql.err.IntegrityError as exc:
-            if exc.args[0] != 1062:
-                raise
-            return self.identity(table,key,values)
+        buffer = self.__dict__.setdefault('_pending',{})
+        buffer.setdefault(table,[]).append((key,values,row))
         self._remember(table,key,row,True)
         return row, True
+
+    def flush(self):
+        """Write buffered rows, one INSERT per table and column set; on a duplicate, row by row."""
+        import pymysql
+        pending, self._pending = getattr(self,'_pending',{}), {}
+        for table, items in pending.items():
+            groups = {}
+            for key, values, row in items:
+                groups.setdefault(tuple(row),[]).append((key,values,row))
+            for columns, group in groups.items():
+                if table not in TABLES or any(c not in TABLES[table] for c in columns):
+                    raise Invalid('MYSQL_IDENTIFIER_NOT_ALLOWED')
+                values_sql = '('+','.join('%s' for _ in columns)+')'
+                sql = ('INSERT INTO `'+table+'` ('+','.join('`'+c+'`' for c in columns)+') VALUES '+
+                    ','.join(values_sql for _ in group))
+                try:
+                    self.execute(sql,tuple(row[c] for _,_,row in group for c in columns))
+                except pymysql.err.IntegrityError as exc:
+                    if exc.args[0] != 1062:
+                        raise
+                    self._read_cache.clear()
+                    for key, values, row in group:
+                        saved, created = self.identity(table,key,values)
+                        if created:
+                            continue
+                        # The buffered id was never stored; the caller already holds it, so a
+                        # different stored row is a conflict rather than a silent swap.
+                        if saved['id'] != row['id']:
+                            raise Invalid('MYSQL_DEFERRED_INSERT_CONFLICT')
 
     def _remember(self,table,key,saved,created):
         # A row inserted in this transaction is served from the cache to later locking reads.
