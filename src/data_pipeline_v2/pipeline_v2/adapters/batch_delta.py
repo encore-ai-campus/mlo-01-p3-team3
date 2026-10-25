@@ -103,40 +103,23 @@ class BatchDelta:
     def registered(self, products):
         """Products (of these keys) that already have history.
 
-        The single writer keeps the whole key set in memory: it is loaded once from the
-        products_seen table and only this process adds to it, so a batch asks no Spark job.
-        The table is built once from the older product_registry or, failing that, input_index.
+        The key set is input_index itself: the single writer loads its product_key column once
+        and adds a batch's products only after that batch's index rows commit. There is no
+        separate registry to fall out of step with the index (a restart reloads it from the
+        index), and no extra commit per batch.
         """
         if self._seen is None:
-            from pyspark.sql import functions as F
-            path = self._path('products_seen')
+            path = self._path('input_index')
             if not self._exists(path):
-                older = next((self._path(n) for n in ('product_registry','input_index') if self._exists(self._path(n))),None)
-                if older is None:
-                    self._seen = set()
-                    return set()
-                self.fence()
-                with self._step('registry.build'):
-                    keys = self.spark.read.format('delta').load(older).select('product_key').distinct()
-                    keys.coalesce(1).write.format('delta').mode('append').save(path)
-                self.fence()
-                self.known.add(path)
-            with self._step('registry.load'):
-                self._seen = {r[0] for r in self.spark.read.format('delta').load(path).select('product_key').collect()}
+                self._seen = set()
+            else:
+                with self._step('registry.load'):
+                    self._seen = {r[0] for r in self.spark.read.format('delta').load(path)
+                        .select('product_key').distinct().collect()}
         return set(products) & self._seen
 
     def register(self, products):
-        """Record products whose history now exists (after their index rows commit). The caller
-        has just checked they are not registered, under the writer lease: no lookup is needed."""
-        products = sorted(set(products) - (self._seen or set()))
-        if not products:
-            return
-        self.fence()
-        with self._step('registry.write'):
-            (self.spark.createDataFrame([(p,) for p in products],'product_key string').coalesce(1)
-                .write.format('delta').mode('append').save(self._path('products_seen')))
-        self.fence()
-        self.known.add(self._path('products_seen'))
+        """Called after the index rows of these products committed."""
         if self._seen is not None:
             self._seen.update(products)
 

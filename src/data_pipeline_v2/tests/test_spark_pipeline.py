@@ -234,16 +234,20 @@ class SparkFinitePipelineTests(unittest.TestCase):
         # The retry read the fixed range again and stored exactly the accepted raw.
         self.assertEqual(len(delta.tables[delta._path('input_raw')]),report['stages']['bronze']['counts']['accepted'])
 
-    def test_a_failed_registry_write_leaves_no_bronze_record_for_later_jobs_to_pin(self):
+    def test_a_failed_index_commit_registers_nothing_and_leaves_no_bronze_record(self):
         from unittest.mock import patch
         delta = self.processor.delta
-        def broken(self, products):
-            raise Invalid('REGISTRY_WRITE_FAILED')
-        with patch.object(type(delta),'register',broken):
-            job = self.batch('spark-registry',self.items)
-            with self.assertRaisesRegex(Invalid,'REGISTRY_WRITE_FAILED'):
+        original = type(delta).append_history
+        def broken(self, name, frame, unique=None):
+            if name == 'input_index':
+                raise Invalid('INDEX_COMMIT_FAILED')
+            return original(self, name, frame, unique)
+        with patch.object(type(delta),'append_history',broken):
+            job = self.batch('spark-index',self.items)
+            with self.assertRaisesRegex(Invalid,'INDEX_COMMIT_FAILED'):
                 self.runner.work(job)
-        # No Bronze record: no later job pins this job's rows while the registry lacks them.
+        # The product key set grows only with committed index rows, and no Bronze is pinned.
+        self.assertFalse({'danawa:12','danawa:13'} & delta.__dict__.get('registry',set()))
         self.assertIsNone(self.processor.store.get('stage',[job,'bronze']))
         self.runner.recover(job,'test process stopped')
         self.assertEqual(self.runner.work(job)['status'],'COMPLETED')

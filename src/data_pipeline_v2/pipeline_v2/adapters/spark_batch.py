@@ -229,14 +229,10 @@ class SparkBatchProcessor:
                         with self.action('bronze.accepted.commit',batch):
                             # One row per event (deduplicated above), so the in-batch key check is not needed.
                             # Keys carry this job's id: on its first attempt none can be stored yet.
-                            # The registry is written beside it and both finish before the Bronze record:
-                            # a later job that pins this Bronze always finds these products registered.
-                            # A failure in between leaves a registered product without rows, which
-                            # only makes a later batch read (empty) history: the safe direction.
-                            concurrently(dict(
-                                index=lambda:delta.append_history('input_index',accepted.drop('disposition','raw_json'),
-                                    unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first)),
-                                registry=lambda:delta.register(set(products)-set(prior))))
+                            delta.append_history('input_index',accepted.drop('disposition','raw_json'),
+                                unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first))
+                        # The product key set is the index itself; it grows only after this commit.
+                        delta.register(products)
                         self._release_handoff()
                         # Silver/Gold take this raw from the cache. Its commit starts only after
                         # publication (finalize), so it never shares the executors with them.
