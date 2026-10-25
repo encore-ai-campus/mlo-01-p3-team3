@@ -61,7 +61,7 @@ scope 완료는 봉인된 **해당 상품 전체**의 Gold·게시 증거로 계
 | 크롤 대조·Kafka 전달 | `application/outbox.py` | 행별 처분, 원천→Outbox 저장 후 읽기 대조, ack 기반 offset 범위, delivery generation |
 | 제출·처리·게시·복구 | `application/batch.py` | job 원장 CAS, 용량 예약·해제, 처리와 게시를 별도 잠금으로 실행, 정지 근거 기반 복구, 상세 감사, 보존 정리 |
 | 로컬 참조 처리 | `adapters/batch_local.py` | 파일 broker·FileLake로 계약과 복구를 검증한다. Spark를 대신하지 않는다. |
-| 분산 처리 | `adapters/spark_batch.py`, `adapters/spark_gold.py`, `adapters/batch_delta.py`, `adapters/kafka_batch.py` | 고정 offset Kafka batch 읽기, Executor 원천 조회·분류·정제, native Gold, Delta snapshot/history |
+| 분산 처리 | `adapters/spark_batch.py`, `adapters/spark_gold.py`, `adapters/batch_delta.py`, `adapters/kafka_batch.py` | 고정 offset Kafka batch 읽기, Executor 원천 조회·분류·정제, 상품 단위 Silver·Gold 패스(`adapters/spark_product.py`), Delta snapshot/history |
 | 제어 원장 | `adapters/batch_store.py` | 파일·Mongo 저장. `quarantine_raw`만 보존 기한 삭제가 허용되고 나머지는 append-only다. |
 | 명령 | `interfaces/batch_cli.py` | NiFi가 호출하는 유한 명령과 JSON 출력 |
 

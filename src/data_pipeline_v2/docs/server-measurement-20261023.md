@@ -75,7 +75,7 @@ epoch 34(v1)와 같은 상품으로 재지 않았으므로 v1과의 직접 비�
 | B2 | 묶음 | 검증 action을 집계 하나로, 존재 확인 캐시, Kafka 검증 3회 → 1회 | Driver 왕복 30~40% 감소 | 낮음~중간. 기존 충돌·변조 테스트 통과가 조건 | `batch_delta.py`, `spark_batch.py` |
 | B3 | 묶음 | 정책 UDF 2 → 1, 이벤트 검증을 Executor 함수 안으로, 중간 결과 캐시 | task 수 감소 | 낮음. 재사용 키 UDF는 유지 | `spark_batch.py` |
 | B4 | 묶음 | Silver 결과 테이블 3개 → 1개 | 커밋 3 → 1 | 중간. manifest 형식 변경, 진행 중 job 정리 후 배포 | `spark_batch.py`, 하류 |
-| B5 | 묶음 | 처리→게시 한 세션, 게시 읽기 prefetch | 세션 기동 7~23초 | 중간. lease를 오래 잡음. 상시 daemon 금지 | `batch_cli.py` |
+| B5 | 묶음 | 처리→게시 한 세션, 게시 읽기 prefetch | 세션 기동 7~23초 | 중간. lease를 오래 잡음. 2026-10-25 결정으로 상주 처리기 허용(`batch-serve`) | `batch_cli.py` |
 | B6 | 묶음 | MySQL 상품별 SQL 70건 → 테이블별 일괄 INSERT | 11초 → 1~2초 | 중간~높음. 충돌 검사를 사전 조회로 완전히 이전. `ON DUPLICATE KEY` 금지 | `adapters/publication.py` |
 | C1 | 병렬 | 서로 다른 Delta 테이블 쓰기를 스레드로 동시 제출(2개) | 쓰기 대기 겹침 | 중간. 반만 남은 출력은 멱등 재실행으로 복구. Driver 메모리 | `spark_batch.py` |
 | C2 | 병렬 | 배치 n+1의 내보내기·등록·발행을 n의 처리와 동시에 | 배치당 약 55초 | 낮음 | 드라이버/NiFi |
