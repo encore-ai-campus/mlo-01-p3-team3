@@ -65,6 +65,22 @@ scope 완료는 봉인된 **해당 상품 전체**의 Gold·게시 증거로 계
 | 제어 원장 | `adapters/batch_store.py` | 파일·Mongo 저장. `quarantine_raw`만 보존 기한 삭제가 허용되고 나머지는 append-only다. |
 | 명령 | `interfaces/batch_cli.py` | NiFi가 호출하는 유한 명령과 JSON 출력 |
 
+### Spark 저장 구조와 상주 처리기 (2026-10-25, `finite-v3`)
+
+| 테이블 | 내용 | 쓰는 시점 |
+|---|---|---|
+| `input_index` | 관측별 이벤트·의존 정보·revision (원문 없음), bucket 16 분할 | Bronze, 원문보다 먼저 |
+| `input_raw` | 승인된 원문, 받은 job별 파티션 | 게시 뒤 `finalize()`. job은 이 커밋 뒤에 `COMPLETED` |
+| `products_seen` | 이력이 있는 상품 키 | Bronze 이력 커밋 뒤, 상품 패스와 겹쳐 실행하고 Gold 기록 전에 기다림 |
+| `normalized_history` | 정규화 결과(정책 identity 키) | 상품 패스 뒤, Gold와 동시 |
+| `runs/<job>/gold`, `silver_holds` | 배치 출력 | 상품 패스 뒤 |
+
+- Silver·Gold는 `product_key` 셔플 한 번 뒤 Executor의 상품 함수(`adapters/spark_product.py`)가 계산한다. native Gold(`spark_gold.py`)와 payload가 같음을 `test_spark_batch.py`가 확인한다.
+- 이력이 없던 상품은 이력 테이블을 읽지 않고 이번 job의 캐시된 색인 행만 쓴다. 정책이 바뀌어 정규화를 다시 할 관측은 상품 패스가 원문 부족을 알리고, 그 원문의 job 파티션만 읽어 해당 상품을 다시 계산한다.
+- 원문이 덜 커밋된 채 재시도되면 고정 Kafka 범위를 다시 읽어 채운다(처리 중이면 상품 패스 전, 게시 뒤면 `finalize()`).
+- `batch-serve`는 Spark 세션·원장·Kafka·lease를 한 번 열고 spool 요청을 차례로 실행한다. 시작 때 Python 작업자를 미리 띄운다. 큐가 10초 이상 비면 이력 테이블을 OPTIMIZE하고, 요청이 오면 취소한다. 상품 색인은 이 단일 writer의 메모리에 둔다.
+- `batch-abandon`은 멈추거나 시작 전인 job을 정지 증거·사유와 함께 `ABANDONED`로 닫고 대기열 예약을 푼다.
+
 ### 상태 축
 
 | 축 | 값 | 저장 위치 |

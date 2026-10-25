@@ -51,7 +51,7 @@ python -B /opt/pj3/pipeline-v2/releases/RELEASE/v2/run_pipeline.py --config /etc
 
 위 절차에 더해 유한 배치 경로는 다음을 먼저 확인한다. 이 항목도 아직 **서버에서 실행하지 않았다.**
 
-1. `batch.server.example.json`을 보호된 경로로 복사하고 `replace-with-*`를 채운다. `lake_root`는 `/direct-v2`로 끝나야 하고 Delta 출력은 그 아래 `finite-v2/`에 생긴다(2026-10-25 단일 패스 형식, 이전 `finite-v1/`은 읽지 않는다). 기존 v1 Delta와 `capture/tick` 실행기의 상태를 공유하지 않는다.
+1. `batch.server.example.json`을 보호된 경로로 복사하고 `replace-with-*`를 채운다. `lake_root`는 `/direct-v2`로 끝나야 하고 Delta 출력은 그 아래 `finite-v3/`에 생긴다(2026-10-25, 원문 분리 형식). 이전 `finite-v2/`·`finite-v1/`의 이력 테이블은 처음 쓸 때 한 번 복사하고, 이전 단계 증명은 원래 위치에서 읽는다. 기존 v1 Delta와 `capture/tick` 실행기의 상태를 공유하지 않는다.
 2. Kafka topic(`kafka.topic`)의 partition 수, retention, 최대 메시지 크기를 정한다. retention은 관측된 최대 backlog와 복구 SLA보다 길어야 한다. 실제 topic retention을 `kafka.retention_seconds`에 적으면 `batch-backlog`가 가장 오래된 미처리 batch 기준의 `kafka_retention_margin_seconds`를 보고한다. producer 옵션은 `PIPELINE_V2_KAFKA_PRODUCER_OPTIONS`, Spark Kafka 옵션은 `PIPELINE_V2_KAFKA_SPARK_OPTIONS` 환경변수 JSON에 둔다. `acks`, `enable_idempotence`, `assign`, `startingOffsets`, `endingOffsets`, `failOnDataLoss`는 코드가 고정한다. Spark에는 설치된 Spark 버전에 맞는 `spark-sql-kafka` jar가 필요하다.
 3. 제어 원장 DB(`store.database`)에 컬렉션 `pipeline_v2_<kind>`가 생긴다. 일반 처리 계정과 격리 열람 계정을 분리하고, `pipeline_v2_quarantine_raw`·`pipeline_v2_quarantine_access`는 제한 역할에만 읽기를 허용한다. TTL 인덱스로 지우지 않고 `batch-retention`으로 지운다.
 4. writer lease는 두 대상으로 나뉜다. 처리 단계는 기존과 같은 Delta writer 대상을 쓴다. 게시 전용 프로세스(`--phase publish`)는 `<lake_root>/_mysql-publication` 대상을 쓴다. 두 lease 모두 TTL 없이 운영하며, 정지 근거 없이 수동으로 지우지 않는다.
