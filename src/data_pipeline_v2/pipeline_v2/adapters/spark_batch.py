@@ -478,22 +478,42 @@ class SparkBatchProcessor:
         if not getattr(self.server_lake,'writable',True):
             raise Invalid('RAW_COMMIT_PENDING')
         with self.action('bronze.raw_recovery',job['crawl_batch_id']):
-            have = {r[0] for r in stored.select('row_key').collect()}
-            index = [r for r in self.delta.job_index(job['job_id']).collect() if r['row_key'] not in have]
-            # Bounded pages (the configured source page size), as the intake reads them.
-            size = self.limits.source_page_size
-            for start in range(0,len(index),size):
-                page = index[start:start+size]
-                events = [json.loads(r['payload_json'])['event'] for r in page]
+            # Missing keys come from Spark one row at a time (never the whole index on the
+            # driver). Source bodies are fetched in pages sized so even maximum-size events stay
+            # within the byte budget, and rows are written whenever the budget is reached.
+            budget = self.limits.outbox_chunk_bytes
+            page_size = max(1,min(self.limits.source_page_size,budget // self.limits.max_event_bytes))
+            missing = self.delta.job_index(job['job_id']).join(stored.select('row_key'),'row_key','left_anti')
+            pending, rows, amount = [], [], 0
+
+            def write():
+                self.delta.append_raw(job['job_id'],self.spark.createDataFrame(rows,
+                    'row_key string,product_key string,payload_json string'),False)
+                rows.clear()
+
+            def fetch():
+                nonlocal amount
+                events = [json.loads(r['payload_json'])['event'] for r in pending]
                 items = self.store.get_many('source',sorted({e['source_ref'] for e in events}))
-                rows = []
-                for row, event in zip(page,events):
+                for row, event in zip(pending,events):
                     item = items.get(event['source_ref'])
                     if item is None or digest(item) != event['payload_hash']:
                         raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
-                    rows.append((row['row_key'],row['product_key'],canonical(item)))
-                self.delta.append_raw(job['job_id'],self.spark.createDataFrame(rows,
-                    'row_key string,product_key string,payload_json string'),False)
+                    body = canonical(item)
+                    rows.append((row['row_key'],row['product_key'],body))
+                    amount += len(body.encode())
+                    if amount >= budget:
+                        write()
+                        amount = 0
+                pending.clear()
+            for row in missing.toLocalIterator():
+                pending.append(row)
+                if len(pending) >= page_size:
+                    fetch()
+            if pending:
+                fetch()
+            if rows:
+                write()
         stored = self.delta.raw([job['job_id']])
         if stored.select('row_key').distinct().count() < accepted:
             raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
