@@ -71,30 +71,6 @@ def resolve_partition(rows, store_config, page_size, expires=None):
             store.close()
 
 
-def background(call):
-    """Start one Spark call in its own thread (keeping the timing context and Spark local
-    properties); `join()` waits for it and raises its error."""
-    import contextvars
-    from pyspark import InheritableThread
-    state, context = {}, contextvars.copy_context()
-
-    def run():
-        try:
-            state['result'] = context.run(call)
-        except BaseException as exc:
-            state['error'] = exc
-    thread = InheritableThread(target=run)
-    thread.start()
-
-    class Handle:
-        def join(self):
-            thread.join()
-            if 'error' in state:
-                raise state['error']
-            return state.get('result')
-    return Handle()
-
-
 def deferred(call):
     """A call run on the first `join()` (and only once); later joins return or raise its outcome."""
     state = {}
@@ -145,7 +121,7 @@ class SparkBatchProcessor:
         self.retention = retention or Retention()
         self.spark = self.delta = None
         self.read_kafka = None
-        self._handoff = self._cached = self._prepared = None
+        self._handoff = self._cached = None
 
     def _open(self):
         if self.spark is None:
@@ -250,6 +226,17 @@ class SparkBatchProcessor:
                         first = job['attempts'] == 1
                         # Read before this job's rows exist: which products already had history.
                         prior = sorted(delta.registered(products))
+                        with self.action('bronze.accepted.commit',batch):
+                            # One row per event (deduplicated above), so the in-batch key check is not needed.
+                            # Keys carry this job's id: on its first attempt none can be stored yet.
+                            # The registry is written beside it and both finish before the Bronze record:
+                            # a later job that pins this Bronze always finds these products registered.
+                            # A failure in between leaves a registered product without rows, which
+                            # only makes a later batch read (empty) history: the safe direction.
+                            concurrently(dict(
+                                index=lambda:delta.append_history('input_index',accepted.drop('disposition','raw_json'),
+                                    unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first)),
+                                registry=lambda:delta.register(set(products)-set(prior))))
                         self._release_handoff()
                         # Silver/Gold take this raw from the cache. Its commit starts only after
                         # publication (finalize), so it never shares the executors with them.
@@ -257,27 +244,6 @@ class SparkBatchProcessor:
                             index=accepted.select('row_key','product_key','payload_json'),
                             commit=deferred(lambda:delta.append_raw(key,raw_of(resolved),first)))
                         handed = True
-
-                        def commit():
-                            with self.action('bronze.accepted.commit',batch):
-                                # One row per event (deduplicated above), so the in-batch key check is not needed.
-                                # Keys carry this job's id: on its first attempt none can be stored yet.
-                                # The registry is written beside it and both finish before the Bronze record:
-                                # a later job that pins this Bronze always finds these products registered.
-                                # A failure in between leaves a registered product without rows, which
-                                # only makes a later batch read (empty) history: the safe direction.
-                                concurrently(dict(
-                                    index=lambda:delta.append_history('input_index',accepted.drop('disposition','raw_json'),
-                                        unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first)),
-                                    registry=lambda:delta.register(set(products)-set(prior))))
-                        # The product pass needs none of these commits (it reads this job's rows from
-                        # the cache), so it runs while they are in flight; the Bronze record still
-                        # waits for both.
-                        committing = background(commit)
-                        try:
-                            self._prepared = (key,) + compute(dict(products=products,prior_products=prior,buckets=buckets))
-                        finally:
-                            committing.join()
                     outputs = {}
                     for table in sorted(set(METADATA_TABLES.values())):
                         names = [d for d,t in METADATA_TABLES.items() if t == table and tally.get(d,(0,))[0]]
@@ -309,11 +275,18 @@ class SparkBatchProcessor:
                 return delta.raw([])
             return self._complete_raw(job,manifest,b['counts']['accepted'])
 
-        def compute(info):
-            """The product pass for this job: the cached output frame, its tally and the bucket
-            list. Bronze runs it while its own commits are in flight (`info` is its record-to-be)."""
+        if job['kind'] == 'REPAIR':
+            b = dict(content_hash=None)
+        else:
+            b = self._stage(job,'bronze',bronze)
+
+        if (b.get('outputs') or {}).get('accepted') or (self.store.get('stage',[key,'silver']) and not self.store.get('stage',[key,'gold'])):
+            # Stage records written before the single product pass cannot be resumed by it.
+            raise Invalid('BATCH_STAGE_FORMAT_CHANGED')
+
+        def output():
             from .spark_product import product_pass
-            products = job['products'] if job['kind'] == 'REPAIR' else info['products']
+            products = job['products'] if job['kind'] == 'REPAIR' else b['products']
             wanted = set(products)
             retractions = {}
             for product, raw in pin['retractions']:
@@ -326,29 +299,28 @@ class SparkBatchProcessor:
                 # One shuffle by product: its Bronze index entries and its cached normalized rows meet
                 # in one Executor function that applies every Silver and Gold rule for that product.
                 # Bronze already listed the products' buckets; a repair computes them once here.
-                shared = {} if job['kind'] == 'REPAIR' else dict(buckets=info['buckets'])
+                shared = {} if job['kind'] == 'REPAIR' else dict(buckets=b['buckets'])
                 handoff = getattr(self,'_handoff',None)
-                if job['kind'] != 'REPAIR' and 'prior_products' in info and handoff and handoff['job'] == key:
-                    # This job's index rows come from the cache (their commit may still be running),
-                    # and only the other pinned jobs' rows are read, for products that had history.
-                    # Products seen for the first time have nothing stored, so nothing is read for them.
-                    prior = info['prior_products']
-                    mine, others = handoff['index'], pin['bronze_jobs']
+                if job['kind'] != 'REPAIR' and 'prior_products' in b and handoff and handoff['job'] == key:
+                    # Products seen for the first time have no stored history: their index rows are
+                    # this job's (still cached) and no normalization exists. Only the others are read.
+                    prior = b['prior_products']
+                    fresh = handoff['index'].join(spark.createDataFrame([(p,) for p in prior],'product_key string'),'product_key','left_anti')
                     stored = spark.createDataFrame([(p,) for p in prior],'product_key string')
                     read = dict(buckets=sorted({r[0] for r in stored.select(delta.bucket('product_key')).collect()})) if prior else None
                 else:
-                    mine, stored, read, others = None, frame, shared, allowed
+                    fresh, stored, read = None, frame, shared
                 if read is None:
                     index = delta.empty().select('product_key',F.lit(0).alias('kind'),'row_key','payload_json')
                     cached = delta.empty().select('product_key',F.lit(1).alias('kind'),'row_key','payload_json')
                 else:
                     index = delta.history('input_index',stored,read).filter(
-                        F.get_json_object('payload_json','$.origin_job').isin(others)).select(
+                        F.get_json_object('payload_json','$.origin_job').isin(allowed)).select(
                         'product_key',F.lit(0).alias('kind'),'row_key','payload_json')
                     cached = delta.history('normalized_history',stored,read).select(
                         'product_key',F.lit(1).alias('kind'),'row_key','payload_json')
-                if mine is not None:
-                    index = index.unionByName(mine.select('product_key',F.lit(0).alias('kind'),'row_key','payload_json'))
+                if fresh is not None:
+                    index = index.unionByName(fresh.select('product_key',F.lit(0).alias('kind'),'row_key','payload_json'))
                 # The raw of this job's own observations is one input_raw partition; older raw is
                 # read only for the observations the pass reports missing (a policy change).
                 own = own_raw().select('product_key',F.lit(2).alias('kind'),'row_key','payload_json')
@@ -387,48 +359,31 @@ class SparkBatchProcessor:
                         out.unpersist()
                         again.unpersist()
                         out = merged
-                return out, tally, shared
+                self._release_cache()
+                self._cached = (key,out)
+                count = lambda kind:sum(n for (k,_),n in tally.items() if k == kind)
+                kind = lambda name:out.filter(F.col('kind') == name).drop('kind')
+                def normalized():
+                    with self.action('silver.normalize_and_commit',batch):
+                        # One row per identity by construction; buckets are a subset of the products' buckets.
+                        # The pass read every stored row of these products and emits only identities not
+                        # among them, and the writer lease admits no other append in between.
+                        delta.append_history('normalized_history',kind('normalized'),
+                            unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or [],absent=True))
+
+                def gold_commit():
+                    with self.action('gold.commit',batch):
+                        return delta.snapshot(key,'gold',kind('gold'))
+                # Three independent tables: their writes and commits overlap instead of queueing.
+                writes = dict(gold=gold_commit)
+                if count('normalized'):
+                    writes['normalized'] = normalized
+                if count('hold'):
+                    writes['holds'] = lambda:delta.snapshot(key,'silver_holds',kind('hold'))
+                done = concurrently(writes)
+                proof, outputs = done['gold'], {k:v for k,v in done.items() if k == 'holds'}
             finally:
                 frame.unpersist()
-
-        if job['kind'] == 'REPAIR':
-            b = dict(content_hash=None)
-        else:
-            b = self._stage(job,'bronze',bronze)
-
-        if (b.get('outputs') or {}).get('accepted') or (self.store.get('stage',[key,'silver']) and not self.store.get('stage',[key,'gold'])):
-            # Stage records written before the single product pass cannot be resumed by it.
-            raise Invalid('BATCH_STAGE_FORMAT_CHANGED')
-
-        def output():
-            prepared, self._prepared = getattr(self,'_prepared',None), None
-            if prepared and prepared[0] == key:
-                out, tally, shared = prepared[1:]
-            else:
-                out, tally, shared = compute(b)
-            self._release_cache()
-            self._cached = (key,out)
-            count = lambda kind:sum(n for (k,_),n in tally.items() if k == kind)
-            kind = lambda name:out.filter(F.col('kind') == name).drop('kind')
-            def normalized():
-                with self.action('silver.normalize_and_commit',batch):
-                    # One row per identity by construction; buckets are a subset of the products' buckets.
-                    # The pass read every stored row of these products and emits only identities not
-                    # among them, and the writer lease admits no other append in between.
-                    delta.append_history('normalized_history',kind('normalized'),
-                        unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or [],absent=True))
-
-            def gold_commit():
-                with self.action('gold.commit',batch):
-                    return delta.snapshot(key,'gold',kind('gold'))
-            # Three independent tables: their writes and commits overlap instead of queueing.
-            writes = dict(gold=gold_commit)
-            if count('normalized'):
-                writes['normalized'] = normalized
-            if count('hold'):
-                writes['holds'] = lambda:delta.snapshot(key,'silver_holds',kind('hold'))
-            done = concurrently(writes)
-            proof, outputs = done['gold'], {k:v for k,v in done.items() if k == 'holds'}
             silver = dict(proofs=list(outputs.values()),outputs=outputs,counts=dict(valid=count('silver'),
                 quality_hold=count('hold'),history_limit=tally.get(('hold','PRODUCT_HISTORY_LIMIT'),0),
                 products=count('policy'),withdrawn=count('withdrawn')))
