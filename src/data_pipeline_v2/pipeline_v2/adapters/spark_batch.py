@@ -88,9 +88,10 @@ def deferred(call):
     return Handle()
 
 
-def concurrently(calls):
-    """Run independent Spark writes at once. Each thread keeps the caller's timing context and
-    Spark local properties; the first failure is raised after every call has finished."""
+def concurrently(calls, settle=False):
+    """Run independent Spark calls at once. Each thread keeps the caller's timing context and
+    Spark local properties; the first failure is raised after every call has finished, or with
+    `settle=True` every outcome (result or exception) is returned by name."""
     import contextvars
     from pyspark import InheritableThread
     results, errors = {}, []
@@ -100,11 +101,14 @@ def concurrently(calls):
             results[name] = context.run(call)
         except BaseException as exc:
             errors.append(exc)
+            results[name] = exc
     threads = [InheritableThread(target=run,args=(name,call,contextvars.copy_context())) for name,call in calls.items()]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
+    if settle:
+        return results
     if errors:
         raise errors[0]
     return results
@@ -209,15 +213,11 @@ class SparkBatchProcessor:
             crawl = self.store.get('crawl',batch)['crawl']
             expires = self.retention.expiry(crawl['completed_at'],'metadata')
             with self.action('kafka.offset_read_and_validate',batch):
-                wire, resolved = read_range(expires)
+                # One small aggregate (computed with the range checks) decides which destinations
+                # need a write at all, and names the accepted products.
+                wire, resolved, found = read_range(expires)
                 handed = False
                 try:
-                    # One small aggregate decides which destinations need a write at all, and
-                    # names the accepted products (the Bronze index is their only stored copy).
-                    found = resolved.groupBy('disposition').agg(F.count('*').alias('n'),
-                        F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
-                        F.sort_array(F.collect_set('product_key')).alias('products'),
-                        F.sort_array(F.collect_set(delta.bucket('product_key'))).alias('buckets')).collect()
                     tally = {r['disposition']:(int(r['n']),r['watermark']) for r in found}
                     products, buckets = next(((list(r['products']),list(r['buckets'])) for r in found if r['disposition'] == 'ACCEPTED'),([],[]))
                     accepted = resolved.filter(F.col('disposition') == 'ACCEPTED')
@@ -405,12 +405,15 @@ class SparkBatchProcessor:
 
     def _read_range(self, job, manifest, expires):
         """Fixed-offset Kafka read, every range check in one aggregate, then Executor resolve.
-        Returns the cached wire and resolved frames; the caller releases them."""
+        Returns the cached wire and resolved frames (the caller releases them) and the resolve
+        summary by disposition."""
         from pyspark.sql import functions as F
         from .kafka_batch import read_kafka
         spark, batch, key = self.spark, job['crawl_batch_id'], job['job_id']
         store_config, page_size = self.store_config, self.limits.source_page_size
-        wire = (self.read_kafka or read_kafka)(spark,self.kafka_config,manifest,self.limits.spark_partitions).persist()
+        # One read task per executor core: more splits only add a second wave and more consumers.
+        splits = max(1,min(self.limits.spark_partitions,spark.sparkContext.defaultParallelism))
+        wire = (self.read_kafka or read_kafka)(spark,self.kafka_config,manifest,splits).persist()
         # Fill the cache with one read of the fixed range first; otherwise the stages that follow
         # start together and each reads the range from the broker again.
         wire.count()
@@ -428,7 +431,25 @@ class SparkBatchProcessor:
             expected = spark.range(1).select(F.explode(F.from_json(F.lit(json.dumps(
                 [dict(_expected_id=a,_expected_hash=h,_expected_product=p) for a,h,p in inventory])),
                 'array<struct<_expected_id:string,_expected_hash:string,_expected_product:string>>')).alias('x')).select('x.*')
-            flags = self.validate_range(decoded,batch,expected)
+            # dropDuplicates resolves top-level names only; lift the nested event id first.
+            # Events are validated inside resolve_partition, not by a separate Python UDF stage.
+            events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
+                F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
+                F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
+            resolved = spark.createDataFrame(events.rdd.mapPartitions(
+                lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
+                'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
+            # The range checks and the resolve summary read the same cached range and do not
+            # depend on each other, so they run at once. A range violation still wins over
+            # whatever resolve reported, keeping the checks' precedence.
+            done = concurrently(dict(flags=lambda:self.validate_range(decoded,batch,expected),
+                found=lambda:resolved.groupBy('disposition').agg(F.count('*').alias('n'),
+                    F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
+                    F.sort_array(F.collect_set('product_key')).alias('products'),
+                    F.sort_array(F.collect_set(self.delta.bucket('product_key'))).alias('buckets')).collect()),settle=True)
+            flags = done['flags']
+            if isinstance(flags,BaseException):
+                raise flags
             # Same precedence as the separate checks this one aggregate replaces.
             if flags['unclassifiable']:
                 raise Invalid('KAFKA_RANGE_UNCLASSIFIABLE_EVENT')
@@ -438,18 +459,14 @@ class SparkBatchProcessor:
                 raise Invalid('EVENT_ID_CONFLICT')
             if flags['mismatch']:
                 raise Invalid('KAFKA_EVENT_SET_MISMATCH')
+            if isinstance(done['found'],BaseException):
+                raise done['found']
         except BaseException:
+            if 'resolved' in locals():
+                resolved.unpersist()
             wire.unpersist()
             raise
-        # dropDuplicates resolves top-level names only; lift the nested event id first.
-        # Events are validated inside resolve_partition, not by a separate Python UDF stage.
-        events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
-            F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
-            F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
-        resolved = spark.createDataFrame(events.rdd.mapPartitions(
-            lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
-            'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
-        return wire, resolved
+        return wire, resolved, done['found']
 
     @staticmethod
     def _raw_of(resolved):
