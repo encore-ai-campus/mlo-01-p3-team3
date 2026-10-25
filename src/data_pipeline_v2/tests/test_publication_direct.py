@@ -26,6 +26,15 @@ class DirectSQLTests(unittest.TestCase):
         engine.publisher=publisher
         return engine,publisher.db
 
+    def test_batched_readback_records_equal_the_per_product_readback(self):
+        from pipeline_v2.adapters.sql_audit import service_rows, service_rows_many
+        engine,db=self.sql_engine();self.assertEqual(self.finish(engine)['status'],'COMPLETED')
+        key=engine._index(engine.state.scope('initial'),0)[0]
+        delivery=read(engine.state.root/'jobs'/key/'delivery.json')
+        product=engine.processor.materialize(delivery['gold'])
+        items=[(product,key)]
+        self.assertEqual(service_rows_many(db,items),[service_rows(db,product,key)])
+
     def test_sql_direct_write_strict_schema_and_tamper_audit(self):
         engine,db=self.sql_engine();result=self.finish(engine)
         self.assertEqual(result['status'],'COMPLETED')

@@ -78,6 +78,27 @@ class DirectMySQL(MySQL):
                     raise Invalid('MYSQL_PREFETCH_DUPLICATE_KEY')
                 self._read_cache[(table,canonical(body),True)] = matches[0] if matches else None
 
+    def fetch_many(self,table,keys):
+        """Plain (non-locking) keyed reads in chunks of 100: canonical(key) -> row or None."""
+        if table not in USED:
+            raise Invalid('MYSQL_PREFETCH_KEY_INVALID')
+        if getattr(self,'_pending',None):
+            self.flush()
+        found = {}
+        for start in range(0,len(keys),100):
+            chunk = keys[start:start+100]
+            for body in chunk:
+                if not body or any(k not in TABLES[table] for k in body):
+                    raise Invalid('MYSQL_PREFETCH_KEY_INVALID')
+            where = ' OR '.join('('+' AND '.join('`'+k+'`=%s' for k in body)+')' for body in chunk)
+            rows = self.all('SELECT * FROM `'+table+'` WHERE '+where,tuple(v for body in chunk for v in body.values()))
+            for body in chunk:
+                matches = [r for r in rows if all(r[k] == v for k,v in body.items())]
+                if len(matches) > 1:
+                    raise Invalid('MYSQL_PREFETCH_DUPLICATE_KEY')
+                found[canonical(body)] = matches[0] if matches else None
+        return found
+
     def _invalidate(self,table,identity):
         cache = getattr(self,'_read_cache',None)
         if cache is not None:

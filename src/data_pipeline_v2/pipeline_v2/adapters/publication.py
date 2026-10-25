@@ -9,7 +9,7 @@ from contextlib import nullcontext
 
 from ..domain.contracts import canonical, digest, seal, verified, stamp, Invalid
 from .files import read, write, immutable, locked
-from .sql_audit import service_rows, verify_service
+from .sql_audit import service_rows, service_rows_many, verify_service
 
 
 class FilePublisher:
@@ -208,6 +208,7 @@ class MySQLPublisher:
                 db.prefetch('offers',[dict(offer_key=o['identity']['offer_key']) for g in ready for o in g['offers']])
                 db.prefetch('offer_snapshots',[dict(snapshot_key=price_snapshot_key(p)) for g in ready for p in offer_prices(g)])
                 at = db.one('SELECT UTC_TIMESTAMP(3) AS stamp')['stamp']
+                done = []
                 for delivery in ordered:
                     key,group = delivery['job_id'],delivery['product']
                     self._active_job = key
@@ -230,8 +231,14 @@ class MySQLPublisher:
                         except StaleInput:
                             # An older finite batch never overwrites a newer published version.
                             resolution = 'LAST_GOOD_RETAINED'
-                    with self._stage('mysql.service_readback',scope,key):
-                        records = service_rows(db,group,key) if resolution == 'PUBLISHED' else []
+                    done.append((delivery,saved,body_hash,resolution))
+                # All products are projected; their service rows are read back together.
+                with self._stage('mysql.service_readback',scope):
+                    published = [(d['product'],d['job_id']) for d,_,_,r in done if r == 'PUBLISHED']
+                    readback = dict(zip([k for _,k in published],service_rows_many(db,published)))
+                for delivery,saved,body_hash,resolution in done:
+                    key = delivery['job_id']
+                    records = readback.get(key,[]) if resolution == 'PUBLISHED' else []
                     db.update('pipeline_publications',dict(plan_id=key),dict(status='COMPLETED',completed_at=at,
                         gold_versions_json=canonical(dict(contract_version=3,proofs=delivery['gold']['proofs'],resolution=resolution,service_rows=records))))
                     receipts[key] = seal(dict(job_id=key,product_hash=body_hash,publication_id=saved['id'],resolution=resolution))
