@@ -71,24 +71,17 @@ def resolve_partition(rows, store_config, page_size, expires=None):
             store.close()
 
 
-def background(call):
-    """Start one Spark call in its own thread (keeping the timing context and Spark local
-    properties); `join()` waits for it and raises its error."""
-    import contextvars
-    from pyspark import InheritableThread
-    state, context = {}, contextvars.copy_context()
-
-    def run():
-        try:
-            state['result'] = context.run(call)
-        except BaseException as exc:
-            state['error'] = exc
-    thread = InheritableThread(target=run)
-    thread.start()
+def deferred(call):
+    """A call run on the first `join()` (and only once); later joins return or raise its outcome."""
+    state = {}
 
     class Handle:
         def join(self):
-            thread.join()
+            if not state:
+                try:
+                    state['result'] = call()
+                except BaseException as exc:
+                    state['error'] = exc
             if 'error' in state:
                 raise state['error']
             return state.get('result')
@@ -224,11 +217,11 @@ class SparkBatchProcessor:
                             # Keys carry this job's id: on its first attempt none can be stored yet.
                             delta.append_history('input_index',accepted.drop('disposition','raw_json'),
                                 unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first))
-                        # The raw commit runs beside Silver/Gold, which take this raw from the cache;
-                        # the Gold record is written only after it (a retry completes a missing one).
+                        # Silver/Gold take this raw from the cache. Its commit starts only after
+                        # publication (finalize), so it never shares the executors with them.
                         self._release_handoff()
                         self._handoff = dict(job=key,frames=[wire,resolved],raw=raw_of(resolved),
-                            commit=background(lambda:delta.append_raw(key,raw_of(resolved),first)))
+                            commit=deferred(lambda:delta.append_raw(key,raw_of(resolved),first)))
                         handed = True
                     outputs = {}
                     for table in sorted(set(METADATA_TABLES.values())):
@@ -364,7 +357,7 @@ class SparkBatchProcessor:
         except BaseException:
             self._release_handoff()
             raise
-        # The raw commit keeps running through publication; finalize() waits for it.
+        # The raw commit runs after publication; finalize() runs it.
         if not self.store.get('stage',[key,'silver']):
             # Derived from the Gold record alone, so writing it again after a crash is identical.
             self.store.put('stage',[key,'silver'],seal(dict(g['silver'],stage='silver',status='COMPLETE',job_id=key,
