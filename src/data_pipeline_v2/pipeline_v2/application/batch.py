@@ -283,6 +283,11 @@ class BatchRunner:
                         completed_at=stamp(),code_version=CODE_VERSION))
                     self.store.put('stage',[key,'publication'],published)
             completed = published['completed_at']
+            finalize = getattr(self.processor,'finalize',None)
+            if finalize:
+                # Work kept off the visible path (the raw commit) is durable before the job closes.
+                with self.timing.measure('batch.finalize',batch):
+                    finalize(job)
             job = self.store.mutate('job',key,lambda old:dict(old,status='COMPLETED',completed_at=completed))
             self._release(key)
             if job['kind'] == 'CRAWL':

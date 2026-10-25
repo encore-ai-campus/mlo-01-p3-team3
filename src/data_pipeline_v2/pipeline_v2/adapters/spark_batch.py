@@ -124,6 +124,7 @@ class SparkBatchProcessor:
         self.retention = retention or Retention()
         self.spark = self.delta = None
         self.read_kafka = None
+        self._handoff = self._cached = None
 
     def _open(self):
         if self.spark is None:
@@ -197,45 +198,8 @@ class SparkBatchProcessor:
         store_config, page_size = self.store_config, self.limits.source_page_size
         reader = self.read_kafka or read_kafka
 
-        def read_range(expires):
-            """Fixed-offset Kafka read, every range check in one aggregate, then Executor resolve.
-            Returns the cached wire and resolved frames; the caller releases them."""
-            wire = reader(spark,self.kafka_config,manifest,self.limits.spark_partitions).persist()
-            schema = 'crawl_batch_id string, event_id string, payload_hash string, product_key string'
-            decoded = wire.withColumn('e',F.from_json('value',schema))
-            selected = decoded.filter(F.col('e.crawl_batch_id') == batch)
-            # Do not silently skip undecodable records in a selected physical range.
-            # Other batches may interleave; malformed records cannot be assigned safely.
-            inventory = [(v['event_id'],v['payload_hash'],v['product_key']) for v in manifest['inventory']]
-            try:
-                if len({v[0] for v in inventory}) != len(inventory):
-                    raise Invalid('KAFKA_EVENT_SET_MISMATCH')
-                flags = self.validate_range(decoded,batch,spark.createDataFrame(
-                    inventory,'_expected_id string,_expected_hash string,_expected_product string'))
-                # Same precedence as the separate checks this one aggregate replaces.
-                if flags['unclassifiable']:
-                    raise Invalid('KAFKA_RANGE_UNCLASSIFIABLE_EVENT')
-                if flags['key_mismatch']:
-                    raise Invalid('KAFKA_KEY_MISMATCH')
-                if flags['conflict']:
-                    raise Invalid('EVENT_ID_CONFLICT')
-                if flags['mismatch']:
-                    raise Invalid('KAFKA_EVENT_SET_MISMATCH')
-            except BaseException:
-                wire.unpersist()
-                raise
-            # dropDuplicates resolves top-level names only; lift the nested event id first.
-            # Events are validated inside resolve_partition, not by a separate Python UDF stage.
-            events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
-                F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
-                F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
-            resolved = spark.createDataFrame(events.rdd.mapPartitions(
-                lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
-                'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
-            return wire, resolved
-
-        def raw_of(resolved):
-            return resolved.filter(F.col('disposition') == 'ACCEPTED').select('row_key','product_key',F.col('raw_json').alias('payload_json'))
+        raw_of = self._raw_of
+        read_range = lambda expires:self._read_range(job,manifest,expires)
 
         def bronze():
             crawl = self.store.get('crawl',batch)['crawl']
@@ -287,25 +251,14 @@ class SparkBatchProcessor:
                         wire.unpersist()
 
         def own_raw():
-            """This job's raw for the product pass: the cache when Bronze ran here, else its partition."""
+            """This job's raw for the product pass: the cache when Bronze ran here, else its partition
+            (completed from the fixed range if the Bronze-time commit did not finish)."""
             handoff = getattr(self,'_handoff',None)
             if handoff and handoff['job'] == key:
                 return handoff['raw']
             if job['kind'] == 'REPAIR':
                 return delta.raw([])
-            stored = delta.raw([key])
-            if stored.count() < b['counts']['accepted']:
-                # Bronze was recorded but its raw commit did not finish: read the range again.
-                crawl = self.store.get('crawl',batch)['crawl']
-                with self.action('bronze.raw_recovery',batch):
-                    wire, resolved = read_range(self.retention.expiry(crawl['completed_at'],'metadata'))
-                    try:
-                        delta.append_raw(key,raw_of(resolved),False)
-                    finally:
-                        resolved.unpersist()
-                        wire.unpersist()
-                stored = delta.raw([key])
-            return stored
+            return self._complete_raw(job,manifest,b['counts']['accepted'])
 
         if job['kind'] == 'REPAIR':
             b = dict(content_hash=None)
@@ -400,10 +353,6 @@ class SparkBatchProcessor:
                 proof, outputs = done['gold'], {k:v for k,v in done.items() if k == 'holds'}
             finally:
                 frame.unpersist()
-            handoff = getattr(self,'_handoff',None)
-            if handoff and handoff['job'] == key:
-                # The raw commit must be durable before the Gold record says this job is done.
-                handoff['commit'].join()
             silver = dict(proofs=list(outputs.values()),outputs=outputs,counts=dict(valid=count('silver'),
                 quality_hold=count('hold'),history_limit=tally.get(('hold','PRODUCT_HISTORY_LIMIT'),0),
                 products=count('policy'),withdrawn=count('withdrawn')))
@@ -412,15 +361,99 @@ class SparkBatchProcessor:
                 rule_version=VERSION,counts=dict(products=proof['count'],**outcomes),silver=silver)
         try:
             g = self._stage(job,'gold',output,parent=b['content_hash'])
-        finally:
-            # Bronze's cached frames and raw commit end with this job (a failed commit was raised above).
+        except BaseException:
             self._release_handoff()
+            raise
+        # The raw commit keeps running through publication; finalize() waits for it.
         if not self.store.get('stage',[key,'silver']):
             # Derived from the Gold record alone, so writing it again after a crash is identical.
             self.store.put('stage',[key,'silver'],seal(dict(g['silver'],stage='silver',status='COMPLETE',job_id=key,
                 parent=b['content_hash'],attempts=g['attempts'],started_at=g['started_at'],completed_at=g['completed_at'],
                 code_version=g['code_version'],spark_application_id=g['spark_application_id'])))
         return g
+
+    def _read_range(self, job, manifest, expires):
+        """Fixed-offset Kafka read, every range check in one aggregate, then Executor resolve.
+        Returns the cached wire and resolved frames; the caller releases them."""
+        from pyspark.sql import functions as F
+        from .kafka_batch import read_kafka
+        spark, batch, key = self.spark, job['crawl_batch_id'], job['job_id']
+        store_config, page_size = self.store_config, self.limits.source_page_size
+        wire = (self.read_kafka or read_kafka)(spark,self.kafka_config,manifest,self.limits.spark_partitions).persist()
+        schema = 'crawl_batch_id string, event_id string, payload_hash string, product_key string'
+        decoded = wire.withColumn('e',F.from_json('value',schema))
+        selected = decoded.filter(F.col('e.crawl_batch_id') == batch)
+        # Do not silently skip undecodable records in a selected physical range.
+        # Other batches may interleave; malformed records cannot be assigned safely.
+        inventory = [(v['event_id'],v['payload_hash'],v['product_key']) for v in manifest['inventory']]
+        try:
+            if len({v[0] for v in inventory}) != len(inventory):
+                raise Invalid('KAFKA_EVENT_SET_MISMATCH')
+            flags = self.validate_range(decoded,batch,spark.createDataFrame(
+                inventory,'_expected_id string,_expected_hash string,_expected_product string'))
+            # Same precedence as the separate checks this one aggregate replaces.
+            if flags['unclassifiable']:
+                raise Invalid('KAFKA_RANGE_UNCLASSIFIABLE_EVENT')
+            if flags['key_mismatch']:
+                raise Invalid('KAFKA_KEY_MISMATCH')
+            if flags['conflict']:
+                raise Invalid('EVENT_ID_CONFLICT')
+            if flags['mismatch']:
+                raise Invalid('KAFKA_EVENT_SET_MISMATCH')
+        except BaseException:
+            wire.unpersist()
+            raise
+        # dropDuplicates resolves top-level names only; lift the nested event id first.
+        # Events are validated inside resolve_partition, not by a separate Python UDF stage.
+        events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
+            F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
+            F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
+        resolved = spark.createDataFrame(events.rdd.mapPartitions(
+            lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
+            'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
+        return wire, resolved
+
+    @staticmethod
+    def _raw_of(resolved):
+        from pyspark.sql import functions as F
+        return resolved.filter(F.col('disposition') == 'ACCEPTED').select('row_key','product_key',F.col('raw_json').alias('payload_json'))
+
+    def _complete_raw(self, job, manifest, accepted):
+        """Make this job's raw partition whole: re-read the fixed range only if rows are missing."""
+        stored = self.delta.raw([job['job_id']])
+        if stored.count() >= accepted:
+            return stored
+        crawl = self.store.get('crawl',job['crawl_batch_id'])['crawl']
+        with self.action('bronze.raw_recovery',job['crawl_batch_id']):
+            wire, resolved = self._read_range(job,manifest,self.retention.expiry(crawl['completed_at'],'metadata'))
+            try:
+                self.delta.append_raw(job['job_id'],self._raw_of(resolved),False)
+            finally:
+                resolved.unpersist()
+                wire.unpersist()
+        return self.delta.raw([job['job_id']])
+
+    def finalize(self, job):
+        """Before a job is marked complete: its raw commit (deferred past publication, which does
+        not need it) is durable. A worker that did not run Bronze checks and completes it."""
+        if job['kind'] == 'REPAIR':
+            return
+        self._open()
+        handoff = getattr(self,'_handoff',None)
+        if handoff and handoff['job'] == job['job_id']:
+            try:
+                handoff['commit'].join()
+                return
+            except BaseException:
+                pass
+            finally:
+                self._release_handoff()
+        bronze = self.store.get('stage',[job['job_id'],'bronze'])
+        if not bronze or not bronze.get('counts',{}).get('accepted'):
+            return
+        from ..domain.batch import delivery_contract
+        manifest = delivery_contract(self.store.get('delivery',[job['crawl_batch_id'],job['generation']]))
+        self._complete_raw(job,manifest,bronze['counts']['accepted'])
 
     def _release_handoff(self):
         handoff, self._handoff = getattr(self,'_handoff',None), None
@@ -504,4 +537,7 @@ class SparkBatchProcessor:
             self.spark.sparkContext.cancelAllJobs()
 
     def close(self):
+        # A process-only worker ends here: let a running raw commit finish before Spark stops
+        # (a failure is completed later by finalize()).
+        self._release_handoff()
         self.server_lake.close()
