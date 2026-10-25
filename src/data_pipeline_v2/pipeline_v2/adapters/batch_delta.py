@@ -59,7 +59,7 @@ class BatchDelta:
         self.fence()
         with self._step('history.' + name + '.carry_v1'):
             (self.spark.read.format('delta').load(old).select('row_key','product_key','payload_json','record_hash')
-                .withColumn('bucket',self.bucket('product_key')).write.format('delta').mode('append')
+                .withColumn('bucket',self.bucket('product_key')).repartition('bucket').write.format('delta').mode('append')
                 .partitionBy('bucket').save(path))
         self.fence()
         self.known.add(path)
@@ -130,7 +130,8 @@ class BatchDelta:
 
     def append_history(self, name, frame, unique=None):
         """Keyed immutable append. `unique` = dict(keys=, buckets=) when the caller built the frame
-        with one row per row_key and already counted it: the in-batch key check is then skipped."""
+        with one row per row_key and already counted it: the in-batch key check is then skipped.
+        `absent=True` in it also states no key is stored yet, so the stored-key join is skipped."""
         from pyspark.sql import functions as F
         path = self._path(name)
         encoded = self.encode(frame).persist()
@@ -152,7 +153,7 @@ class BatchDelta:
             fresh = keys['keys']
             with self._step(step + '.exists'):
                 exists = self._exists(path)
-            if exists and fresh:
+            if exists and fresh and not (unique or {}).get('absent'):
                 # Only the buckets this write touches are read, so partition pruning applies and the
                 # accumulated history is not scanned. One join and one aggregate serve the conflict
                 # check and the new-row count; the new-row filter reuses the cached join.
@@ -169,12 +170,31 @@ class BatchDelta:
             self.fence()
             if fresh:
                 with self._step(step + '.write'):
-                    encoded.write.format('delta').mode('append').partitionBy('bucket').save(path)
+                    # One file per touched bucket: every later history read opens each file on S3.
+                    encoded.repartition('bucket').write.format('delta').mode('append').partitionBy('bucket').save(path)
                 self.known.add(path)
             self.fence()
         finally:
             for frame in cached:
                 frame.unpersist()
+
+    def compact(self, name):
+        """Merge a history table's small files (Delta OPTIMIZE, bin-packing per bucket).
+
+        Reads are latency-bound on S3 (one open per file), so many small appended files cost more
+        than their bytes. Compaction rewrites data only; old files stay for time travel.
+        """
+        from delta.tables import DeltaTable
+        path = self._path(name)
+        if not self._exists(path):
+            return None
+        self.fence()
+        with self._step('history.' + name + '.compact') as counts:
+            result = DeltaTable.forPath(self.spark,path).optimize().executeCompaction().first()
+            metrics = result['metrics'].asDict() if result is not None else {}
+            counts.update(files_removed=int(metrics.get('numFilesRemoved') or 0),files_added=int(metrics.get('numFilesAdded') or 0))
+        self.fence()
+        return dict(files_removed=counts['files_removed'],files_added=counts['files_added'])
 
     def snapshot(self, job_id, stage, frame):
         from pyspark.sql import functions as F

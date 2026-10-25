@@ -205,7 +205,9 @@ class SparkBatchProcessor:
                         if products:
                             with self.action('bronze.accepted.commit',batch):
                                 # One row per event (deduplicated above), so the in-batch key check is not needed.
-                                delta.append_history('input_index',accepted,unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets))
+                                # Keys carry this job's id: on its first attempt none can be stored yet.
+                                delta.append_history('input_index',accepted,unique=dict(keys=tally['ACCEPTED'][0],
+                                    buckets=buckets,absent=job['attempts'] == 1))
                         outputs = {}
                         for table in sorted(set(METADATA_TABLES.values())):
                             names = [d for d,t in METADATA_TABLES.items() if t == table and tally.get(d,(0,))[0]]
@@ -270,8 +272,10 @@ class SparkBatchProcessor:
                 if count('normalized'):
                     with self.action('silver.normalize_and_commit',batch):
                         # One row per identity by construction; buckets are a subset of the products' buckets.
+                        # The pass read every stored row of these products and emits only identities not
+                        # among them, and the writer lease admits no other append in between.
                         delta.append_history('normalized_history',kind('normalized'),
-                            unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or []))
+                            unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or [],absent=True))
                 outputs = {}
                 if count('hold'):
                     outputs['holds'] = delta.snapshot(key,'silver_holds',kind('hold'))
@@ -351,6 +355,12 @@ class SparkBatchProcessor:
     def purge_quarantine_metadata(self, now):
         self._open()
         return sum(self.delta.purge(table,now) for table in sorted(set(METADATA_TABLES.values())))
+
+    def compact(self):
+        """Idle-time maintenance of the history tables every batch reads."""
+        self._open()
+        with self.timing.measure('serve.history_compaction','maintenance'):
+            return {name:self.delta.compact(name) for name in ('input_index','normalized_history')}
 
     def close(self):
         self.server_lake.close()

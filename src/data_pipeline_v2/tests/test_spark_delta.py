@@ -251,6 +251,22 @@ class RealDeltaBatchTests(unittest.TestCase):
             self.delta.snapshot('job-1','probe',self.encoded([('k1','danawa:11','{"a":1}')]))
         self.delta.audit(proof)
 
+    def test_history_writes_one_file_per_bucket_and_compaction_keeps_rows(self):
+        path = self.delta._path('input_index')
+        rows = [('k%d' % i,'danawa:%d' % (i % 5),'{"a":%d}' % i) for i in range(40)]
+        for start in range(0,40,10):
+            self.delta.append_history('input_index',self.encoded(rows[start:start+10]))
+        buckets = len({r[4] for r in self.rows(self.spark.read.format('delta').load(path))})
+        before = self.files(path)
+        # Four appends, each at most one file per touched bucket.
+        self.assertLessEqual(before,4*buckets)
+        stored = self.rows(self.spark.read.format('delta').load(path))
+        result = self.delta.compact('input_index')
+        self.assertEqual(self.rows(self.spark.read.format('delta').load(path)),stored)
+        self.assertGreater(result['files_removed'],result['files_added'])
+        self.assertEqual(result['files_added'],buckets)
+        self.assertIsNone(self.delta.compact('normalized_history'))
+
     def test_v1_history_is_carried_rebucketed_and_v1_proofs_still_load(self):
         class V1(BatchDelta):
             NAMESPACE, LEGACY, BUCKETS = 'finite-v1', 'finite-v0', 128

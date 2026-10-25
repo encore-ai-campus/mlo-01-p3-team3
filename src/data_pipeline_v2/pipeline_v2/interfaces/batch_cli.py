@@ -101,10 +101,28 @@ def serve(args, parser, runner, outbox):
     warm = getattr(runner.processor,'_open',None)
     if warm:
         warm()
-    served = 0
+    # History compaction runs only after the queue has been idle for a while (at start and after
+    # processed batches), so a batch's process and publish requests are never split by it.
+    compact = getattr(runner.processor,'compact',None)
+
+    def maintain():
+        try:
+            compact()
+        except Exception as exc:
+            write(args.spool/'compaction-failed.json',dict(error_code=error_code(exc)))
+        finally:
+            runner.timing.flush()
+    if compact:
+        # Before the first request too: tables left fragmented by earlier runs are read by it.
+        maintain()
+    dirty, last, served = False, time.monotonic(), 0
     while not (args.spool/'stop').exists():
         pending = sorted(inbox.glob('*.json'))
         if not pending:
+            if dirty and time.monotonic() - last >= args.compact_idle_seconds:
+                dirty = False
+                maintain()
+                continue
             time.sleep(args.poll_seconds)
             continue
         request, started = pending[0], time.monotonic()
@@ -118,10 +136,12 @@ def serve(args, parser, runner, outbox):
             if inner.command in {'batch-serve','metrics','spark-metrics'}:
                 raise Invalid('SERVE_COMMAND_UNSUPPORTED')
             result = dispatch(inner,runner,outbox)
+            dirty = dirty or (compact is not None and inner.command in {'batch-work','batch-repair'})
         except Exception as exc:
             result = dict(status='FAILED',error_code=error_code(exc))
         finally:
             runner.timing.flush()
+            last = time.monotonic()
         write(answers/request.name,dict(request=request.stem,wall_ms=round((time.monotonic()-started)*1000,1),result=result))
         request.unlink()
         served += 1
@@ -171,6 +191,7 @@ def build_parser():
     serve = commands.add_parser('batch-serve',help='상주 처리기: Spark 세션·원장·Kafka 연결을 유지하고 spool 요청을 차례로 실행')
     serve.add_argument('--spool',type=Path,required=True)
     serve.add_argument('--poll-seconds',type=float,default=0.2)
+    serve.add_argument('--compact-idle-seconds',type=float,default=10.0)
     for name,command in commands.choices.items():
         if name not in READ_ONLY:
             command.add_argument('--apply',action='store_true')
