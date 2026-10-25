@@ -210,17 +210,24 @@ class SparkBatchProcessor:
                     tally = {r['disposition']:(int(r['n']),r['watermark']) for r in found}
                     products, buckets = next(((list(r['products']),list(r['buckets'])) for r in found if r['disposition'] == 'ACCEPTED'),([],[]))
                     accepted = resolved.filter(F.col('disposition') == 'ACCEPTED')
+                    prior = []
                     if products:
                         first = job['attempts'] == 1
+                        # Read before this job's rows exist: which products already had history.
+                        prior = sorted(delta.registered(spark.createDataFrame([(p,) for p in products],'product_key string'),
+                            dict(buckets=buckets)))
                         with self.action('bronze.accepted.commit',batch):
                             # One row per event (deduplicated above), so the in-batch key check is not needed.
                             # Keys carry this job's id: on its first attempt none can be stored yet.
                             delta.append_history('input_index',accepted.drop('disposition','raw_json'),
                                 unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first))
+                            # Only after the index rows: the registry never names a product without history.
+                            delta.register(set(products)-set(prior),buckets)
                         # Silver/Gold take this raw from the cache. Its commit starts only after
                         # publication (finalize), so it never shares the executors with them.
                         self._release_handoff()
                         self._handoff = dict(job=key,frames=[wire,resolved],raw=raw_of(resolved),
+                            index=accepted.select('row_key','product_key','payload_json'),
                             commit=deferred(lambda:delta.append_raw(key,raw_of(resolved),first)))
                         handed = True
                     outputs = {}
@@ -234,7 +241,8 @@ class SparkBatchProcessor:
                             delta.append_history(table,frame)
                         outputs[table] = dict(delta.digest_rows(frame),expires_at=expires)
                     counts = dict(accepted=tally.get('ACCEPTED',(0,))[0],**{d.lower():v[0] for d,v in tally.items() if d != 'ACCEPTED'})
-                    return dict(format=2,proofs=[],products=products,buckets=buckets,metadata_outputs=outputs,counts=counts,
+                    return dict(format=2,proofs=[],products=products,prior_products=prior,buckets=buckets,
+                        metadata_outputs=outputs,counts=counts,
                         input=dict(delivery_hash=manifest['content_hash'],event_set_hash=manifest['event_set_hash'],
                             generation=manifest['generation']),
                         source_version_watermark=tally.get('ACCEPTED',(0,None))[1])
@@ -278,11 +286,27 @@ class SparkBatchProcessor:
                 # in one Executor function that applies every Silver and Gold rule for that product.
                 # Bronze already listed the products' buckets; a repair computes them once here.
                 shared = {} if job['kind'] == 'REPAIR' else dict(buckets=b['buckets'])
-                index = delta.history('input_index',frame,shared).filter(
-                    F.get_json_object('payload_json','$.origin_job').isin(allowed)).select(
-                    'product_key',F.lit(0).alias('kind'),'row_key','payload_json')
-                cached = delta.history('normalized_history',frame,shared).select(
-                    'product_key',F.lit(1).alias('kind'),'row_key','payload_json')
+                handoff = getattr(self,'_handoff',None)
+                if job['kind'] != 'REPAIR' and 'prior_products' in b and handoff and handoff['job'] == key:
+                    # Products seen for the first time have no stored history: their index rows are
+                    # this job's (still cached) and no normalization exists. Only the others are read.
+                    prior = b['prior_products']
+                    fresh = handoff['index'].join(spark.createDataFrame([(p,) for p in prior],'product_key string'),'product_key','left_anti')
+                    stored = spark.createDataFrame([(p,) for p in prior],'product_key string')
+                    read = dict(buckets=sorted({r[0] for r in stored.select(delta.bucket('product_key')).collect()})) if prior else None
+                else:
+                    fresh, stored, read = None, frame, shared
+                if read is None:
+                    index = delta.empty().select('product_key',F.lit(0).alias('kind'),'row_key','payload_json')
+                    cached = delta.empty().select('product_key',F.lit(1).alias('kind'),'row_key','payload_json')
+                else:
+                    index = delta.history('input_index',stored,read).filter(
+                        F.get_json_object('payload_json','$.origin_job').isin(allowed)).select(
+                        'product_key',F.lit(0).alias('kind'),'row_key','payload_json')
+                    cached = delta.history('normalized_history',stored,read).select(
+                        'product_key',F.lit(1).alias('kind'),'row_key','payload_json')
+                if fresh is not None:
+                    index = index.unionByName(fresh.select('product_key',F.lit(0).alias('kind'),'row_key','payload_json'))
                 # The raw of this job's own observations is one input_raw partition; older raw is
                 # read only for the observations the pass reports missing (a policy change).
                 own = own_raw().select('product_key',F.lit(2).alias('kind'),'row_key','payload_json')
