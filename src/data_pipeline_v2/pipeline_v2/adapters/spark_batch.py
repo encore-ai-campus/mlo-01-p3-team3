@@ -71,6 +71,30 @@ def resolve_partition(rows, store_config, page_size, expires=None):
             store.close()
 
 
+def background(call):
+    """Start one Spark call in its own thread (keeping the timing context and Spark local
+    properties); `join()` waits for it and raises its error."""
+    import contextvars
+    from pyspark import InheritableThread
+    state, context = {}, contextvars.copy_context()
+
+    def run():
+        try:
+            state['result'] = context.run(call)
+        except BaseException as exc:
+            state['error'] = exc
+    thread = InheritableThread(target=run)
+    thread.start()
+
+    class Handle:
+        def join(self):
+            thread.join()
+            if 'error' in state:
+                raise state['error']
+            return state.get('result')
+    return Handle()
+
+
 def concurrently(calls):
     """Run independent Spark writes at once. Each thread keeps the caller's timing context and
     Spark local properties; the first failure is raised after every call has finished."""
@@ -173,78 +197,116 @@ class SparkBatchProcessor:
         store_config, page_size = self.store_config, self.limits.source_page_size
         reader = self.read_kafka or read_kafka
 
+        def read_range(expires):
+            """Fixed-offset Kafka read, every range check in one aggregate, then Executor resolve.
+            Returns the cached wire and resolved frames; the caller releases them."""
+            wire = reader(spark,self.kafka_config,manifest,self.limits.spark_partitions).persist()
+            schema = 'crawl_batch_id string, event_id string, payload_hash string, product_key string'
+            decoded = wire.withColumn('e',F.from_json('value',schema))
+            selected = decoded.filter(F.col('e.crawl_batch_id') == batch)
+            # Do not silently skip undecodable records in a selected physical range.
+            # Other batches may interleave; malformed records cannot be assigned safely.
+            inventory = [(v['event_id'],v['payload_hash'],v['product_key']) for v in manifest['inventory']]
+            try:
+                if len({v[0] for v in inventory}) != len(inventory):
+                    raise Invalid('KAFKA_EVENT_SET_MISMATCH')
+                flags = self.validate_range(decoded,batch,spark.createDataFrame(
+                    inventory,'_expected_id string,_expected_hash string,_expected_product string'))
+                # Same precedence as the separate checks this one aggregate replaces.
+                if flags['unclassifiable']:
+                    raise Invalid('KAFKA_RANGE_UNCLASSIFIABLE_EVENT')
+                if flags['key_mismatch']:
+                    raise Invalid('KAFKA_KEY_MISMATCH')
+                if flags['conflict']:
+                    raise Invalid('EVENT_ID_CONFLICT')
+                if flags['mismatch']:
+                    raise Invalid('KAFKA_EVENT_SET_MISMATCH')
+            except BaseException:
+                wire.unpersist()
+                raise
+            # dropDuplicates resolves top-level names only; lift the nested event id first.
+            # Events are validated inside resolve_partition, not by a separate Python UDF stage.
+            events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
+                F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
+                F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
+            resolved = spark.createDataFrame(events.rdd.mapPartitions(
+                lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
+                'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
+            return wire, resolved
+
+        def raw_of(resolved):
+            return resolved.filter(F.col('disposition') == 'ACCEPTED').select('row_key','product_key',F.col('raw_json').alias('payload_json'))
+
         def bronze():
             crawl = self.store.get('crawl',batch)['crawl']
             expires = self.retention.expiry(crawl['completed_at'],'metadata')
             with self.action('kafka.offset_read_and_validate',batch):
-                wire = reader(spark,self.kafka_config,manifest,self.limits.spark_partitions).persist()
+                wire, resolved = read_range(expires)
+                handed = False
                 try:
-                    schema = 'crawl_batch_id string, event_id string, payload_hash string, product_key string'
-                    decoded = wire.withColumn('e',F.from_json('value',schema))
-                    selected = decoded.filter(F.col('e.crawl_batch_id') == batch)
-                    # Do not silently skip undecodable records in a selected physical range.
-                    # Other batches may interleave; malformed records cannot be assigned safely.
-                    inventory = [(v['event_id'],v['payload_hash'],v['product_key']) for v in manifest['inventory']]
-                    if len({v[0] for v in inventory}) != len(inventory):
-                        raise Invalid('KAFKA_EVENT_SET_MISMATCH')
-                    flags = self.validate_range(decoded,batch,spark.createDataFrame(
-                        inventory,'_expected_id string,_expected_hash string,_expected_product string'))
-                    # Same precedence as the separate checks this one aggregate replaces.
-                    if flags['unclassifiable']:
-                        raise Invalid('KAFKA_RANGE_UNCLASSIFIABLE_EVENT')
-                    if flags['key_mismatch']:
-                        raise Invalid('KAFKA_KEY_MISMATCH')
-                    if flags['conflict']:
-                        raise Invalid('EVENT_ID_CONFLICT')
-                    if flags['mismatch']:
-                        raise Invalid('KAFKA_EVENT_SET_MISMATCH')
-                    # dropDuplicates resolves top-level names only; lift the nested event id first.
-                    # Events are validated inside resolve_partition, not by a separate Python UDF stage.
-                    events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
-                        F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
-                        F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
-                    resolved = spark.createDataFrame(events.rdd.mapPartitions(
-                        lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
-                        'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
+                    # One small aggregate decides which destinations need a write at all, and
+                    # names the accepted products (the Bronze index is their only stored copy).
+                    found = resolved.groupBy('disposition').agg(F.count('*').alias('n'),
+                        F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
+                        F.sort_array(F.collect_set('product_key')).alias('products'),
+                        F.sort_array(F.collect_set(delta.bucket('product_key'))).alias('buckets')).collect()
+                    tally = {r['disposition']:(int(r['n']),r['watermark']) for r in found}
+                    products, buckets = next(((list(r['products']),list(r['buckets'])) for r in found if r['disposition'] == 'ACCEPTED'),([],[]))
+                    accepted = resolved.filter(F.col('disposition') == 'ACCEPTED')
+                    if products:
+                        first = job['attempts'] == 1
+                        with self.action('bronze.accepted.commit',batch):
+                            # One row per event (deduplicated above), so the in-batch key check is not needed.
+                            # Keys carry this job's id: on its first attempt none can be stored yet.
+                            delta.append_history('input_index',accepted.drop('disposition','raw_json'),
+                                unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first))
+                        # The raw commit runs beside Silver/Gold, which take this raw from the cache;
+                        # the Gold record is written only after it (a retry completes a missing one).
+                        self._release_handoff()
+                        self._handoff = dict(job=key,frames=[wire,resolved],raw=raw_of(resolved),
+                            commit=background(lambda:delta.append_raw(key,raw_of(resolved),first)))
+                        handed = True
+                    outputs = {}
+                    for table in sorted(set(METADATA_TABLES.values())):
+                        names = [d for d,t in METADATA_TABLES.items() if t == table and tally.get(d,(0,))[0]]
+                        if not names:
+                            continue
+                        frame = resolved.filter(F.col('disposition').isin(names)).drop('disposition','raw_json')
+                        # Expiring metadata table: idempotent keyed append, one write per destination.
+                        with self.action('bronze.'+table+'.commit',batch):
+                            delta.append_history(table,frame)
+                        outputs[table] = dict(delta.digest_rows(frame),expires_at=expires)
+                    counts = dict(accepted=tally.get('ACCEPTED',(0,))[0],**{d.lower():v[0] for d,v in tally.items() if d != 'ACCEPTED'})
+                    return dict(format=2,proofs=[],products=products,buckets=buckets,metadata_outputs=outputs,counts=counts,
+                        input=dict(delivery_hash=manifest['content_hash'],event_set_hash=manifest['event_set_hash'],
+                            generation=manifest['generation']),
+                        source_version_watermark=tally.get('ACCEPTED',(0,None))[1])
+                finally:
+                    if not handed:
+                        resolved.unpersist()
+                        wire.unpersist()
+
+        def own_raw():
+            """This job's raw for the product pass: the cache when Bronze ran here, else its partition."""
+            handoff = getattr(self,'_handoff',None)
+            if handoff and handoff['job'] == key:
+                return handoff['raw']
+            if job['kind'] == 'REPAIR':
+                return delta.raw([])
+            stored = delta.raw([key])
+            if stored.count() < b['counts']['accepted']:
+                # Bronze was recorded but its raw commit did not finish: read the range again.
+                crawl = self.store.get('crawl',batch)['crawl']
+                with self.action('bronze.raw_recovery',batch):
+                    wire, resolved = read_range(self.retention.expiry(crawl['completed_at'],'metadata'))
                     try:
-                        # One small aggregate decides which destinations need a write at all, and
-                        # names the accepted products (the Bronze index is their only stored copy).
-                        found = resolved.groupBy('disposition').agg(F.count('*').alias('n'),
-                            F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
-                            F.sort_array(F.collect_set('product_key')).alias('products'),
-                            F.sort_array(F.collect_set(delta.bucket('product_key'))).alias('buckets')).collect()
-                        tally = {r['disposition']:(int(r['n']),r['watermark']) for r in found}
-                        products, buckets = next(((list(r['products']),list(r['buckets'])) for r in found if r['disposition'] == 'ACCEPTED'),([],[]))
-                        accepted = resolved.filter(F.col('disposition') == 'ACCEPTED')
-                        if products:
-                            first = job['attempts'] == 1
-                            with self.action('bronze.accepted.commit',batch):
-                                # One row per event (deduplicated above), so the in-batch key check is not needed.
-                                # Keys carry this job's id: on its first attempt none can be stored yet.
-                                concurrently(dict(
-                                    index=lambda:delta.append_history('input_index',accepted.drop('disposition','raw_json'),
-                                        unique=dict(keys=tally['ACCEPTED'][0],buckets=buckets,absent=first)),
-                                    raw=lambda:delta.append_raw(key,accepted.select('row_key','product_key',
-                                        F.col('raw_json').alias('payload_json')),first)))
-                        outputs = {}
-                        for table in sorted(set(METADATA_TABLES.values())):
-                            names = [d for d,t in METADATA_TABLES.items() if t == table and tally.get(d,(0,))[0]]
-                            if not names:
-                                continue
-                            frame = resolved.filter(F.col('disposition').isin(names)).drop('disposition','raw_json')
-                            # Expiring metadata table: idempotent keyed append, one write per destination.
-                            with self.action('bronze.'+table+'.commit',batch):
-                                delta.append_history(table,frame)
-                            outputs[table] = dict(delta.digest_rows(frame),expires_at=expires)
-                        counts = dict(accepted=tally.get('ACCEPTED',(0,))[0],**{d.lower():v[0] for d,v in tally.items() if d != 'ACCEPTED'})
-                        return dict(format=2,proofs=[],products=products,buckets=buckets,metadata_outputs=outputs,counts=counts,
-                            input=dict(delivery_hash=manifest['content_hash'],event_set_hash=manifest['event_set_hash'],
-                                generation=manifest['generation']),
-                            source_version_watermark=tally.get('ACCEPTED',(0,None))[1])
+                        delta.append_raw(key,raw_of(resolved),False)
                     finally:
                         resolved.unpersist()
-                finally:
-                    wire.unpersist()
+                        wire.unpersist()
+                stored = delta.raw([key])
+            return stored
+
         if job['kind'] == 'REPAIR':
             b = dict(content_hash=None)
         else:
@@ -277,7 +339,7 @@ class SparkBatchProcessor:
                     'product_key',F.lit(1).alias('kind'),'row_key','payload_json')
                 # The raw of this job's own observations is one input_raw partition; older raw is
                 # read only for the observations the pass reports missing (a policy change).
-                own = delta.raw([] if job['kind'] == 'REPAIR' else [key]).select('product_key',F.lit(2).alias('kind'),'row_key','payload_json')
+                own = own_raw().select('product_key',F.lit(2).alias('kind'),'row_key','payload_json')
                 base = index.unionByName(cached)
 
                 def run(raw):
@@ -338,19 +400,37 @@ class SparkBatchProcessor:
                 proof, outputs = done['gold'], {k:v for k,v in done.items() if k == 'holds'}
             finally:
                 frame.unpersist()
+            handoff = getattr(self,'_handoff',None)
+            if handoff and handoff['job'] == key:
+                # The raw commit must be durable before the Gold record says this job is done.
+                handoff['commit'].join()
             silver = dict(proofs=list(outputs.values()),outputs=outputs,counts=dict(valid=count('silver'),
                 quality_hold=count('hold'),history_limit=tally.get(('hold','PRODUCT_HISTORY_LIMIT'),0),
                 products=count('policy'),withdrawn=count('withdrawn')))
             outcomes = {label.lower():n for (k,label),n in tally.items() if k == 'gold'}
             return dict(format=2,proofs=[proof],output=proof,gold_version=digest([proof]),input_hash=job['event_set_hash'],
                 rule_version=VERSION,counts=dict(products=proof['count'],**outcomes),silver=silver)
-        g = self._stage(job,'gold',output,parent=b['content_hash'])
+        try:
+            g = self._stage(job,'gold',output,parent=b['content_hash'])
+        finally:
+            # Bronze's cached frames and raw commit end with this job (a failed commit was raised above).
+            self._release_handoff()
         if not self.store.get('stage',[key,'silver']):
             # Derived from the Gold record alone, so writing it again after a crash is identical.
             self.store.put('stage',[key,'silver'],seal(dict(g['silver'],stage='silver',status='COMPLETE',job_id=key,
                 parent=b['content_hash'],attempts=g['attempts'],started_at=g['started_at'],completed_at=g['completed_at'],
                 code_version=g['code_version'],spark_application_id=g['spark_application_id'])))
         return g
+
+    def _release_handoff(self):
+        handoff, self._handoff = getattr(self,'_handoff',None), None
+        if handoff:
+            try:
+                handoff['commit'].join()
+            except BaseException:
+                pass
+            for frame in handoff['frames']:
+                frame.unpersist()
 
     def _release_cache(self):
         cached, self._cached = getattr(self,'_cached',None), None

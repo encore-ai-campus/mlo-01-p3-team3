@@ -199,6 +199,27 @@ class SparkFinitePipelineTests(unittest.TestCase):
         self.assertEqual(len([r for r in delta.tables[path] if r[1] == 'danawa:11']),2)
         self.assertEqual(repaired['stages']['publication']['resolutions'],{'PUBLISHED':1})
 
+    def test_a_failed_background_raw_commit_blocks_gold_and_a_retry_completes_it(self):
+        from unittest.mock import patch
+        delta = self.processor.delta
+        original = type(delta).append_raw
+        def broken(self, job_id, frame, first):
+            raise Invalid('RAW_COMMIT_FAILED')
+        with patch.object(type(delta),'append_raw',broken):
+            job = self.batch('spark-raw-retry',self.items)
+            with self.assertRaisesRegex(Invalid,'RAW_COMMIT_FAILED'):
+                self.runner.work(job)
+        # Bronze is recorded, Gold is not: the job did not claim completion without its raw.
+        self.assertTrue(self.processor.store.get('stage',[job,'bronze']))
+        self.assertIsNone(self.processor.store.get('stage',[job,'gold']))
+        self.assertFalse(delta.tables.get(delta._path('input_raw')))
+        self.runner.recover(job,'test process stopped')
+        report = self.runner.work(job)
+        self.assertEqual(report['status'],'COMPLETED')
+        # The retry read the fixed range again and stored exactly the accepted raw.
+        self.assertEqual(len(delta.tables[delta._path('input_raw')]),report['stages']['bronze']['counts']['accepted'])
+        self.assertIs(type(delta).append_raw,original)
+
     def test_oversized_history_holds_only_that_product(self):
         self.processor.limits = BatchLimits(spark_partitions=2,history_observations=1)
         report = self.runner.work(self.batch('spark-limit',self.items+[self.old,self.new]))
