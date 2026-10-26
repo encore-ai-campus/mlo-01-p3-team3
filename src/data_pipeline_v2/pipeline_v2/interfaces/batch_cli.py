@@ -66,7 +66,7 @@ def dispatch(args, runner, outbox):
         if compact is None:
             raise Invalid('COMPACTION_UNSUPPORTED')
         # The writer lease is held for the whole pass, so no batch commits meanwhile.
-        result = dict(status='COMPACTED',tables=compact())
+        result = dict(status='COMPACTED',tables=compact(over=args.if_files_over))
     elif args.command == 'batch-abandon':
         result = runner.abandon(args.job,args.stop_evidence,args.reason)
     elif args.command == 'batch-backlog':
@@ -198,7 +198,9 @@ def build_parser():
         if name == 'batch-work':
             # process and publish may run as separate NiFi-launched processes to overlap batches.
             command.add_argument('--phase',choices=['all','process','publish'],default='all')
-    commands.add_parser('batch-compact',help='이력 테이블 압축(정기 작업용, 쓰기 lease를 잡음)')
+    compact = commands.add_parser('batch-compact',help='이력 테이블 압축(정기 작업용, 쓰기 lease를 잡음)')
+    compact.add_argument('--if-files-over',type=int,default=None,
+        help='데이터 파일이 이 수보다 많은 테이블만 압축(측정 전 점검용)')
     backlog = commands.add_parser('batch-backlog')
     backlog.add_argument('--rebuild',action='store_true')
     retract = commands.add_parser('batch-retract')

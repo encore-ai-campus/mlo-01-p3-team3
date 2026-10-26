@@ -675,9 +675,10 @@ class SparkBatchProcessor:
         self._open()
         return sum(self.delta.purge(table,now) for table in sorted(set(METADATA_TABLES.values())))
 
-    def compact(self):
+    def compact(self, over=None):
         """Idle-time maintenance of the history tables every batch reads. A cancel request stops
-        it before the next table starts (part of OPTIMIZE runs on the driver, outside any job)."""
+        it before the next table starts (part of OPTIMIZE runs on the driver, outside any job).
+        With `over`, only a table holding more data files than that is compacted."""
         self._open()
         self._cancelled = False
         done = {}
@@ -685,6 +686,9 @@ class SparkBatchProcessor:
             for name in ('input_index','normalized_history'):
                 if self._cancelled:
                     raise Invalid('MAINTENANCE_CANCELLED')
+                if over is not None and self.delta.files(name) <= over:
+                    done[name] = dict(skipped=True,files=self.delta.files(name))
+                    continue
                 done[name] = self.delta.compact(name)
         return done
 
