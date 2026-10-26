@@ -29,6 +29,9 @@ class BatchLimits:
     outbox_chunk: int = 200
     # At the measured ~0.2 MB/s uncompressed broker throughput, 8 MiB drains well inside the 120 s delivery timeout.
     outbox_chunk_bytes: int = 8 * 1024 * 1024
+    # Data files a history table may hold before a batch compacts it first (a scheduled
+    # batch-compact normally keeps it far below; 128 = 8 per bucket).
+    history_files: int = 128
 
     def __post_init__(self):
         if any(type(v) is not int or v < 1 for v in vars(self).values()):

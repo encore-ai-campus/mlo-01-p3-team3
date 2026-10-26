@@ -201,6 +201,7 @@ class SparkBatchProcessor:
         from .kafka_batch import read_kafka
         self._open()
         spark, delta, batch, key = self.spark,self.delta,job['crawl_batch_id'],job['job_id']
+        self.compact_if_needed(batch)
         pin = pinned_inputs(self.store, key)
         allowed = pin['bronze_jobs'] + [key]
         store_config, page_size = self.store_config, self.limits.source_page_size
@@ -372,7 +373,15 @@ class SparkBatchProcessor:
                         return delta.snapshot(key,'gold',kind('gold'))
                 # Three independent tables: their writes and commits overlap instead of queueing.
                 writes = dict(gold=gold_commit)
-                if count('normalized'):
+                handoff = getattr(self,'_handoff',None)
+                if count('normalized') and handoff and handoff['job'] == key:
+                    # The normalization cache is not needed to publish: it is appended after
+                    # publication (finalize), so the Gold commit has the executors to itself. By
+                    # then another worker may have stored some keys, so this append checks stored
+                    # keys (no absent claim). Losing it only means a later batch parses again.
+                    handoff['normalized'] = deferred(lambda:delta.append_history('normalized_history',kind('normalized'),
+                        unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or [])))
+                elif count('normalized'):
                     writes['normalized'] = normalized
                 if count('hold'):
                     writes['holds'] = lambda:delta.snapshot(key,'silver_holds',kind('hold'))
@@ -551,10 +560,15 @@ class SparkBatchProcessor:
         handoff = getattr(self,'_handoff',None)
         if handoff and handoff['job'] == job['job_id']:
             try:
-                handoff['commit'].join()
-                return
-            except BaseException:
-                pass
+                if handoff.get('normalized'):
+                    # A failed cache append keeps the job open; a retry without this process's
+                    # cache only completes the raw (the normalization is redone by a later batch).
+                    handoff['normalized'].join()
+                try:
+                    handoff['commit'].join()
+                    return
+                except BaseException:
+                    pass
             finally:
                 self._release_handoff()
         bronze = self.store.get('stage',[job['job_id'],'bronze'])
@@ -565,12 +579,17 @@ class SparkBatchProcessor:
     def _release_handoff(self):
         handoff, self._handoff = getattr(self,'_handoff',None), None
         if handoff:
-            try:
-                handoff['commit'].join()
-            except BaseException:
-                pass
+            for name in ('normalized','commit'):
+                try:
+                    if handoff.get(name):
+                        handoff[name].join()
+                except BaseException:
+                    pass
             for frame in handoff['frames']:
                 frame.unpersist()
+            cached = getattr(self,'_cached',None)
+            if cached and cached[0] == handoff['job']:
+                self._release_cache()
 
     def _release_cache(self):
         cached, self._cached = getattr(self,'_cached',None), None
@@ -596,7 +615,9 @@ class SparkBatchProcessor:
             else:
                 frame = self.delta.load(stage['output']).select('product_key','payload_json')
             yield from self._chunks(frame)
-            if cached:
+            handoff = getattr(self,'_handoff',None)
+            if cached and not (handoff and handoff['job'] == cached[0]):
+                # Otherwise kept until finalize: the deferred normalized append reads it.
                 self._release_cache()
         finally:
             for name,value in previous.items():
@@ -643,6 +664,14 @@ class SparkBatchProcessor:
                     raise Invalid('MAINTENANCE_CANCELLED')
                 done[name] = self.delta.compact(name)
         return done
+
+    def compact_if_needed(self, batch):
+        """Safety net when scheduled compaction did not run: a history table over the file limit
+        is compacted before the batch reads it (that batch waits; normally never needed)."""
+        for name in ('input_index','normalized_history'):
+            if self.delta.files(name) > self.limits.history_files:
+                with self.action('history.forced_compaction',batch):
+                    self.delta.compact(name)
 
     def cancel_maintenance(self):
         # Only called while maintenance is the sole Spark work in this process; an interrupted

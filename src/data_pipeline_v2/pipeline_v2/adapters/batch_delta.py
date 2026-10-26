@@ -14,6 +14,7 @@ class BatchDelta:
         self.known = set()
         self._carry_lock = threading.Lock()
         self._seen = None
+        self._files = {}
 
     @contextmanager
     def _step(self, name):
@@ -278,6 +279,9 @@ class BatchDelta:
                     # One file per touched bucket: every later history read opens each file on S3.
                     encoded.repartition('bucket').write.format('delta').mode('append').partitionBy('bucket').save(path)
                 self.known.add(path)
+                if name in self._files:
+                    # At most one new file per touched bucket.
+                    self._files[name] += len(keys['buckets'])
             self.fence()
         finally:
             for frame in cached:
@@ -299,7 +303,18 @@ class BatchDelta:
             metrics = result['metrics'].asDict() if result is not None else {}
             counts.update(files_removed=int(metrics.get('numFilesRemoved') or 0),files_added=int(metrics.get('numFilesAdded') or 0))
         self.fence()
+        self._files.pop(name,None)
         return dict(files_removed=counts['files_removed'],files_added=counts['files_added'])
+
+    def files(self, name):
+        """Data files of a history table: read from the Delta log once, then counted as this
+        writer appends (an upper bound) until the next compaction re-reads it."""
+        from delta.tables import DeltaTable
+        if name not in self._files:
+            path = self._path(name)
+            self._files[name] = (int(DeltaTable.forPath(self.spark,path).detail().select('numFiles').first()[0])
+                if self._exists(path) else 0)
+        return self._files[name]
 
     def snapshot(self, job_id, stage, frame):
         from pyspark.sql import functions as F

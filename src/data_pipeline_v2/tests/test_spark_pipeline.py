@@ -57,6 +57,12 @@ class MemoryDelta(BatchDelta):
             self.tables[path] = list(old.values()) + fresh
             self.commits += 1
 
+    def files(self, name):
+        return len(self.tables.get(self._path(name),[]))
+
+    def compact(self, name):
+        self.__dict__.setdefault('compacted',[]).append(name)
+
     def registered(self, products):
         return set(products) & self.__dict__.setdefault('registry',set())
 
@@ -277,6 +283,15 @@ class SparkFinitePipelineTests(unittest.TestCase):
         self.assertEqual(len(rows),len(set(rows)))
         self.assertEqual(len(rows),self.processor.store.get('stage',[job,'bronze'])['counts']['accepted'])
         self.assertEqual(self.runner.work(job,phase='publish')['status'],'COMPLETED')
+
+    def test_a_history_table_over_the_file_limit_is_compacted_before_the_batch(self):
+        delta = self.processor.delta
+        self.processor.limits = BatchLimits(spark_partitions=2,history_files=1)
+        self.assertEqual(self.runner.work(self.batch('spark-files-1',self.items))['status'],'COMPLETED')
+        # The first batch found empty tables; now each stand-in row counts as a file.
+        self.assertNotIn('input_index',delta.__dict__.get('compacted',[]))
+        self.assertEqual(self.runner.work(self.batch('spark-files-2',self.items[:1]))['status'],'COMPLETED')
+        self.assertIn('input_index',delta.compacted)
 
     def test_oversized_history_holds_only_that_product(self):
         self.processor.limits = BatchLimits(spark_partitions=2,history_observations=1)

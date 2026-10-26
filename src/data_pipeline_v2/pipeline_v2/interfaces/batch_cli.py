@@ -11,6 +11,7 @@ from ..domain.contracts import Invalid
 
 COMMANDS = {'batch-prepare','batch-relay','batch-submit','batch-work','batch-status','batch-recover','batch-audit',
             'batch-backlog','batch-retract','batch-repair','batch-retention','batch-quarantine-read','batch-serve','batch-abandon',
+            'batch-compact',
             'metrics','spark-metrics'}
 READ_ONLY = {'metrics','spark-metrics','batch-status','batch-backlog'}
 
@@ -60,6 +61,12 @@ def dispatch(args, runner, outbox):
         result = runner.work(args.job,args.phase)
     elif args.command == 'batch-recover':
         result = runner.recover(args.job,args.stop_evidence,args.generation)
+    elif args.command == 'batch-compact':
+        compact = getattr(runner.processor,'compact',None)
+        if compact is None:
+            raise Invalid('COMPACTION_UNSUPPORTED')
+        # The writer lease is held for the whole pass, so no batch commits meanwhile.
+        result = dict(status='COMPACTED',tables=compact())
     elif args.command == 'batch-abandon':
         result = runner.abandon(args.job,args.stop_evidence,args.reason)
     elif args.command == 'batch-backlog':
@@ -191,6 +198,7 @@ def build_parser():
         if name == 'batch-work':
             # process and publish may run as separate NiFi-launched processes to overlap batches.
             command.add_argument('--phase',choices=['all','process','publish'],default='all')
+    commands.add_parser('batch-compact',help='이력 테이블 압축(정기 작업용, 쓰기 lease를 잡음)')
     backlog = commands.add_parser('batch-backlog')
     backlog.add_argument('--rebuild',action='store_true')
     retract = commands.add_parser('batch-retract')
@@ -232,7 +240,7 @@ def main(argv=None):
             from ..adapters.spark_metrics import report
             result = report(args.event_log,args.scope)
         else:
-            writable = args.command in {'batch-work','batch-audit','batch-retention','batch-serve','batch-abandon'}
+            writable = args.command in {'batch-work','batch-audit','batch-retention','batch-serve','batch-abandon','batch-compact'}
             if config['mode'] == 'server' and args.command not in READ_ONLY and not args.apply:
                 raise Invalid('SERVER_EXECUTION_REQUIRES_APPLY')
             event_scope = getattr(args,'batch',getattr(args,'job',args.command))

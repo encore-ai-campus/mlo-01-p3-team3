@@ -71,13 +71,13 @@ scope 완료는 봉인된 **해당 상품 전체**의 Gold·게시 증거로 계
 |---|---|---|
 | `input_index` | 관측별 이벤트·의존 정보·revision (원문 없음), bucket 16 분할 | Bronze, 원문보다 먼저 |
 | `input_raw` | 승인된 원문, 받은 job별 파티션 | 게시 뒤 `finalize()`. job은 이 커밋 뒤에 `COMPLETED` |
-| `normalized_history` | 정규화 결과(정책 identity 키) | 상품 패스 뒤, Gold와 동시 |
+| `normalized_history` | 정규화 결과(정책 identity 키), 다음 배치의 재사용 캐시 | 게시 뒤 `finalize()`, 저장 키 대조 후 추가. 같은 프로세스가 아니면(재시도·수리) 상품 패스 뒤 바로 |
 | `runs/<job>/gold`, `silver_holds` | 배치 출력 | 상품 패스 뒤 |
 
 - Silver·Gold는 `product_key` 셔플 한 번 뒤 Executor의 상품 함수(`adapters/spark_product.py`)가 계산한다. native Gold(`spark_gold.py`)와 payload가 같음을 `test_spark_batch.py`가 확인한다.
 - 이력이 있는 상품 키는 별도 테이블 없이 `input_index`에서 얻는다. 단일 writer가 시작할 때 상품 키 열을 한 번 읽어 메모리에 두고, 배치의 이력 커밋이 끝난 뒤에만 그 상품을 더한다. 이력이 없던 상품은 이력 테이블을 읽지 않고 이번 job의 캐시된 색인 행만 쓴다. 정책이 바뀌어 정규화를 다시 할 관측은 상품 패스가 원문 부족을 알리고, 그 원문의 job 파티션만 읽어 해당 상품을 다시 계산한다.
 - 원문이 덜 커밋된 채 재시도되면 고정 Kafka 범위를 다시 읽어 채운다(처리 중이면 상품 패스 전, 게시 뒤면 `finalize()`).
-- `batch-serve`는 Spark 세션·원장·Kafka·lease를 한 번 열고 spool 요청을 차례로 실행한다. 시작 때 Python 작업자를 미리 띄우고 상품 키 집합을 읽는다. 배치를 처리한 뒤 큐가 60초 이상 비면 이력 테이블을 OPTIMIZE하고(시작 때는 하지 않음), 요청이 오면 Spark 작업을 취소하고 다음 테이블은 시작하지 않는다. OPTIMIZE의 Driver 쪽 처리는 취소로 멈추지 않아, 시작 때 압축하던 측정에서 첫 요청이 116초 기다렸다. 상품 색인은 이 단일 writer의 메모리에 둔다.
+- `batch-serve`는 Spark 세션·원장·Kafka·lease를 한 번 열고 spool 요청을 차례로 실행한다. 시작 때 Python 작업자를 미리 띄우고 상품 키 집합을 읽는다. 배치를 처리한 뒤 큐가 60초 이상 비면 이력 테이블을 OPTIMIZE하고(시작 때는 하지 않음), 요청이 오면 Spark 작업을 취소하고 다음 테이블은 시작하지 않는다. OPTIMIZE의 Driver 쪽 처리는 취소로 멈추지 않아, 시작 때 압축하던 측정에서 첫 요청이 116초 기다렸다. 배치가 60초보다 자주 오면 이 유휴 압축이 돌지 않으므로, 정기 압축은 NiFi 일정으로 `batch-compact`(쓰기 lease를 잡고 이력 테이블 두 개를 OPTIMIZE)를 배치가 없는 시간(예: 매일 새벽)에 실행한다. NiFi와 실행기의 실제 흐름 연결은 아직 미완료다. 그래도 밀리면 처리 단계가 시작 전에 이력 테이블의 파일 수(처음 한 번 Delta 로그에서 읽고 이후 append마다 더함)가 `history_files`(기본 128)를 넘은 테이블을 먼저 압축한다. 상품 색인은 이 단일 writer의 메모리에 둔다.
 - `batch-abandon`은 멈추거나 시작 전인 job을 정지 증거·사유와 함께 `ABANDONED`로 닫고 대기열 예약을 푼다.
 
 ### 상태 축
