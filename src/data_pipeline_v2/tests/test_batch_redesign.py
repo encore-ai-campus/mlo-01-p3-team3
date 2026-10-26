@@ -282,6 +282,25 @@ class RedesignContractTests(unittest.TestCase):
             self.assertEqual(runner.work(third)['stages']['silver']['counts']['history_limit'],0)
             self.assertEqual(runner.audit(second)['status'],'AUDIT_OK')
 
+    def test_receipts_omit_the_delivery_and_audit_rebuilds_it_from_gold(self):
+        from pipeline_v2.adapters.files import write
+        with runtime(self.config) as (runner,outbox):
+            outbox.prepare(self.crawl,self.items)
+            outbox.relay('crawl-1')
+            key = runner.submit('crawl-1')['job_id']
+            self.assertEqual(runner.work(key)['status'],'COMPLETED')
+            entries = list(outbox.store.values('publication_receipt'))
+            self.assertEqual(len(entries),5)
+            self.assertTrue(all('delivery' not in e and e['product_key'] for e in entries))
+            self.assertEqual(runner.audit(key)['status'],'AUDIT_OK')
+            # A changed published version no longer matches the delivery rebuilt from Gold.
+            job_id = entries[0]['receipt']['job_id']
+            path = runner.publisher.root/'versions'/(job_id+'.json')
+            saved = read(path)
+            write(path,dict(saved,content_hash='0'*64))
+            with self.assertRaises(Invalid):
+                runner.audit(key)
+
     def relay_only(self, **limits):
         # Relay mechanics alone: prepare does not send ahead.
         return dict(self.config,batch_limits=limits,kafka=dict(self.config.get('kafka',{}),early_relay=False))

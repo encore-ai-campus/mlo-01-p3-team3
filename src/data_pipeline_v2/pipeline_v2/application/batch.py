@@ -326,7 +326,10 @@ class BatchRunner:
                                 verified(receipt)
                                 if receipt['job_id'] != delivery['job_id'] or receipt['product_hash'] != digest(delivery['product']):
                                     raise Invalid('PUBLICATION_RECEIPT_CHANGED')
-                            self.store.put_many('publication_receipt',[([key,delivery['job_id']],dict(delivery=delivery,receipt=receipt))
+                            # The delivery itself is not stored: it is a pure function of the Gold record
+                            # and its product, so audit() rebuilds it from Gold (about 100 KB per product).
+                            self.store.put_many('publication_receipt',[([key,delivery['job_id']],
+                                dict(receipt=receipt,product_key=delivery['product_key']))
                                 for delivery,receipt in zip(requests,answers)])
                             for delivery,receipt in zip(requests,answers):
                                 resolutions[receipt['resolution']] = resolutions.get(receipt['resolution'],0)+1
@@ -413,8 +416,24 @@ class BatchRunner:
             entries = self.store.get_list('publication_receipt',[[key,v] for v in published['receipts']])
             if any(v is None for v in entries):
                 raise Invalid('PUBLICATION_RECEIPT_MISSING')
+            # Receipts written before deliveries were rebuilt still carry theirs.
+            pending = {}
             for entry in entries:
-                self.publisher.audit(entry['delivery'],entry['receipt'])
+                if 'delivery' in entry:
+                    self.publisher.audit(entry['delivery'],entry['receipt'])
+                else:
+                    pending[entry['receipt']['job_id']] = entry['receipt']
+            if pending:
+                # The same requests the publication built, rebuilt chunk by chunk from Gold, so the
+                # published rows are checked against Gold itself.
+                gold = verified(self.store.get('stage',[key,'gold']))
+                for products in self.processor.products(gold):
+                    for delivery in self._deliveries(key,job['crawl_batch_id'],gold,products):
+                        receipt = pending.pop(delivery['job_id'],None)
+                        if receipt is not None:
+                            self.publisher.audit(delivery,receipt)
+                if pending:
+                    raise Invalid('PUBLICATION_DELIVERY_NOT_IN_GOLD')
         return dict(status='AUDIT_OK',job_id=key,crawl_batch_id=job['crawl_batch_id'])
 
     def retention_purge(self, now=None):
