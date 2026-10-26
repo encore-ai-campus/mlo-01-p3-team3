@@ -452,14 +452,17 @@ class RedesignContractTests(unittest.TestCase):
             def cancel_maintenance(self):
                 events['cancelled'].set()
         runner = SimpleNamespace(processor=Processor(),timing=SimpleNamespace(flush=lambda:None),
-            status=lambda job:dict(status='QUEUED',job_id=job))
+            status=lambda job:dict(status='QUEUED',job_id=job),work=lambda job,phase:dict(status='COMPLETED',job_id=job))
         parser = build_parser()
         args = parser.parse_args(['--config','unused.json','batch-serve','--spool',str(spool),
             '--poll-seconds','0.01','--compact-idle-seconds','0'])
         worker = threading.Thread(target=lambda:self.__dict__.update(result=serve(args,parser,runner,None)))
         worker.start()
         try:
-            # Compaction starts at once on an idle queue; a request cancels it and is answered.
+            # Nothing runs at start; after a processed batch the idle queue starts compaction,
+            # and a request that arrives meanwhile cancels it and is answered.
+            self.assertFalse(events['started'].wait(0.3))
+            write(spool/'inbox'/'0.json',dict(argv=['batch-work','--job','j0']))
             self.assertTrue(events['started'].wait(10))
             write(spool/'inbox'/'1.json',dict(argv=['batch-status','--job','j1']))
             for _ in range(500):
@@ -476,7 +479,7 @@ class RedesignContractTests(unittest.TestCase):
         finally:
             (spool/'stop').write_text('')
             worker.join(30)
-        self.assertEqual(self.result,dict(status='STOPPED',served=1))
+        self.assertEqual(self.result,dict(status='STOPPED',served=2))
 
     def test_resident_worker_runs_spool_requests_in_one_runtime(self):
         import io

@@ -104,8 +104,8 @@ def serve(args, parser, runner, outbox):
     warm = getattr(runner.processor,'warm',None) or getattr(runner.processor,'_open',None)
     if warm:
         warm()
-    # History compaction runs in the background only while the queue is idle (at start and after
-    # processed batches). A request that arrives meanwhile cancels it, so no batch waits for it.
+    # History compaction runs in the background only after the queue has been idle a while
+    # following processed batches. A request that arrives meanwhile cancels it.
     import threading
     compact = getattr(runner.processor,'compact',None)
     cancel = getattr(runner.processor,'cancel_maintenance',None)
@@ -121,7 +121,9 @@ def serve(args, parser, runner, outbox):
                 write(args.spool/'compaction-failed.json',dict(error_code=error_code(exc)))
         finally:
             runner.timing.flush()
-    dirty, last, served, worker = compact is not None, time.monotonic() - args.compact_idle_seconds, 0, None
+    # Not at start: writes keep one file per bucket, and a batch arriving during a startup pass
+    # waited for it (OPTIMIZE's driver side does not stop on a job cancel).
+    dirty, last, served, worker = False, time.monotonic(), 0, None
     while not (args.spool/'stop').exists():
         pending = sorted(inbox.glob('*.json'))
         if worker is not None and not worker.is_alive():
@@ -212,7 +214,7 @@ def build_parser():
     serve = commands.add_parser('batch-serve',help='상주 처리기: Spark 세션·원장·Kafka 연결을 유지하고 spool 요청을 차례로 실행')
     serve.add_argument('--spool',type=Path,required=True)
     serve.add_argument('--poll-seconds',type=float,default=0.2)
-    serve.add_argument('--compact-idle-seconds',type=float,default=10.0)
+    serve.add_argument('--compact-idle-seconds',type=float,default=60.0)
     for name,command in commands.choices.items():
         if name not in READ_ONLY:
             command.add_argument('--apply',action='store_true')

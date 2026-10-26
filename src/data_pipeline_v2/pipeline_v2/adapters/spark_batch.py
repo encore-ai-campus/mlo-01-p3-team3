@@ -632,14 +632,22 @@ class SparkBatchProcessor:
         return sum(self.delta.purge(table,now) for table in sorted(set(METADATA_TABLES.values())))
 
     def compact(self):
-        """Idle-time maintenance of the history tables every batch reads."""
+        """Idle-time maintenance of the history tables every batch reads. A cancel request stops
+        it before the next table starts (part of OPTIMIZE runs on the driver, outside any job)."""
         self._open()
+        self._cancelled = False
+        done = {}
         with self.timing.measure('serve.history_compaction','maintenance'):
-            return {name:self.delta.compact(name) for name in ('input_index','normalized_history')}
+            for name in ('input_index','normalized_history'):
+                if self._cancelled:
+                    raise Invalid('MAINTENANCE_CANCELLED')
+                done[name] = self.delta.compact(name)
+        return done
 
     def cancel_maintenance(self):
         # Only called while maintenance is the sole Spark work in this process; an interrupted
         # OPTIMIZE never commits, so the tables stay as they were.
+        self._cancelled = True
         if self.spark is not None:
             self.spark.sparkContext.cancelAllJobs()
 
