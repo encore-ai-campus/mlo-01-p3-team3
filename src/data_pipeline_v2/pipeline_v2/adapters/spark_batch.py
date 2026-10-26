@@ -170,7 +170,8 @@ class SparkBatchProcessor:
             F.max(F.col('e.crawl_batch_id').isNull().cast('int')).alias('unclassifiable'),
             F.max((mine & ~F.col('key').eqNullSafe(F.coalesce('e.product_key','e.event_id'))).cast('int')).alias('key_mismatch'),
             F.sum(mine.cast('int')).alias('rows'),
-            F.countDistinct(F.when(mine,F.col('value'))).alias('bodies'),
+            # Distinct bodies by hash: the shuffle carries 32 bytes per event, not its body.
+            F.countDistinct(F.when(mine,F.sha2(F.col('value'),256))).alias('bodies'),
             F.countDistinct(F.when(mine,F.struct('e.payload_hash','e.product_key'))).alias('identities'),
             F.first(F.when(mine,F.col('e.payload_hash')),ignorenulls=True).alias('_hash'),
             F.first(F.when(mine,F.col('e.product_key')),ignorenulls=True).alias('_product'))
@@ -433,6 +434,10 @@ class SparkBatchProcessor:
         # Other batches may interleave; malformed records cannot be assigned safely.
         inventory = [(v['event_id'],v['payload_hash'],v['product_key']) for v in manifest['inventory']]
         try:
+            # Fill the cache with one read of the fixed range first, so the range checks and resolve
+            # below run at once from it (one after the other they cost ~9 s more per 1000 events).
+            # Inside the try: a failed read must not leave a partial cache in the resident session.
+            wire.count()
             if len({v[0] for v in inventory}) != len(inventory):
                 raise Invalid('KAFKA_EVENT_SET_MISMATCH')
             # The manifest inventory as one JSON literal expanded in the JVM: a Python-side
@@ -453,15 +458,14 @@ class SparkBatchProcessor:
             resolved = spark.createDataFrame(events.rdd.mapPartitions(
                 lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
                 'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
-            # The resolve summary is the one read of the fixed range: it fills the wire cache on the
-            # way (a separate count first cost a job wave), then the range checks read that cache.
-            # Run together they would each read the range from the broker. A range violation
-            # still wins over whatever resolve reported, keeping the checks' precedence.
-            done = dict(found=self._settle(lambda:resolved.groupBy('disposition').agg(F.count('*').alias('n'),
-                F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
-                F.sort_array(F.collect_set('product_key')).alias('products'),
-                F.sort_array(F.collect_set(self.delta.bucket('product_key'))).alias('buckets')).collect()))
-            done['flags'] = self._settle(lambda:self.validate_range(decoded,batch,expected))
+            # The range checks and the resolve summary read the same cached range and do not
+            # depend on each other, so they run at once. A range violation still wins over
+            # whatever resolve reported, keeping the checks' precedence.
+            done = concurrently(dict(flags=lambda:self.validate_range(decoded,batch,expected),
+                found=lambda:resolved.groupBy('disposition').agg(F.count('*').alias('n'),
+                    F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
+                    F.sort_array(F.collect_set('product_key')).alias('products'),
+                    F.sort_array(F.collect_set(self.delta.bucket('product_key'))).alias('buckets')).collect()),settle=True)
             flags = done['flags']
             if isinstance(flags,BaseException):
                 raise flags
@@ -486,14 +490,6 @@ class SparkBatchProcessor:
         # recomputed from the same fixed range. (Unpersisting it again later is a no-op.)
         wire.unpersist()
         return wire, resolved, done['found']
-
-    @staticmethod
-    def _settle(call):
-        """The call's result, or the exception it raised (like `concurrently(..., settle=True)`)."""
-        try:
-            return call()
-        except BaseException as exc:
-            return exc
 
     @staticmethod
     def _raw_of(resolved):

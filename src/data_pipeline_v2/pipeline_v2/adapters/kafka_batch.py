@@ -233,6 +233,12 @@ def read_kafka(spark, config, manifest, min_partitions):
         # the next batch instead of connecting again; offsets are explicit and never committed,
         # so the group is only that cache key.
         reader = reader.option('kafka.group.id', 'pj3-v2-batch-range-reader')
+    # Events are ~200 KB; the consumer default of 1 MiB per partition per fetch paid hundreds of
+    # broker round trips for a 1000-event range (15 s at ~12 MB/s, mostly waiting).
+    for name, value in (('kafka.max.partition.fetch.bytes', str(16 * 1024 * 1024)),
+                        ('kafka.fetch.max.bytes', str(64 * 1024 * 1024))):
+        if name not in options:
+            reader = reader.option(name, value)
     return (reader.option('startingOffsets',starts).option('endingOffsets',ends)
         .option('failOnDataLoss','true').option('minPartitions',str(min_partitions)).load()
         .selectExpr('topic','partition','offset','CAST(key AS STRING) AS key','CAST(value AS STRING) AS value'))
