@@ -1,6 +1,7 @@
 """Finite crawl batches, immutable event identities and offset range contracts."""
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import hashlib
 import re
 from .contracts import canonical, digest, verified, utc, Invalid
 
@@ -184,7 +185,9 @@ def error_code(value):
     return value if re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', value) else 'SOURCE_INPUT_INVALID'
 
 
-def validate_event(event):
+def validate_event(event, payload_text=None):
+    """payload_text: canonical(event['payload']) when the caller already encoded that very object
+    (the hash is still checked, from that text, instead of encoding it a second time)."""
     accepted = {'schema_version','event_type','crawl_batch_id','event_id','product_key','source_ref',
                 'payload_hash','source_version','raw_document_id','collected_at','quarantine_allowed'}
     rejected = {'schema_version','event_type','crawl_batch_id','event_id','product_key','source_ref',
@@ -197,8 +200,10 @@ def validate_event(event):
         # The Kafka wire copy may carry the admitted payload; the Outbox record never does.
         if set(event) - {'payload'} != accepted:
             raise Invalid('BATCH_EVENT_SCHEMA_INVALID')
-        if 'payload' in event and digest(event['payload']) != event['payload_hash']:
-            raise Invalid('BATCH_EVENT_PAYLOAD_CHANGED')
+        if 'payload' in event:
+            text = payload_text if payload_text is not None else canonical(event['payload'])
+            if hashlib.sha256(text.encode()).hexdigest() != event['payload_hash']:
+                raise Invalid('BATCH_EVENT_PAYLOAD_CHANGED')
         if not hexes('event_id','source_ref','payload_hash','source_version'):
             raise Invalid('BATCH_EVENT_ID_INVALID')
         if event['source_ref'] != event['payload_hash']:

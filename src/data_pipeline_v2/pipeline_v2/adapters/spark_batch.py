@@ -40,8 +40,11 @@ def resolve_partition(rows, store_config, page_size, expires=None):
                     store = open_store(store_config)
                 items = store.get_many('source',list(set(missing)))
             for record, event, item in zip(page,events,carried):
+                # The carried payload is encoded once: that text is what validate_event hashes and
+                # what the raw table stores (it is the same object, so the same bytes).
+                text = canonical(item) if item is not None and item is event.get('payload') else None
                 # The Kafka wire body, validated here instead of in a separate UDF stage.
-                validate_event(event)
+                validate_event(event,payload_text=text)
                 event = {k:v for k,v in event.items() if k != 'payload'}
                 if event['event_type'] == REJECTED:
                     # Rejected rows carry no trusted product identity and never reach Silver.
@@ -53,7 +56,8 @@ def resolve_partition(rows, store_config, page_size, expires=None):
                     continue
                 item = item if item is not None else items.get(event['source_ref'])
                 # One canonical encoding serves both the hash check and the stored raw.
-                text = canonical(item) if item is not None else None
+                if text is None and item is not None:
+                    text = canonical(item)
                 if text is None or hashlib.sha256(text.encode()).hexdigest() != event['payload_hash']:
                     raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
                 disposition, reason = classify(item,event,document_verified=True)
