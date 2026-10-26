@@ -36,7 +36,7 @@ class DirectMySQL(MySQL):
     def transaction(self):
         with self._timed('mysql.transaction.begin'):
             self.connection.begin()
-        self._read_cache, self._pending = {}, {}
+        self._read_cache, self._pending, self._deferred = {}, {}, []
         try:
             yield self
             self.flush()
@@ -54,8 +54,8 @@ class DirectMySQL(MySQL):
         identity = (table,canonical(key),locking)
         if cache is not None and identity in cache:
             return cache[identity]
-        if getattr(self,'_pending',None):
-            # A read that reaches the database sees every buffered row first.
+        if getattr(self,'_pending',None) or getattr(self,'_deferred',None):
+            # A read that reaches the database sees every buffered row and update first.
             self.flush()
         return super().get(table,key,locking=locking)
 
@@ -118,13 +118,33 @@ class DirectMySQL(MySQL):
             raise
 
     def update(self,table,key,values):
-        if getattr(self,'_pending',None):
-            # Buffered rows exist before any UPDATE (it may target them or reference them).
+        pending = getattr(self,'_pending',None) or {}
+        ids = {row['id'] for items in pending.values() for _,_,row in items}
+        targets = [row for _,_,row in pending.get(table,[]) if all(row.get(k) == v for k,v in key.items())]
+        if any(v in ids for v in values.values()):
+            # It references a row not written yet (e.g. a new product's representative image, a
+            # cycle with product_images): it runs right after the buffered inserts.
+            self._invalidate(table,key)
+            self._deferred.append((table,key,values))
+            return 1
+        # A deferred update that may touch the same row keeps its place before this one.
+        queued = any(t == table and (k == key or set(k) != {'id'} or set(key) != {'id'})
+            for t,k,_ in getattr(self,'_deferred',None) or [])
+        if targets and set(key) == {'id'} and not queued:
+            # A buffered row: the change goes into its INSERT (the cached row is the same dict).
+            targets[0].update(values)
+            return 1
+        if targets or queued:
             self.flush()
         self._invalidate(table,key)
         return super().update(table,key,values)
 
     def identity(self,table,key,values):
+        cache = getattr(self,'_read_cache',None)
+        if cache is not None and cache.get((table,canonical(key),True),False) is None:
+            # Prefetched FOR UPDATE and absent in this transaction: buffered for one multi-row INSERT
+            # per table (a concurrent duplicate still falls back to the checked path in flush()).
+            return self.identity_absent(table,key,values)
         saved, created = super().identity(table,key,values)
         self._remember(table,key,saved,created)
         return saved, created
@@ -140,11 +160,35 @@ class DirectMySQL(MySQL):
         self._remember(table,key,row,True)
         return row, True
 
+    @staticmethod
+    def _parents_first(pending):
+        """Buffered tables with every referenced parent table before its children. An edge whose
+        column is None in every buffered row (products.representative_image_id, set by a deferred
+        update) is ignored, which breaks the products/product_images cycle."""
+        order, state = [], {}
+        def visit(table):
+            if state.get(table) == 'done':
+                return
+            if state.get(table) == 'open':
+                raise Invalid('MYSQL_BUFFER_FK_CYCLE')
+            state[table] = 'open'
+            for column, parent, _ in FKS.get(table,()):
+                if parent != table and parent in pending and any(row.get(column) is not None for _,_,row in pending[table]):
+                    visit(parent)
+            state[table] = 'done'
+            order.append(table)
+        for table in pending:
+            visit(table)
+        return order
+
     def flush(self):
-        """Write buffered rows, one INSERT per table and column set; on a duplicate, row by row."""
+        """Write buffered rows, one INSERT per table and column set in parent-first order (on a
+        duplicate, row by row), then the deferred updates in their original order."""
         import pymysql
         pending, self._pending = getattr(self,'_pending',{}), {}
-        for table, items in pending.items():
+        deferred, self._deferred = getattr(self,'_deferred',None) or [], []
+        for table in self._parents_first(pending):
+            items = pending[table]
             groups = {}
             for key, values, row in items:
                 groups.setdefault(tuple(row),[]).append((key,values,row))
@@ -161,13 +205,17 @@ class DirectMySQL(MySQL):
                         raise
                     self._read_cache.clear()
                     for key, values, row in group:
-                        saved, created = self.identity(table,key,values)
-                        if created:
+                        saved = MySQL.get(self,table,key)
+                        if saved is None:
+                            # Callers already hold the buffered id: store the row with it.
+                            super().insert(table,row)
                             continue
                         # The buffered id was never stored; the caller already holds it, so a
                         # different stored row is a conflict rather than a silent swap.
                         if saved['id'] != row['id']:
                             raise Invalid('MYSQL_DEFERRED_INSERT_CONFLICT')
+        for table, key, values in deferred:
+            super().update(table,key,values)
 
     def _remember(self,table,key,saved,created):
         # A row inserted in this transaction is served from the cache to later locking reads.

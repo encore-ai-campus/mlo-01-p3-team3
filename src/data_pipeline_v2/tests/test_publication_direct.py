@@ -140,6 +140,69 @@ class DirectMySQLIdentityTests(unittest.TestCase):
         self.assertEqual(db.executed[0][0].count('),('), 2)
         self.assertEqual(db._pending, {})
 
+    def absent(self, db, table, key):
+        # What prefetch() records for a key it found no row for.
+        from pipeline_v2.domain.contracts import canonical
+        db._read_cache[(table, canonical(key), True)] = None
+
+    def test_prefetched_absent_rows_of_many_products_go_in_one_parent_first_insert_per_table(self):
+        db = self.transport()
+        db._deferred = []
+        images = []
+        for n in ('1', '2'):
+            product = dict(product_key='danawa:' + n)
+            self.absent(db, 'products', product)
+            saved, created = db.identity('products', product, dict(name='p' + n, representative_image_id=None))
+            self.assertTrue(created)
+            asset = dict(bucket='b', object_key='o' + n)
+            self.absent(db, 'assets', asset)
+            asset_row, _ = db.identity('assets', asset, dict(kind='PRODUCT_IMAGE'))
+            image = dict(product_id=saved['id'], source_code='danawa', source_product_id=n, image_variant='representative',
+                raw_document_id='r', source_version='v')
+            self.absent(db, 'product_images', image)
+            linked, _ = db.identity('product_images', image, dict(asset_id=asset_row['id']))
+            images.append(linked['id'])
+            # The new product's representative image is not stored yet: the update waits for it.
+            db.update('products', dict(id=saved['id']), dict(representative_image_id=linked['id']))
+        self.assertEqual(db.executed, [])
+        db.flush()
+        statements = [sql.split(' SET')[0].split('(')[0].strip() for sql, _ in db.executed]
+        self.assertEqual(statements, ['INSERT INTO `products`', 'INSERT INTO `assets`', 'INSERT INTO `product_images`',
+            'UPDATE `products`', 'UPDATE `products`'])
+        self.assertEqual(db.executed[0][0].count('),('), 1)
+        self.assertEqual([args[0] for _, args in db.executed[3:]], images)
+
+    def test_an_update_of_a_buffered_row_goes_into_its_insert(self):
+        db = self.transport()
+        db._deferred = []
+        offer = dict(offer_key='k')
+        self.absent(db, 'offers', offer)
+        saved, _ = db.identity('offers', offer, dict(price_amount=1))
+        db.update('offers', dict(id=saved['id']), dict(price_amount=2))
+        db.flush()
+        self.assertEqual(len(db.executed), 1)
+        sql, args = db.executed[0]
+        self.assertIn(2, args)
+        self.assertNotIn(1, args)
+
+    def test_a_duplicate_in_a_buffered_insert_keeps_the_held_id_for_absent_rows(self):
+        import pymysql
+        db = self.transport()
+        db._deferred = []
+        calls = []
+        def execute(sql, args=()):
+            calls.append((sql, args))
+            if '),(' in sql and sql.startswith('INSERT'):
+                raise pymysql.err.IntegrityError(1062, 'Duplicate entry')
+            return 1
+        db.execute = execute
+        db.one = lambda sql, args=(): None
+        held = [db.identity_absent('offers', dict(offer_key=k), dict(price_amount=1))[0]['id'] for k in ('a', 'b')]
+        db.flush()
+        # Both rows were absent after all (the duplicate was elsewhere): each stored with its held id.
+        self.assertEqual(len(calls), 3)
+        self.assertEqual([args[list(args).index(h)] for (_, args), h in zip(calls[1:], held)], held)
+
     def test_a_duplicate_in_a_buffered_insert_is_checked_row_by_row(self):
         import pymysql
         from pipeline_v2.domain.contracts import Invalid
@@ -149,7 +212,7 @@ class DirectMySQLIdentityTests(unittest.TestCase):
         db.execute = duplicate
         key = dict(product_id='p1', link_observation_key='l1', gold_evaluation_key='j1')
         db.identity_absent('product_link_observations', key, dict(source_url='u'))
-        db.identity = lambda table, key, values: (dict(key, id='existing'), False)
+        db.one = lambda sql, args=(): dict(key, id='existing')
         # The caller already holds the buffered id, so another stored row is a conflict.
         with self.assertRaisesRegex(Invalid, 'MYSQL_DEFERRED_INSERT_CONFLICT'):
             db.flush()
