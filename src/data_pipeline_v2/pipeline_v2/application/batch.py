@@ -16,17 +16,17 @@ ACTIVE = {'RUNNING', 'PUBLISHING', 'RECOVERY_REQUIRED'}
 CLOSED = {'COMPLETED', 'ABANDONED'}
 
 
-def prefetched(values):
-    """Yield `values` in order while the next item is produced in a background thread.
+def prefetched(values, ahead=2):
+    """Yield `values` in order while the next items are produced in a background thread.
 
     The publication loop reads Gold chunks from the lake and writes them to MySQL; reading the
-    next chunk during the current write hides the read. At most one item waits ahead. A producer
+    next chunks during the current write hides the read. At most `ahead` items wait. A producer
     failure is raised at that item; a consumer that stops early closes the producer.
     """
     import contextvars
     import queue
     import threading
-    slots, stop, done = queue.Queue(maxsize=1), threading.Event(), object()
+    slots, stop, done = queue.Queue(maxsize=ahead), threading.Event(), object()
     iterator = iter(values)
 
     def produce():

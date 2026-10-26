@@ -643,7 +643,9 @@ class SparkBatchProcessor:
 
     def _chunks(self, frame):
         chunk, amount = [], 0
-        for value in frame.toLocalIterator(prefetchPartitions=False):
+        # The next partition is fetched while this one is turned into chunks: Driver receive is
+        # bandwidth-bound (~10 MB/s between VMs), so waiting for each partition in turn left it bare.
+        for value in frame.toLocalIterator(prefetchPartitions=True):
             size = len(value['payload_json'].encode())
             if size > self.limits.publication_bytes:
                 raise Invalid('PUBLICATION_PRODUCT_BYTE_LIMIT')
