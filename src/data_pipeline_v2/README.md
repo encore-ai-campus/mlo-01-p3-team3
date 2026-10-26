@@ -12,6 +12,7 @@
 | 서버 이전·환경·중단·복구·반복 배포 | [서버 이전](docs/server-migration.md) | `config/*server.example.json`, `tools/release.py`, `tools/export_batch_input.py` |
 | 검증 범위와 성능 근거 | [검증 기록](docs/validation.md) | `tests/` |
 | 서버 계측 결과·병목·개선 계획 | [서버 계측 기록](docs/server-measurement-20261023.md) | `docs/verification/server_batch_20261023.json` |
+| 성능 개선 내용·효과·반영 순서 | [성능 개선 이력](docs/performance-history.md) | [10/25~26 계측 기록](docs/server-measurement-20261025.md) |
 
 ## 실행 구조
 

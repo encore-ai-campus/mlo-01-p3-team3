@@ -10,7 +10,7 @@
 
 | 목적 | 먼저 읽을 문서 | 함께 확인할 문서 |
 |---|---|---|
-| 새 상품 실행기·크롤 완료 유한 배치(NiFi→Kafka→Spark)·직접 게시·서버 이전 | [v2 실행기 README](../src/data_pipeline_v2/README.md) | [책임·처리 계약](../src/data_pipeline_v2/docs/architecture.md), [NiFi 기동 계약](../src/data_pipeline_v2/docs/nifi-contract.md), [서버 이전](../src/data_pipeline_v2/docs/server-migration.md), [로컬 검증](../src/data_pipeline_v2/docs/validation.md) |
+| 새 상품 실행기·크롤 완료 유한 배치(NiFi→Kafka→Spark)·직접 게시·서버 이전 | [v2 실행기 README](../src/data_pipeline_v2/README.md) | [책임·처리 계약](../src/data_pipeline_v2/docs/architecture.md), [NiFi 기동 계약](../src/data_pipeline_v2/docs/nifi-contract.md), [서버 이전](../src/data_pipeline_v2/docs/server-migration.md), [로컬 검증](../src/data_pipeline_v2/docs/validation.md), [성능 개선 이력](../src/data_pipeline_v2/docs/performance-history.md) |
 | dev 원본 보존·로컬 시연 MVP 분리 | [시연 분리·미연동 배경](interior-recommender/local-demo.md) | [시연 실행](../src/local_demo/README.md), [서버 카탈로그](interior-recommender/server-catalog.md) |
 | 추천 카탈로그의 MySQL·Garage·Delta 연결 | [서버 카탈로그 연결](interior-recommender/server-catalog.md) | [카탈로그 담당](interior-recommender/roles/catalog.md), [게시 계약](design/13-gold-mysql-publication.md) |
 | 추천 이후 상품 배치 이미지 생성 | [상품 배치 미리보기](interior-recommender/product-preview.md) | [실행·복구](interior-recommender/execution.md), [직접 추천](design/12-direct-recommendation.md) |
