@@ -301,6 +301,33 @@ class RedesignContractTests(unittest.TestCase):
             with self.assertRaises(Invalid):
                 runner.audit(key)
 
+    def test_a_publish_retry_keeps_receipts_an_earlier_version_stored_with_the_delivery(self):
+        with runtime(self.config) as (runner,outbox):
+            outbox.prepare(self.crawl,self.items)
+            outbox.relay('crawl-1')
+            key = runner.submit('crawl-1')['job_id']
+            self.assertEqual(runner.work(key,'process')['status'],'GOLD_COMMITTED')
+            store = outbox.store
+            original = store.put_many
+            old = []
+            def stop(kind,records):
+                records = list(records)
+                if kind == 'publication_receipt' and not old:
+                    # The earlier version: the delivery stored inside, then the process stopped.
+                    gold = store.get('stage',[key,'gold'])
+                    deliveries = {d['job_id']:d for products in runner.processor.products(gold)
+                        for d in runner._deliveries(key,'crawl-1',gold,products)}
+                    old.extend((k,dict(delivery=deliveries[k[1]],receipt=v['receipt'])) for k,v in records)
+                    original(kind,old)
+                    raise OSError('stopped before the publication record')
+                return original(kind,records)
+            with patch.object(store,'put_many',side_effect=stop):
+                with self.assertRaises(OSError):
+                    runner.work(key,'publish')
+            runner.recover(key,'publisher stopped')
+            self.assertEqual(runner.work(key,'publish')['status'],'COMPLETED')
+            self.assertEqual(runner.audit(key)['status'],'AUDIT_OK')
+
     def relay_only(self, **limits):
         # Relay mechanics alone: prepare does not send ahead.
         return dict(self.config,batch_limits=limits,kafka=dict(self.config.get('kafka',{}),early_relay=False))

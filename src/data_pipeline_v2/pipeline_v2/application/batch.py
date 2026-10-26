@@ -328,9 +328,19 @@ class BatchRunner:
                                     raise Invalid('PUBLICATION_RECEIPT_CHANGED')
                             # The delivery itself is not stored: it is a pure function of the Gold record
                             # and its product, so audit() rebuilds it from Gold (about 100 KB per product).
-                            self.store.put_many('publication_receipt',[([key,delivery['job_id']],
-                                dict(receipt=receipt,product_key=delivery['product_key']))
-                                for delivery,receipt in zip(requests,answers)])
+                            # A retry keeps receipts already stored, including ones an earlier version
+                            # wrote with the delivery inside (records are immutable); only missing ones
+                            # are written.
+                            keys = [[key,delivery['job_id']] for delivery in requests]
+                            stored = self.store.get_list('publication_receipt',keys)
+                            fresh = []
+                            for k,delivery,receipt,old in zip(keys,requests,answers,stored):
+                                if old is None:
+                                    fresh.append((k,dict(receipt=receipt,product_key=delivery['product_key'])))
+                                elif old['receipt'] != receipt or old.get('delivery',delivery) != delivery:
+                                    raise Invalid('PUBLICATION_RECEIPT_CHANGED')
+                            if fresh:
+                                self.store.put_many('publication_receipt',fresh)
                             for delivery,receipt in zip(requests,answers):
                                 resolutions[receipt['resolution']] = resolutions.get(receipt['resolution'],0)+1
                                 receipts.append(delivery['job_id'])
