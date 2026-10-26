@@ -282,8 +282,50 @@ class RedesignContractTests(unittest.TestCase):
             self.assertEqual(runner.work(third)['stages']['silver']['counts']['history_limit'],0)
             self.assertEqual(runner.audit(second)['status'],'AUDIT_OK')
 
-    def test_relay_publishes_in_bounded_groups_and_keeps_confirmed_acks(self):
+    def relay_only(self, **limits):
+        # Relay mechanics alone: prepare does not send ahead.
+        return dict(self.config,batch_limits=limits,kafka=dict(self.config.get('kafka',{}),early_relay=False))
+
+    def test_prepare_sends_each_durable_chunk_and_relay_only_writes_the_manifest(self):
         config = dict(self.config,batch_limits={'outbox_chunk':2})
+        with runtime(config) as (runner,outbox):
+            original = outbox.producer.send_many
+            sizes = []
+            def counted(pairs):
+                pairs = list(pairs)
+                sizes.append(len(pairs))
+                return original(pairs)
+            with patch.object(outbox.producer,'send_many',side_effect=counted):
+                outbox.prepare(self.crawl,self.items)
+                self.assertEqual(sorted(sizes),[1,2,2])
+                sizes.clear()
+                manifest = outbox.relay('crawl-1')
+            self.assertEqual(sizes,[])
+            self.assertEqual(manifest['event_count'],5)
+            self.assertEqual(runner.work(runner.submit('crawl-1')['job_id'])['status'],'COMPLETED')
+
+    def test_a_failed_early_send_is_sent_by_relay(self):
+        config = dict(self.config,batch_limits={'outbox_chunk':2})
+        with runtime(config) as (runner,outbox):
+            original = outbox.producer.send_many
+            def down(pairs):
+                raise OSError('broker unavailable')
+            with patch.object(outbox.producer,'send_many',side_effect=down):
+                # The crawl still completes; nothing is final before the manifest.
+                self.assertEqual(outbox.prepare(self.crawl,self.items)['status'],'SOURCE_COMPLETE')
+            sizes = []
+            def counted(pairs):
+                pairs = list(pairs)
+                sizes.append(len(pairs))
+                return original(pairs)
+            with patch.object(outbox.producer,'send_many',side_effect=counted):
+                manifest = outbox.relay('crawl-1')
+            self.assertEqual(sizes,[2,2,1])
+            self.assertEqual(manifest['event_count'],5)
+            self.assertEqual(runner.work(runner.submit('crawl-1')['job_id'])['status'],'COMPLETED')
+
+    def test_relay_publishes_in_bounded_groups_and_keeps_confirmed_acks(self):
+        config = self.relay_only(outbox_chunk=2)
         with runtime(config) as (runner,outbox):
             outbox.prepare(self.crawl,self.items)
             original = outbox.producer.send_many
@@ -301,7 +343,7 @@ class RedesignContractTests(unittest.TestCase):
             self.assertEqual(sizes,[])
 
     def test_unconfirmed_message_keeps_other_acks_and_only_it_is_resent(self):
-        config = dict(self.config,batch_limits={'outbox_chunk':2})
+        config = self.relay_only(outbox_chunk=2)
         with runtime(config) as (runner,outbox):
             outbox.prepare(self.crawl,self.items)
             original = outbox.producer.send_many

@@ -64,7 +64,8 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(runner.publisher.writes,writes)
 
     def test_ack_loss_retransmits_identical_event_and_deduplicates(self):
-        with runtime(self.config) as (runner,outbox):
+        config = dict(self.config,kafka=dict(self.config.get('kafka',{}),early_relay=False))
+        with runtime(config) as (runner,outbox):
             outbox.prepare(self.crawl,self.items)
             original = outbox.store.put
             failed = False

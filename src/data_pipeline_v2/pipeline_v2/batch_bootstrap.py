@@ -139,7 +139,8 @@ def runtime(config, *, batch='runtime', writable=False, phase='all'):
                     lock=phase_lock(config),retention=retention,
                     kafka_retention_seconds=config.get('kafka',{}).get('retention_seconds'))
                 outbox = Outbox(store,producer,timing,limits,config['admission'],retention,
-                    wire_payload=config.get('kafka',{}).get('wire_payload',True))
+                    wire_payload=config.get('kafka',{}).get('wire_payload',True),
+                    early_relay=config.get('kafka',{}).get('early_relay',True))
                 yield runner,outbox
     finally:
         timing.flush()

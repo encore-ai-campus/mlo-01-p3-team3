@@ -5,8 +5,14 @@ from ..domain.contracts import digest, canonical, seal, verified, stamp, Invalid
 
 
 class Outbox:
-    def __init__(self, store, producer, timing, limits, admission, retention=None, wire_payload=True):
+    def __init__(self, store, producer, timing, limits, admission, retention=None, wire_payload=True,
+                 early_relay=True):
+        import threading
         self.store, self.producer, self.timing = store, producer, timing
+        # True: each chunk goes to Kafka as soon as its source and outbox rows are durable, during
+        # prepare; relay() then finds the acks and only writes the delivery manifest.
+        self.early_relay = early_relay
+        self._sending = threading.Lock()
         self.limits, self.admission = limits, admission
         self.retention = retention or Retention()
         # False: Kafka carries only the immutable source reference (consumer reads the ledger itself).
@@ -67,6 +73,24 @@ class Outbox:
             self.prepared[1].update((e['source_ref'], p) for e, p in admitted)
         self.store.put_many('outbox', [([batch, e['event_id']], e) for e, _ in pending])
 
+    def _send_early(self, batch, pending):
+        """Send a chunk whose source and outbox rows are durable and record its acks (generation 0).
+
+        This is relay()'s own send, earlier: the same key and wire event, and an ack only for a
+        broker offset. Nothing is final before the delivery manifest, so a failure here only leaves
+        acks missing and relay() sends those events as before; a crawl that later fails leaves
+        messages outside any manifest range, which no batch reads.
+        """
+        try:
+            with self._sending, self.timing.measure('kafka.publish_ack', batch, counts={'messages': len(pending)}):
+                # As in relay(): quarantined raw stays in its restricted store and is never sent.
+                acks = self.producer.send_many([(kafka_key(e), wire_event(e,
+                    None if e['event_type'] == REJECTED or not self.wire_payload else p)) for e, p in pending])
+            self.store.put_many('ack', [([batch, 0, e['event_id']], ack) for (e, _), ack in zip(pending, acks)
+                if ack is not None])
+        except Exception:
+            pass
+
     def prepare(self, crawl, items):
         source_contract(crawl)
         batch = crawl['crawl_batch_id']
@@ -81,7 +105,11 @@ class Outbox:
         pool, writes = ThreadPoolExecutor(max_workers=3), []
 
         def persist(chunk):
-            writes.append(pool.submit(contextvars.copy_context().run, self._persist, crawl, chunk))
+            def write():
+                self._persist(crawl, chunk)
+                if self.early_relay:
+                    self._send_early(batch, chunk)
+            writes.append(pool.submit(contextvars.copy_context().run, write))
         with self.timing.measure('outbox.reconcile_source', batch) as counts, pool:
             for position, original in enumerate(items):
                 item = stable_item(original)
