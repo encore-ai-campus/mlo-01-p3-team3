@@ -68,6 +68,15 @@ class LazyProducer:
     def send_many(self,pairs):
         return self._open().send_many(pairs)
 
+    def begin_many(self,pairs):
+        inner = self._open()
+        if hasattr(inner,'begin_many'):
+            return inner.begin_many(pairs)
+        # A backend without in-flight groups (the local file broker) sends now.
+        from .adapters.kafka_batch import Pending
+        acks = self.send_many(pairs)
+        return Pending(lambda:acks)
+
     @property
     def failure_code(self):
         return getattr(self.inner, 'failure_code', None)

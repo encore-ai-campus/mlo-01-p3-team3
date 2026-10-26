@@ -12,7 +12,7 @@ class Outbox:
         # True: each chunk goes to Kafka as soon as its source and outbox rows are durable, during
         # prepare; relay() then finds the acks and only writes the delivery manifest.
         self.early_relay = early_relay
-        self._sending = threading.Lock()
+        self._sending, self._inflight = threading.Lock(), []
         self.limits, self.admission = limits, admission
         self.retention = retention or Retention()
         # False: Kafka carries only the immutable source reference (consumer reads the ledger itself).
@@ -74,27 +74,46 @@ class Outbox:
         self.store.put_many('outbox', [([batch, e['event_id']], e) for e, _ in pending])
 
     def _send_early(self, batch, pending):
-        """Send a chunk whose source and outbox rows are durable and record its acks (generation 0).
+        """Hand a chunk whose source and outbox rows are durable to Kafka, without waiting.
 
         This is relay()'s own send, earlier: the same key and wire event, and an ack only for a
-        broker offset. Nothing is final before the delivery manifest, so a failure here only leaves
-        acks missing and relay() sends those events as before; a crawl that later fails leaves
-        messages outside any manifest range, which no batch reads.
+        broker offset. Chunks stay in flight together; `_confirm_early` waits once at the end of
+        prepare. Nothing is final before the delivery manifest, so a failure only leaves acks
+        missing and relay() sends those events as before; a crawl that later fails leaves messages
+        outside any manifest range, which no batch reads.
         """
         try:
-            with self._sending, self.timing.measure('kafka.publish_ack', batch, counts={'messages': len(pending)}):
-                # As in relay(): quarantined raw stays in its restricted store and is never sent.
-                acks = self.producer.send_many([(kafka_key(e), wire_event(e,
-                    None if e['event_type'] == REJECTED or not self.wire_payload else p)) for e, p in pending])
-            self.store.put_many('ack', [([batch, 0, e['event_id']], ack) for (e, _), ack in zip(pending, acks)
-                if ack is not None])
+            # As in relay(): quarantined raw stays in its restricted store and is never sent.
+            pairs = [(kafka_key(e), wire_event(e, None if e['event_type'] == REJECTED or not self.wire_payload else p))
+                for e, p in pending]
+            with self._sending:
+                begin = getattr(self.producer, 'begin_many', None)
+                if begin is None:
+                    acks = self.producer.send_many(pairs)
+                    handle = type('Sent', (), {'acks': lambda _: acks})()
+                else:
+                    handle = begin(pairs)
+                self._inflight.append((handle, pending))
         except Exception:
             pass
+
+    def _confirm_early(self, batch):
+        inflight, self._inflight = self._inflight, []
+        if not inflight:
+            return
+        with self.timing.measure('kafka.publish_ack', batch, counts={'messages': sum(len(p) for _, p in inflight)}):
+            for handle, pending in inflight:
+                try:
+                    acks = handle.acks()
+                    self.store.put_many('ack', [([batch, 0, e['event_id']], ack) for (e, _), ack in zip(pending, acks)
+                        if ack is not None])
+                except Exception:
+                    pass
 
     def prepare(self, crawl, items):
         source_contract(crawl)
         batch = crawl['crawl_batch_id']
-        self.prepared = (batch, {})
+        self.prepared, self._inflight = (batch, {}), []
         inventory, total_bytes, records, duplicates = {}, 0, 0, 0
         dispositions = {}
         pending, pending_bytes = [], 0
@@ -151,6 +170,8 @@ class Outbox:
                 persist(pending)
             for write in writes:
                 write.result()
+            if self.early_relay:
+                self._confirm_early(batch)
             if records != crawl['event_count']:
                 raise Invalid('CRAWL_EVENT_COUNT_MISMATCH')
             source = seal(dict(schema_version=BATCH_SCHEMA, crawl=crawl, crawl_batch_id=batch,

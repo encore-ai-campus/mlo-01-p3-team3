@@ -38,6 +38,17 @@ class FileBroker:
         pass
 
 
+class Pending:
+    """Acks of a group handed to a producer; resolved once, on the first `acks()`."""
+    def __init__(self, resolve):
+        self._resolve, self._acks = resolve, None
+
+    def acks(self):
+        if self._acks is None:
+            self._acks = self._resolve()
+        return self._acks
+
+
 class KafkaProducer:
     """Durable acks=all producer. The server venv ships confluent-kafka; kafka-python is a fallback."""
     def __init__(self, config):
@@ -80,17 +91,28 @@ class KafkaProducer:
         Only a broker acknowledgement with an offset counts as delivery. Per-key order is kept by the
         idempotent producer (at most 5 in flight), so a group is not weaker than one send per message.
         """
+        return self.begin_many(pairs).acks()
+
+    def begin_many(self, pairs):
+        """Hand a group to the producer without waiting; `.acks()` on the result waits for it.
+
+        Groups begun one after another stay in flight together, so a caller that keeps producing
+        while earlier groups are acknowledged pays one wait instead of one per group.
+        """
         pairs = list(pairs)
         if self.kind == 'kafka-python':
             futures = [self.producer.send(self.topic,key=key,value=event) for key, event in pairs]
-            acks = []
-            for future in futures:
-                try:
-                    metadata = future.get(timeout=60)
-                    acks.append(dict(topic=metadata.topic,partition=metadata.partition,offset=metadata.offset))
-                except Exception:
-                    acks.append(None)
-            return acks
+
+            def resolve():
+                acks = []
+                for future in futures:
+                    try:
+                        metadata = future.get(timeout=60)
+                        acks.append(dict(topic=metadata.topic,partition=metadata.partition,offset=metadata.offset))
+                    except Exception:
+                        acks.append(None)
+                return acks
+            return Pending(resolve)
         results = [None] * len(pairs)
 
         def reporter(position):
@@ -107,19 +129,22 @@ class KafkaProducer:
                     # Local queue full: let delivery reports drain it instead of failing the group.
                     self.producer.poll(1)
             self.producer.poll(0)
-        self.producer.flush(150)
-        acks = []
-        self.failure_code = None
-        for result in results:
-            if result is None or result[0] is not None or result[1].offset() is None or result[1].offset() < 0:
-                acks.append(None)
-                # Only the Kafka error name is kept: a fixed symbolic code, never a message or payload.
-                name = result[0].name() if result is not None and result[0] is not None else 'NO_REPORT'
-                self.failure_code = self.failure_code or 'KAFKA_DELIVERY_' + re.sub(r'[^A-Z0-9]+', '_', str(name).upper()).strip('_')[:48]
-            else:
-                message = result[1]
-                acks.append(dict(topic=message.topic(),partition=message.partition(),offset=message.offset()))
-        return acks
+
+        def resolve():
+            self.producer.flush(150)
+            acks = []
+            self.failure_code = None
+            for result in results:
+                if result is None or result[0] is not None or result[1].offset() is None or result[1].offset() < 0:
+                    acks.append(None)
+                    # Only the Kafka error name is kept: a fixed symbolic code, never a message or payload.
+                    name = result[0].name() if result is not None and result[0] is not None else 'NO_REPORT'
+                    self.failure_code = self.failure_code or 'KAFKA_DELIVERY_' + re.sub(r'[^A-Z0-9]+', '_', str(name).upper()).strip('_')[:48]
+                else:
+                    message = result[1]
+                    acks.append(dict(topic=message.topic(),partition=message.partition(),offset=message.offset()))
+            return acks
+        return Pending(resolve)
 
     def close(self):
         if self.kind == 'kafka-python':
