@@ -426,9 +426,6 @@ class SparkBatchProcessor:
         # One read task per executor core: more splits only add a second wave and more consumers.
         splits = max(1,min(self.limits.spark_partitions,spark.sparkContext.defaultParallelism))
         wire = (self.read_kafka or read_kafka)(spark,self.kafka_config,manifest,splits).persist()
-        # Fill the cache with one read of the fixed range first; otherwise the stages that follow
-        # start together and each reads the range from the broker again.
-        wire.count()
         schema = 'crawl_batch_id string, event_id string, payload_hash string, product_key string'
         decoded = wire.withColumn('e',F.from_json('value',schema))
         selected = decoded.filter(F.col('e.crawl_batch_id') == batch)
@@ -451,14 +448,15 @@ class SparkBatchProcessor:
             resolved = spark.createDataFrame(events.rdd.mapPartitions(
                 lambda rows:resolve_partition(rows,store_config,page_size,expires=expires)),
                 'row_key string,product_key string,payload_json string,disposition string,raw_json string').persist()
-            # The range checks and the resolve summary read the same cached range and do not
-            # depend on each other, so they run at once. A range violation still wins over
-            # whatever resolve reported, keeping the checks' precedence.
-            done = concurrently(dict(flags=lambda:self.validate_range(decoded,batch,expected),
-                found=lambda:resolved.groupBy('disposition').agg(F.count('*').alias('n'),
-                    F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
-                    F.sort_array(F.collect_set('product_key')).alias('products'),
-                    F.sort_array(F.collect_set(self.delta.bucket('product_key'))).alias('buckets')).collect()),settle=True)
+            # The resolve summary is the one read of the fixed range: it fills the wire cache on the
+            # way (a separate count first cost a job wave), then the range checks read that cache.
+            # Run together they would each read the range from the broker. A range violation
+            # still wins over whatever resolve reported, keeping the checks' precedence.
+            done = dict(found=self._settle(lambda:resolved.groupBy('disposition').agg(F.count('*').alias('n'),
+                F.max(F.get_json_object('payload_json','$.event.collected_at')).alias('watermark'),
+                F.sort_array(F.collect_set('product_key')).alias('products'),
+                F.sort_array(F.collect_set(self.delta.bucket('product_key'))).alias('buckets')).collect()))
+            done['flags'] = self._settle(lambda:self.validate_range(decoded,batch,expected))
             flags = done['flags']
             if isinstance(flags,BaseException):
                 raise flags
@@ -479,6 +477,14 @@ class SparkBatchProcessor:
             wire.unpersist()
             raise
         return wire, resolved, done['found']
+
+    @staticmethod
+    def _settle(call):
+        """The call's result, or the exception it raised (like `concurrently(..., settle=True)`)."""
+        try:
+            return call()
+        except BaseException as exc:
+            return exc
 
     @staticmethod
     def _raw_of(resolved):
@@ -567,17 +573,17 @@ class SparkBatchProcessor:
         handoff = getattr(self,'_handoff',None)
         if handoff and handoff['job'] == job['job_id']:
             try:
-                if handoff.get('normalized'):
-                    # A failed cache append keeps the job open; a retry without this process's
-                    # cache only completes the raw (the normalization is redone by a later batch).
-                    handoff['normalized'].join()
-                try:
-                    handoff['commit'].join()
-                    return
-                except BaseException:
-                    pass
+                # Two independent tables: the cache append and the raw commit overlap.
+                calls = {name:handoff[name].join for name in ('normalized','commit') if handoff.get(name)}
+                done = concurrently(calls,settle=True)
             finally:
                 self._release_handoff()
+            if isinstance(done.get('normalized'),BaseException):
+                # A failed cache append keeps the job open; a retry without this process's
+                # cache only completes the raw (the normalization is redone by a later batch).
+                raise done['normalized']
+            if not isinstance(done['commit'],BaseException):
+                return
         bronze = self.store.get('stage',[job['job_id'],'bronze'])
         if not bronze or not bronze.get('counts',{}).get('accepted'):
             return

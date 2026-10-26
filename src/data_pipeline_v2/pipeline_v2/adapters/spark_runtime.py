@@ -52,6 +52,9 @@ class ServerLake:
                 options.setdefault('spark.eventLog.dir',event_directory.resolve().as_uri())
                 options.setdefault('spark.eventLog.compress','false')
                 options.setdefault('spark.eventLog.logStageExecutorMetrics','true')
+                # Memory sizing evidence: cached block sizes (memory/disk) and Python worker RSS.
+                options.setdefault('spark.eventLog.logBlockUpdates.enabled','true')
+                options.setdefault('spark.executor.processTreeMetrics.enabled','true')
             options.setdefault('spark.redaction.regex','(?i)secret|password|token|access[.]?key|uri|credential')
             options=storage_options(options,writer=self.writable,lease=self.lease if self.writable else None)
             builder=SparkSession.builder.appName('sketchon-direct-pipeline-v2')
