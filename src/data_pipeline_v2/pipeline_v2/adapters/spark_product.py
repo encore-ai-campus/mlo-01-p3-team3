@@ -5,6 +5,7 @@ batch even for three products. Every rule here is per product, so one grouped pa
 same payload: values are projected through the same schema `from_json` used, arrays are ordered
 like `sort_array`, and "latest" keeps the native tie rules (equal-time conflicts are excluded).
 """
+import hashlib
 import json
 from itertools import groupby
 
@@ -276,10 +277,17 @@ def product_pass(rows, context):
         yield ('policy', sha(product), product, '')
         for identity, value in needed.items():
             event = value['event']
-            item = value.get('item') or json.loads(raw[value['_row_key']])
-            if digest(item) != event['payload_hash']:
-                raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
-            result = parse_observation(item, policy)
+            text = raw.get(value['_row_key']) if value.get('item') is None else None
+            # The stored raw is its canonical text: its sha256 is the payload hash, so the check
+            # needs no decode and re-encode (other text falls back to the full check).
+            if text is not None and hashlib.sha256(text.encode()).hexdigest() == event['payload_hash']:
+                item = json.loads(text)
+            else:
+                item = value.get('item') or json.loads(text)
+                if digest(item) != event['payload_hash']:
+                    raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
+            # Only accepted observations are indexed: this exact raw passed validate_raw at intake.
+            result = parse_observation(item, policy, raw_verified=True)
             body = canonical(dict(quality=result['quality'],reason=result['reason'],
                 normalized_json=canonical(result['normalized']) if result['normalized'] is not None else None,
                 raw_document_id=event['raw_document_id'],event_id=event['event_id'],

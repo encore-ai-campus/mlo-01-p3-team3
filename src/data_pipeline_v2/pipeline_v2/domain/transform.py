@@ -34,11 +34,11 @@ def silver_identity(item, policy):
         rules=projected['rules'], mappings=projected['mappings']))
 
 
-def normalize(item, policy):
+def normalize(item, policy, raw_verified=False):
     from product_pipeline.silver.normalize import normalize as parse_facts
     doc, state = item['document'], item['image_state']
     result = parse_facts(doc, state, normalization_inputs(policy), processing_run_id=RUN,
-        as_of=doc['collected_at'], processed_at=doc['collected_at'])
+        as_of=doc['collected_at'], processed_at=doc['collected_at'], raw_verified=raw_verified)
     # Keep source facts and parser diagnostics. Legacy review fields are never decisions in v2.
     result['direct_input_hash'] = silver_identity(item, policy)
     result['direct_images'] = []

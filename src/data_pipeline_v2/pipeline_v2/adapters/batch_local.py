@@ -10,21 +10,23 @@ METADATA_TABLES = {'INPUT_QUARANTINE':'bronze_quarantine','PAYLOAD_OMITTED':'bro
                    'SOURCE_METADATA_ONLY':'bronze_metadata'}
 
 
-def classify(item, event):
+def classify(item, event, document_verified=False):
+    """document_verified: the item's payload hash already matched an event made at intake, where
+    event_for_item checked document_hash against this very document."""
     from product_pipeline.bronze.contracts import validate_raw, Poison
     from product_pipeline.contracts import event_for
     try:
         doc = item['document']
-        validate_raw(doc, event_for(doc, RUN, doc['collected_at']))
+        validate_raw(doc, event_for(doc, RUN, doc['collected_at']), document_verified)
     except Poison as exc:
         return 'INPUT_QUARANTINE' if event['quarantine_allowed'] else 'PAYLOAD_OMITTED', exc.code
     return 'ACCEPTED', None
 
 
-def parse_observation(item, policy):
+def parse_observation(item, policy, raw_verified=False):
     from product_pipeline.errors import Conflict
     try:
-        return dict(quality='VALID', normalized=normalize(item, policy), reason=None)
+        return dict(quality='VALID', normalized=normalize(item, policy, raw_verified), reason=None)
     except Conflict as exc:
         # Only explicit deterministic source conflicts become row-level holds.
         return dict(quality='QUALITY_HOLD', normalized=None, reason=exc.code)

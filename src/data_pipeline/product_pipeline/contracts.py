@@ -47,11 +47,13 @@ def image_projection(image):
             "acquisition_state": "VERIFIED" if verified else "UNAVAILABLE"}
 
 
-def observation_key(raw, images):
+def observation_key(raw, images, raw_hash=None, gallery_hash=None):
+    """Precomputed digest(raw) / gallery hash may be passed; the key is the same either way."""
     return digest({"contract_version": 1, "collection_run_id": raw["job_id"],
                    "source_record_key": f"danawa:PRODUCT:{raw['product_id']}",
-                   "source_observation_hash": digest(raw),
-                   "gallery_acquisition_hash": digest([image_projection(i) for i in images])})
+                   "source_observation_hash": raw_hash if raw_hash is not None else digest(raw),
+                   "gallery_acquisition_hash": gallery_hash if gallery_hash is not None
+                   else digest([image_projection(i) for i in images])})
 
 
 def registration_identity(row):

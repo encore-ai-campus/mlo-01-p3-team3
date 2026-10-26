@@ -33,10 +33,14 @@ def source_time(value):
     return (utc(value),'OBSERVED') if value else (None,'UNKNOWN')
 
 
-def evaluation_input(doc,state,inputs,as_of):
-    """Identity shared by normalization and observation-specific reuse checks."""
+def evaluation_input(doc,state,inputs,as_of,raw_verified=False):
+    """Identity shared by normalization and observation-specific reuse checks.
+
+    raw_verified: the caller already proved this exact raw passed validate_raw (same content hash);
+    the check is pure, so running it again cannot change the result."""
     utc(as_of)
-    validate_raw(doc,event_for(doc,'00000000-0000-4000-8000-000000000001',doc['collected_at']))
+    if not raw_verified:
+        validate_raw(doc,event_for(doc,'00000000-0000-4000-8000-000000000001',doc['collected_at']))
     image=image_state(doc,state)
     related=project(doc,inputs,as_of)
     normalizer_version=VERSION+':'+digest(related['rules'])
@@ -50,9 +54,9 @@ def evaluation_input(doc,state,inputs,as_of):
     return dict(evaluation_key=eval_key,processing_input_fingerprint=fingerprint,image_state=image),related,normalizer_version
 
 
-def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None):
+def normalize(doc, state, inputs, *, processing_run_id, as_of, processed_at=None, raw_verified=False):
     UUID(processing_run_id)
-    identity,related,normalizer_version=evaluation_input(doc,state,inputs,as_of)
+    identity,related,normalizer_version=evaluation_input(doc,state,inputs,as_of,raw_verified)
     image=identity['image_state'];fingerprint=identity['processing_input_fingerprint'];eval_key=identity['evaluation_key']
     rules=[r for r in related['rules']['rows'] if r['effective_status']=='ACTIVE']
     common=dict(evaluation_key=eval_key,raw_document_id=doc['_id'],document_hash=doc['document_hash'],

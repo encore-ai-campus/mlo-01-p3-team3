@@ -1,6 +1,7 @@
 """Finite distributed source resolution, cached parsing, native Gold and bounded publication."""
 from contextlib import contextmanager
 from itertools import islice
+import hashlib
 import json
 
 from ..domain.contracts import canonical, digest, seal, stamp, Invalid
@@ -51,16 +52,18 @@ def resolve_partition(rows, store_config, page_size, expires=None):
                     yield (event['event_id'],'',canonical(body),disposition,None)
                     continue
                 item = item if item is not None else items.get(event['source_ref'])
-                if item is None or digest(item) != event['payload_hash']:
+                # One canonical encoding serves both the hash check and the stored raw.
+                text = canonical(item) if item is not None else None
+                if text is None or hashlib.sha256(text.encode()).hexdigest() != event['payload_hash']:
                     raise Invalid('IMMUTABLE_SOURCE_UNAVAILABLE')
-                disposition, reason = classify(item,event)
+                disposition, reason = classify(item,event,document_verified=True)
                 if disposition == 'ACCEPTED':
                     # The index keeps what every batch reads (event, dependencies, revision); the
                     # raw is kept once in input_raw, read only when a normalization is not reusable.
                     body = dict(event={k:v for k,v in event.items() if k != 'crawl_batch_id'},
                         dependencies=reference(item),image_revision=item['image_state']['image_state_revision'],
                         origin_job=record['origin_job'])
-                    yield (record['row_key'],event['product_key'],canonical(body),disposition,canonical(item))
+                    yield (record['row_key'],event['product_key'],canonical(body),disposition,text)
                 else:
                     # The raw stays in the normal immutable source snapshot; only a reference is kept.
                     body = dict(intake_metadata(event,disposition,reason,expires,
