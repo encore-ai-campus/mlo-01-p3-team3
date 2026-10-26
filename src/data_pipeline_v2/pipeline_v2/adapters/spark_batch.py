@@ -201,6 +201,12 @@ class SparkBatchProcessor:
         from .kafka_batch import read_kafka
         self._open()
         spark, delta, batch, key = self.spark,self.delta,job['crawl_batch_id'],job['job_id']
+        handoff = getattr(self,'_handoff',None)
+        if handoff and handoff['job'] != key:
+            # Another job's deferred writes finish before this pass reads any history: a retry or
+            # repair reuses stored Bronze and would otherwise store normalized keys that job still
+            # appends with its absent claim. Normally already done by that job's finalize.
+            self._release_handoff()
         self.compact_if_needed(batch)
         pin = pinned_inputs(self.store, key)
         allowed = pin['bronze_jobs'] + [key]
@@ -376,11 +382,12 @@ class SparkBatchProcessor:
                 handoff = getattr(self,'_handoff',None)
                 if count('normalized') and handoff and handoff['job'] == key:
                     # The normalization cache is not needed to publish: it is appended after
-                    # publication (finalize), so the Gold commit has the executors to itself. By
-                    # then another worker may have stored some keys, so this append checks stored
-                    # keys (no absent claim). Losing it only means a later batch parses again.
+                    # publication (finalize), so the Gold commit has the executors to itself. The
+                    # absent claim still holds then: this process's next pass joins it first
+                    # (_release_handoff), and a lost writer lease stays lost, so no other writer
+                    # can append in between. Losing it only means a later batch parses again.
                     handoff['normalized'] = deferred(lambda:delta.append_history('normalized_history',kind('normalized'),
-                        unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or [])))
+                        unique=dict(keys=count('normalized'),buckets=shared.get('buckets') or [],absent=True)))
                 elif count('normalized'):
                     writes['normalized'] = normalized
                 if count('hold'):

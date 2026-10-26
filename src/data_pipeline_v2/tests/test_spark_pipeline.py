@@ -284,6 +284,39 @@ class SparkFinitePipelineTests(unittest.TestCase):
         self.assertEqual(len(rows),self.processor.store.get('stage',[job,'bronze'])['counts']['accepted'])
         self.assertEqual(self.runner.work(job,phase='publish')['status'],'COMPLETED')
 
+    def test_a_resident_process_phase_leaves_raw_and_normalized_writes_to_publication(self):
+        delta = self.processor.delta
+        job = self.batch('spark-resident',self.items)
+        normalized = len(delta.tables.get(delta._path('normalized_history'),[]))
+        self.assertEqual(self.runner.work(job,phase='process')['status'],'GOLD_COMMITTED')
+        # Still pending in this process: neither write may run before publication.
+        self.assertFalse([r for r in delta.tables.get(delta._path('input_raw'),[]) if r[3] == job])
+        self.assertEqual(len(delta.tables.get(delta._path('normalized_history'),[])),normalized)
+        self.assertEqual(self.runner.work(job,phase='publish')['status'],'COMPLETED')
+        rows = [r[0] for r in delta.tables[delta._path('input_raw')] if r[3] == job]
+        self.assertEqual(len(rows),self.processor.store.get('stage',[job,'bronze'])['counts']['accepted'])
+        self.assertGreater(len(delta.tables[delta._path('normalized_history')]),normalized)
+
+    def test_another_jobs_deferred_writes_finish_before_a_retried_pass(self):
+        from unittest.mock import patch
+        delta = self.processor.delta
+        first = self.batch('spark-pending-a',self.items)
+        self.assertEqual(self.runner.work(first,phase='process')['status'],'GOLD_COMMITTED')
+        self.assertEqual(self.processor._handoff['job'],first)
+        second = self.batch('spark-pending-b',self.items)
+        seen = []
+        original = self.processor.compact_if_needed
+        def entry(batch):
+            # Reached on every path (fresh, retry, repair) before any history is read.
+            seen.append(getattr(self.processor,'_handoff',None))
+            return original(batch)
+        with patch.object(self.processor,'compact_if_needed',entry):
+            self.assertEqual(self.runner.work(second)['status'],'COMPLETED')
+        self.assertEqual(seen,[None])
+        # The first job's raw and normalization cache were stored before the second pass ran.
+        self.assertTrue([r for r in delta.tables[delta._path('input_raw')] if r[3] == first])
+        self.assertEqual(self.runner.work(first,phase='publish')['status'],'COMPLETED')
+
     def test_a_history_table_over_the_file_limit_is_compacted_before_the_batch(self):
         delta = self.processor.delta
         self.processor.limits = BatchLimits(spark_partitions=2,history_files=1)

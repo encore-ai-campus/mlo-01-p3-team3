@@ -185,12 +185,14 @@ class BatchRunner:
         measured = self.timing.measure('batch.total',job['crawl_batch_id']) if phase == 'all' else nullcontext()
         try:
             with measured:
+                processed = False
                 if phase in {'all','process'} and job['status'] == 'QUEUED':
                     with self.lock('process'):
-                        job = self._process(key)
-                if phase == 'process' and job['status'] == 'GOLD_COMMITTED' and hasattr(self.processor,'complete_raw'):
+                        job, processed = self._process(key), True
+                if phase == 'process' and job['status'] == 'GOLD_COMMITTED' and not processed and hasattr(self.processor,'complete_raw'):
                     # A writer run of a processed job completes a raw commit a publish-only worker
-                    # could not (RAW_COMMIT_PENDING); a no-op when the raw is whole.
+                    # could not (RAW_COMMIT_PENDING); a no-op when the raw is whole. Not for a job
+                    # this call just processed: its raw commit waits for publication (finalize).
                     with self.lock('process'):
                         self.processor.complete_raw(job)
                 if phase in {'all','publish'} and job['status'] == 'GOLD_COMMITTED':
