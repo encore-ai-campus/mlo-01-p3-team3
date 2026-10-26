@@ -203,6 +203,11 @@ def read_kafka(spark, config, manifest, min_partitions):
     for position in manifest['ranges']:
         assignment.setdefault(position['topic'], []).append(position['partition'])
     reader = spark.read.format('kafka').options(**options).option('assign', canonical(assignment))
+    if 'kafka.group.id' not in options and 'groupIdPrefix' not in options:
+        # A fixed id lets each executor's cached consumer (keyed by group and partition) serve
+        # the next batch instead of connecting again; offsets are explicit and never committed,
+        # so the group is only that cache key.
+        reader = reader.option('kafka.group.id', 'pj3-v2-batch-range-reader')
     return (reader.option('startingOffsets',starts).option('endingOffsets',ends)
         .option('failOnDataLoss','true').option('minPartitions',str(min_partitions)).load()
         .selectExpr('topic','partition','offset','CAST(key AS STRING) AS key','CAST(value AS STRING) AS value'))
