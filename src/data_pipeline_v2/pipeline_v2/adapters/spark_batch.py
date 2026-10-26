@@ -476,6 +476,10 @@ class SparkBatchProcessor:
                 resolved.unpersist()
             wire.unpersist()
             raise
+        # Every later step reads the resolved cache, which holds each event's body again: keeping
+        # the wire too doubled executor storage, the batch size limit. A lost resolved block is
+        # recomputed from the same fixed range. (Unpersisting it again later is a no-op.)
+        wire.unpersist()
         return wire, resolved, done['found']
 
     @staticmethod
