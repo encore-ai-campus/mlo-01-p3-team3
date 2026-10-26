@@ -16,6 +16,56 @@ ACTIVE = {'RUNNING', 'PUBLISHING', 'RECOVERY_REQUIRED'}
 CLOSED = {'COMPLETED', 'ABANDONED'}
 
 
+def prefetched(values):
+    """Yield `values` in order while the next item is produced in a background thread.
+
+    The publication loop reads Gold chunks from the lake and writes them to MySQL; reading the
+    next chunk during the current write hides the read. At most one item waits ahead. A producer
+    failure is raised at that item; a consumer that stops early closes the producer.
+    """
+    import contextvars
+    import queue
+    import threading
+    slots, stop, done = queue.Queue(maxsize=1), threading.Event(), object()
+    iterator = iter(values)
+
+    def produce():
+        try:
+            for value in iterator:
+                while not stop.is_set():
+                    try:
+                        slots.put((True, value), timeout=0.2)
+                        break
+                    except queue.Full:
+                        continue
+                if stop.is_set():
+                    return
+            slots.put((True, done))
+        except BaseException as exc:
+            slots.put((False, exc))
+        finally:
+            if hasattr(iterator, 'close'):
+                iterator.close()
+    worker = threading.Thread(target=contextvars.copy_context().run, args=(produce,), daemon=True)
+    worker.start()
+    try:
+        while True:
+            ok, value = slots.get()
+            if not ok:
+                raise value
+            if value is done:
+                return
+            yield value
+    finally:
+        stop.set()
+        while worker.is_alive():
+            try:
+                slots.get_nowait()
+            except queue.Empty:
+                pass
+            worker.join(0.2)
+
+
 def _age(value, now):
     return max(0, (now - datetime.fromisoformat(value.replace('Z', '+00:00'))).total_seconds())
 
@@ -261,7 +311,8 @@ class BatchRunner:
                     started, resolutions, receipts = stamp(), {}, []
                     with self.timing.measure('mysql.publication_total',batch) as counts:
                         # Lake read time is accumulated between yields, excluding the publication work.
-                        for products in self.timing.iterate('publish.lake_read',batch,self.processor.products(gold)):
+                        # The next chunk is read while this one is published; lake_read is the wait left.
+                        for products in self.timing.iterate('publish.lake_read',batch,prefetched(self.processor.products(gold))):
                             # Materialized once per bounded chunk, outside service transactions.
                             requests = self._deliveries(key,batch,gold,products)
                             with self.timing.measure('mysql.publish_chunk',batch,counts={'products':len(requests)}):

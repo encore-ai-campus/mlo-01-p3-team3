@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 HERE = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(HERE),str(HERE.parent/'data_pipeline')]
-from pipeline_v2.application.batch import BatchRunner
+from pipeline_v2.application.batch import BatchRunner, prefetched
 
 
 class Processor:
@@ -39,6 +39,50 @@ class WorkPhaseTests(unittest.TestCase):
         run, processor = runner('GOLD_COMMITTED')
         run.work('j','process')
         self.assertEqual(processor.calls,[('complete_raw','j')])
+
+
+class PrefetchedTests(unittest.TestCase):
+    def test_the_next_item_is_produced_while_the_current_one_is_consumed(self):
+        import threading
+        produced = []
+        ahead = threading.Event()
+        def values():
+            for n in range(3):
+                produced.append(n)
+                if n == 1:
+                    ahead.set()
+                yield n
+        seen = []
+        for value in prefetched(values()):
+            if value == 0:
+                # Item 1 is produced while item 0 is still being consumed.
+                self.assertTrue(ahead.wait(5))
+            seen.append(value)
+        self.assertEqual(seen, [0, 1, 2])
+
+    def test_a_producer_failure_is_raised_at_its_place(self):
+        def values():
+            yield 1
+            raise ValueError('lake read failed')
+        seen = []
+        with self.assertRaisesRegex(ValueError, 'lake read failed'):
+            for value in prefetched(values()):
+                seen.append(value)
+        self.assertEqual(seen, [1])
+
+    def test_a_consumer_that_stops_early_closes_the_producer(self):
+        import threading
+        closed = threading.Event()
+        def values():
+            try:
+                for n in range(100):
+                    yield n
+            finally:
+                closed.set()
+        for value in prefetched(values()):
+            if value == 1:
+                break
+        self.assertTrue(closed.wait(5))
 
 
 if __name__ == '__main__':
