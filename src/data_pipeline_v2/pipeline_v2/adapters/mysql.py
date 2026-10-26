@@ -181,6 +181,22 @@ class DirectMySQL(MySQL):
             visit(table)
         return order
 
+    # Each multi-row INSERT stays far below max_allowed_packet (64 MiB by default).
+    INSERT_BYTES, INSERT_ROWS = 4 * 1024 * 1024, 1000
+
+    def _bounded(self, rows):
+        group, size = [], 0
+        for item in rows:
+            row = item[2]
+            n = sum(len(v) if isinstance(v,(str,bytes)) else 16 for v in row.values()) + 8 * len(row)
+            if group and (size + n > self.INSERT_BYTES or len(group) >= self.INSERT_ROWS):
+                yield group
+                group, size = [], 0
+            group.append(item)
+            size += n
+        if group:
+            yield group
+
     def flush(self):
         """Write buffered rows, one INSERT per table and column set in parent-first order (on a
         duplicate, row by row), then the deferred updates in their original order."""
@@ -192,9 +208,10 @@ class DirectMySQL(MySQL):
             groups = {}
             for key, values, row in items:
                 groups.setdefault(tuple(row),[]).append((key,values,row))
-            for columns, group in groups.items():
-                if table not in TABLES or any(c not in TABLES[table] for c in columns):
-                    raise Invalid('MYSQL_IDENTIFIER_NOT_ALLOWED')
+            for columns, rows in groups.items():
+              if table not in TABLES or any(c not in TABLES[table] for c in columns):
+                  raise Invalid('MYSQL_IDENTIFIER_NOT_ALLOWED')
+              for group in self._bounded(rows):
                 values_sql = '('+','.join('%s' for _ in columns)+')'
                 sql = ('INSERT INTO `'+table+'` ('+','.join('`'+c+'`' for c in columns)+') VALUES '+
                     ','.join(values_sql for _ in group))
@@ -210,10 +227,11 @@ class DirectMySQL(MySQL):
                             # Callers already hold the buffered id: store the row with it.
                             super().insert(table,row)
                             continue
-                        # The buffered id was never stored; the caller already holds it, so a
-                        # different stored row is a conflict rather than a silent swap.
+                        # Another writer stored this key after the prefetch: the caller already
+                        # holds the buffered id, so the transaction is retried (its prefetch then
+                        # finds the stored row) rather than the id silently swapped.
                         if saved['id'] != row['id']:
-                            raise Invalid('MYSQL_DEFERRED_INSERT_CONFLICT')
+                            raise Invalid('MYSQL_CONCURRENT_INSERT')
         for table, key, values in deferred:
             super().update(table,key,values)
 

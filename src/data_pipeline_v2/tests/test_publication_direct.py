@@ -203,6 +203,16 @@ class DirectMySQLIdentityTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertEqual([args[list(args).index(h)] for (_, args), h in zip(calls[1:], held)], held)
 
+    def test_large_buffered_rows_are_split_below_the_packet_bound(self):
+        db = self.transport()
+        db._deferred = []
+        db.INSERT_BYTES = 1000
+        for n in range(5):
+            db.identity_absent('pipeline_publication_staging', dict(plan_id='j%d' % n, product_key='p%d' % n),
+                dict(body_hash='h', body_json='x' * 400))
+        db.flush()
+        self.assertEqual([sql.count('),(') + 1 for sql, _ in db.executed], [2, 2, 1])
+
     def test_a_duplicate_in_a_buffered_insert_is_checked_row_by_row(self):
         import pymysql
         from pipeline_v2.domain.contracts import Invalid
@@ -214,7 +224,7 @@ class DirectMySQLIdentityTests(unittest.TestCase):
         db.identity_absent('product_link_observations', key, dict(source_url='u'))
         db.one = lambda sql, args=(): dict(key, id='existing')
         # The caller already holds the buffered id, so another stored row is a conflict.
-        with self.assertRaisesRegex(Invalid, 'MYSQL_DEFERRED_INSERT_CONFLICT'):
+        with self.assertRaisesRegex(Invalid, 'MYSQL_CONCURRENT_INSERT'):
             db.flush()
 
 

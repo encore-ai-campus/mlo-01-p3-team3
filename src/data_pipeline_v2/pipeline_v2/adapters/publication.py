@@ -179,70 +179,84 @@ class MySQLPublisher:
         ordered = sorted(deliveries,key=lambda d:d['product_key'])
         self.fence()
         with self._stage('mysql.staging_batch_transaction',scope):
-            with db.transaction():
-                db.prefetch('pipeline_publications',[dict(plan_id=d['job_id']) for d in ordered])
-                db.prefetch('pipeline_publication_staging',[dict(plan_id=d['job_id'],product_key=d['product_key']) for d in ordered])
-                for delivery in ordered:
-                    key,group = delivery['job_id'],delivery['product']
-                    body_hash = digest(group)
-                    record,_ = db.identity('pipeline_publications',dict(plan_id=key),dict(plan_hash=body_hash,
-                        status='STAGED',gold_versions_json=canonical(dict(contract_version=3,proofs=delivery['gold']['proofs'])),product_count=1,completed_at=None))
-                    if record['plan_hash'] != body_hash:
-                        raise Invalid('PUBLICATION_PLAN_CONFLICT')
-                    prior = db.get('pipeline_publication_staging',dict(plan_id=key,product_key=group['product_key']))
-                    if prior and prior['body_hash'] != body_hash:
-                        raise Invalid('PUBLICATION_STAGING_CONFLICT')
-                    if not prior:
-                        db.identity('pipeline_publication_staging',dict(plan_id=key,product_key=group['product_key']),
-                            dict(body_hash=body_hash,body_json=canonical(group)))
-                self.fence()
-        receipts = {}
+            for attempt in (0,1):
+                try:
+                    with db.transaction():
+                        db.prefetch('pipeline_publications',[dict(plan_id=d['job_id']) for d in ordered])
+                        db.prefetch('pipeline_publication_staging',[dict(plan_id=d['job_id'],product_key=d['product_key']) for d in ordered])
+                        for delivery in ordered:
+                            key,group = delivery['job_id'],delivery['product']
+                            body_hash = digest(group)
+                            record,_ = db.identity('pipeline_publications',dict(plan_id=key),dict(plan_hash=body_hash,
+                                status='STAGED',gold_versions_json=canonical(dict(contract_version=3,proofs=delivery['gold']['proofs'])),product_count=1,completed_at=None))
+                            if record['plan_hash'] != body_hash:
+                                raise Invalid('PUBLICATION_PLAN_CONFLICT')
+                            prior = db.get('pipeline_publication_staging',dict(plan_id=key,product_key=group['product_key']))
+                            if prior and prior['body_hash'] != body_hash:
+                                raise Invalid('PUBLICATION_STAGING_CONFLICT')
+                            if not prior:
+                                db.identity('pipeline_publication_staging',dict(plan_id=key,product_key=group['product_key']),
+                                    dict(body_hash=body_hash,body_json=canonical(group)))
+                        self.fence()
+                    break
+                except Invalid as exc:
+                    # Another writer stored a prefetched-absent key: once more, with a fresh prefetch.
+                    if attempt or exc.args[:1] != ('MYSQL_CONCURRENT_INSERT',):
+                        raise
         with self._stage('mysql.service_batch_transaction',scope):
-            with db.transaction():
-                db.prefetch('pipeline_publications',[dict(plan_id=d['job_id']) for d in ordered])
-                db.prefetch('products',[dict(product_key=d['product_key']) for d in ordered])
-                db.prefetch('pipeline_product_versions',[dict(product_key=d['product_key']) for d in ordered])
-                ready = [d['product'] for d in ordered if d['product']['catalog_ready'] and not d['product'].get('withdrawn')]
-                db.prefetch('categories',[dict(id=UUID(g['category_id']).hex) for g in ready])
-                db.prefetch('assets',[dict(bucket=i['bucket'],object_key=i['object_key']) for g in ready for i in g['images']])
-                db.prefetch('offers',[dict(offer_key=o['identity']['offer_key']) for g in ready for o in g['offers']])
-                db.prefetch('offer_snapshots',[dict(snapshot_key=price_snapshot_key(p)) for g in ready for p in offer_prices(g)])
-                at = db.one('SELECT UTC_TIMESTAMP(3) AS stamp')['stamp']
-                done = []
-                for delivery in ordered:
-                    key,group = delivery['job_id'],delivery['product']
-                    self._active_job = key
-                    saved = db.get('pipeline_publications',dict(plan_id=key))
-                    body_hash = digest(group)
-                    if saved['status'] == 'COMPLETED':
-                        receipt = seal(dict(job_id=key,product_hash=body_hash,publication_id=saved['id'],
-                            resolution=json.loads(saved['gold_versions_json'])['resolution']))
-                        self.audit(delivery,receipt)
-                        receipts[key] = receipt
-                        continue
-                    old = db.get('products',dict(product_key=group['product_key']))
-                    resolution = 'LAST_GOOD_RETAINED' if old and not group['catalog_ready'] else 'QUALITY_WAIT'
-                    if group.get('withdrawn'):
-                        resolution = self._withdraw(db,group,key,at,old)
-                    elif group['catalog_ready']:
-                        try:
-                            self._product(db,group,key,at,old)
-                            resolution = 'PUBLISHED'
-                        except StaleInput:
-                            # An older finite batch never overwrites a newer published version.
-                            resolution = 'LAST_GOOD_RETAINED'
-                    done.append((delivery,saved,body_hash,resolution))
-                # All products are projected; their service rows are read back together.
-                with self._stage('mysql.service_readback',scope):
-                    published = [(d['product'],d['job_id']) for d,_,_,r in done if r == 'PUBLISHED']
-                    readback = dict(zip([k for _,k in published],service_rows_many(db,published)))
-                for delivery,saved,body_hash,resolution in done:
-                    key = delivery['job_id']
-                    records = readback.get(key,[]) if resolution == 'PUBLISHED' else []
-                    db.update('pipeline_publications',dict(plan_id=key),dict(status='COMPLETED',completed_at=at,
-                        gold_versions_json=canonical(dict(contract_version=3,proofs=delivery['gold']['proofs'],resolution=resolution,service_rows=records))))
-                    receipts[key] = seal(dict(job_id=key,product_hash=body_hash,publication_id=saved['id'],resolution=resolution))
-                self.fence()
+            for attempt in (0,1):
+                try:
+                    receipts = {}
+                    with db.transaction():
+                        db.prefetch('pipeline_publications',[dict(plan_id=d['job_id']) for d in ordered])
+                        db.prefetch('products',[dict(product_key=d['product_key']) for d in ordered])
+                        db.prefetch('pipeline_product_versions',[dict(product_key=d['product_key']) for d in ordered])
+                        ready = [d['product'] for d in ordered if d['product']['catalog_ready'] and not d['product'].get('withdrawn')]
+                        db.prefetch('categories',[dict(id=UUID(g['category_id']).hex) for g in ready])
+                        db.prefetch('assets',[dict(bucket=i['bucket'],object_key=i['object_key']) for g in ready for i in g['images']])
+                        db.prefetch('offers',[dict(offer_key=o['identity']['offer_key']) for g in ready for o in g['offers']])
+                        db.prefetch('offer_snapshots',[dict(snapshot_key=price_snapshot_key(p)) for g in ready for p in offer_prices(g)])
+                        at = db.one('SELECT UTC_TIMESTAMP(3) AS stamp')['stamp']
+                        done = []
+                        for delivery in ordered:
+                            key,group = delivery['job_id'],delivery['product']
+                            self._active_job = key
+                            saved = db.get('pipeline_publications',dict(plan_id=key))
+                            body_hash = digest(group)
+                            if saved['status'] == 'COMPLETED':
+                                receipt = seal(dict(job_id=key,product_hash=body_hash,publication_id=saved['id'],
+                                    resolution=json.loads(saved['gold_versions_json'])['resolution']))
+                                self.audit(delivery,receipt)
+                                receipts[key] = receipt
+                                continue
+                            old = db.get('products',dict(product_key=group['product_key']))
+                            resolution = 'LAST_GOOD_RETAINED' if old and not group['catalog_ready'] else 'QUALITY_WAIT'
+                            if group.get('withdrawn'):
+                                resolution = self._withdraw(db,group,key,at,old)
+                            elif group['catalog_ready']:
+                                try:
+                                    self._product(db,group,key,at,old)
+                                    resolution = 'PUBLISHED'
+                                except StaleInput:
+                                    # An older finite batch never overwrites a newer published version.
+                                    resolution = 'LAST_GOOD_RETAINED'
+                            done.append((delivery,saved,body_hash,resolution))
+                        # All products are projected; their service rows are read back together.
+                        with self._stage('mysql.service_readback',scope):
+                            published = [(d['product'],d['job_id']) for d,_,_,r in done if r == 'PUBLISHED']
+                            readback = dict(zip([k for _,k in published],service_rows_many(db,published)))
+                        for delivery,saved,body_hash,resolution in done:
+                            key = delivery['job_id']
+                            records = readback.get(key,[]) if resolution == 'PUBLISHED' else []
+                            db.update('pipeline_publications',dict(plan_id=key),dict(status='COMPLETED',completed_at=at,
+                                gold_versions_json=canonical(dict(contract_version=3,proofs=delivery['gold']['proofs'],resolution=resolution,service_rows=records))))
+                            receipts[key] = seal(dict(job_id=key,product_hash=body_hash,publication_id=saved['id'],resolution=resolution))
+                        self.fence()
+                    break
+                except Invalid as exc:
+                    # Another writer stored a prefetched-absent key: once more, with a fresh prefetch.
+                    if attempt or exc.args[:1] != ('MYSQL_CONCURRENT_INSERT',):
+                        raise
         self.remaining -= len(deliveries)
         return [receipts[d['job_id']] for d in deliveries]
 
