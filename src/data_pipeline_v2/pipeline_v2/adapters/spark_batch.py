@@ -442,7 +442,12 @@ class SparkBatchProcessor:
                 'array<struct<_expected_id:string,_expected_hash:string,_expected_product:string>>')).alias('x')).select('x.*')
             # dropDuplicates resolves top-level names only; lift the nested event id first.
             # Events are validated inside resolve_partition, not by a separate Python UDF stage.
-            events = selected.withColumn('_event_id',F.col('e.event_id')).dropDuplicates(['_event_id']).select(
+            # One partition per executor slot, stated: the dedup shuffle otherwise left AQE to
+            # coalesce it (4 partitions on 3 executors), and the executor holding two of the
+            # resolved cache's largest blocks neared its storage limit. Hash-partitioning on the
+            # dedup key satisfies dropDuplicates, so no second shuffle is added.
+            events = selected.withColumn('_event_id',F.col('e.event_id')).repartition(
+                self.limits.spark_partitions,'_event_id').dropDuplicates(['_event_id']).select(
                 F.sha2(F.concat(F.lit(key+':'),F.col('e.event_id')),256).alias('row_key'),
                 F.col('value').alias('event_json'),F.lit(None).cast('string').alias('item_json'),F.lit(key).alias('origin_job'))
             resolved = spark.createDataFrame(events.rdd.mapPartitions(
