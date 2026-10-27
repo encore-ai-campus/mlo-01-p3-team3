@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-27",
+  "source_baseline_commit": "67e837db4114ef8955a12c0b466f6f4aba50bd8f",
+  "tests": {
+    "total": 113,
+    "passed": 106,
+    "skipped_live": 7,
+    "errors": 0,
+    "failures": 0,
+    "seconds": 5.783
+  },
+  "copied_existing_data_benchmark": {
+    "sample_products": 200,
+    "sample_urls": 561,
+    "source_data_modified": false,
+    "network_requests": 0,
+    "results": {
+      "legacy": {
+        "seconds": 15.9358,
+        "mapping_exports": 23,
+        "requests": 0,
+        "cached": 561,
+        "validation_full_hashes": null,
+        "journal_growth_bytes": 255741
+      },
+      "first_upgrade": {
+        "seconds": 15.3165,
+        "mapping_exports": 1,
+        "requests": 0,
+        "cached": 561,
+        "validation_full_hashes": 926,
+        "journal_growth_bytes": 0
+      },
+      "warm_resume": {
+        "seconds": 1.6886,
+        "mapping_exports": 1,
+        "requests": 0,
+        "cached": 561,
+        "validation_full_hashes": 0,
+        "journal_growth_bytes": 0
+      }
+    },
+    "scope": "Copied existing files only; not full 65498-product runtime prediction"
+  },
+  "full_export_default_seconds": 300,
+  "real_download_restarted": false,
+  "actual_collection_files_modified": false,
+  "git_staging_commit_push": false,
+  "launcher_import_checked_without_execution": true,
+  "limits": "The 200-product benchmark is not a full 65498-product completion forecast; the first upgrade must build validation evidence; file metadata is a cache signal, not a full integrity audit.",
+  "publication_regression": {
+    "total": 113,
+    "passed": 106,
+    "skipped_live": 7,
+    "seconds": 8.577,
+    "result": "OK",
+    "location": "isolated main-merged tree, src/Commerce_crawler",
+    "command": "python -m unittest discover -s tests"
+  }
+}

@@ -13,7 +13,9 @@
 | 7 | [이미지 전달](image_delivery.md) | manifest·전달 묶음·하드링크·NAS·용량 |
 | 8 | [검증 기록](validation_results.md) | 소량/대량/로컬/NAS의 대상·날짜·건수·한계 |
 | 9 | [5개 카테고리 검증 원기록](five_category_pagination_validation.md) | 2026-10-14 목록 1→2페이지 실험 |
-| 10 | [파이프라인 연계 계획](pipeline_integration.md) | 기존 수집기와 MongoDB·이미지 저장소·Kafka의 연결 경계 |
+| 10 | [파이프라인 문서 위치](pipeline_integration.md) | 별도 작업 경로 src/data_pipeline의 통합 설계·연결 계약 안내 |
+
+| 11 | [이미지 재개 최적화](image_resume_optimization.md) | 파일 검증 캐시·실패 재시도·잠금·측정 결과 |
 
 ## 문서와 데이터의 관계
 

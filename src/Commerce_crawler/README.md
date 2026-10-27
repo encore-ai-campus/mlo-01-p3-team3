@@ -29,7 +29,7 @@ flowchart LR
 
 ## 설치와 실행
 
-명령은 `Commerce_crawler` 디렉터리를 기준으로 한다. Python 3.10 이상과 `requirements-collector.txt`가 필요하다. 프로젝트 루트의 기존 가상환경을 사용한다면 먼저 활성화하거나 그 Python의 전체 경로로 아래 명령을 실행한다. Windows 가상환경은 Linux 서버에 복사하지 않고 서버에서 재생성한다.
+명령은 `src/Commerce_crawler` 디렉터리를 기준으로 한다. Python 3.10 이상과 `requirements-collector.txt`가 필요하다. 프로젝트 루트의 기존 가상환경을 사용한다면 먼저 활성화하거나 그 Python의 전체 경로로 아래 명령을 실행한다. Windows 가상환경은 Linux 서버에 복사하지 않고 서버에서 재생성한다.
 
 ```powershell
 # 새 환경이 필요한 경우에만 이 폴더에 생성
@@ -124,6 +124,6 @@ python run_collector.py --export-from "data/danawa/<job_id>"
 - NAS 복사본: 같은 300개와 이미지 경로 1,426개를 검사해 원문 연결·파일 해시·용량·해상도·형식 오류 없음. 다운로드 실패 14개가 해결됐다는 뜻은 아니다.
 - 대량 작업의 고유 목록 상품 65,498개는 진행 중 관측 수다. 전체 상세·사진·추천 검수가 끝난 수로 해석하지 않는다.
 
-현재 구현은 다나와 파일 수집기다. MongoDB 적재, Object Storage 전송, Kafka, Spark/Delta Bronze·Silver·Gold, MySQL 게시, NiFi 스케줄링은 아직 구현하지 않았다. PyMongo를 개발 가상환경에 설치한 사실과 적재 구현을 혼동하지 않는다. [아키텍처 연계 계획](docs/pipeline_integration.md)
+이 디렉터리는 다나와 파일 수집기를 담당한다. MongoDB·Object Storage·Kafka·Spark·MySQL·NiFi 처리는 별도 [데이터 파이프라인](../data_pipeline/README.md)이 담당하며, [연결 경계](docs/pipeline_integration.md)를 참고한다. [이미지 재개 개선과 검증 결과](docs/image_resume_optimization.md)에 이력 확인·중복 방지·실패 재시도 방식을 기록했다.
 
-코드·설정·테스트·공식 문서는 Git으로 관리하고 이미지·원본·체크포인트·로컬 헤더는 제외한다. 협업은 [팀 가이드](../docs/guides/GITHUB_GUIDE.md)를 따른다.
+코드·설정·테스트·공식 문서는 Git으로 관리하고 이미지·원본·체크포인트·로컬 헤더는 제외한다. 협업은 [팀 가이드](../../docs/guides/GITHUB_GUIDE.md)를 따른다.
