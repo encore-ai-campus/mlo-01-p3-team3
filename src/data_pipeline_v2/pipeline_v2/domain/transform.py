@@ -19,14 +19,14 @@ def related_policy(policy, references):
 
 
 def normalization_inputs(policy):
-    from product_pipeline.silver.inputs import input_snapshot
+    from pipeline_v2.legacy.silver.inputs import input_snapshot
     return {kind:input_snapshot(kind, policy.get(kind) if kind in {'mappings','rules'} else None,
         provider_version=VERSION, evidence_ref='config://direct-pipeline-policy')
         for kind in ('mappings','rules','reviews','links')}
 
 
 def silver_identity(item, policy):
-    from product_pipeline.silver.inputs import project
+    from pipeline_v2.legacy.silver.inputs import project
     doc, state = item['document'], item['image_state']
     projected = project(doc, normalization_inputs(policy), doc['collected_at'])
     return digest(dict(version=VERSION, document_hash=doc['document_hash'],
@@ -35,7 +35,7 @@ def silver_identity(item, policy):
 
 
 def normalize(item, policy, raw_verified=False):
-    from product_pipeline.silver.normalize import normalize as parse_facts
+    from pipeline_v2.legacy.silver.normalize import normalize as parse_facts
     doc, state = item['document'], item['image_state']
     result = parse_facts(doc, state, normalization_inputs(policy), processing_run_id=RUN,
         as_of=doc['collected_at'], processed_at=doc['collected_at'], raw_verified=raw_verified)
@@ -84,7 +84,7 @@ def gold(product_key, observations, policy):
     category_id = category['service_category_id'] if category else None
     if category_id: UUID(category_id)
     # The old parser's boolean usable also depends on a review result. Validate the observed URL directly.
-    from product_pipeline.contracts import valid_product_url
+    from pipeline_v2.legacy.contracts import valid_product_url
     comparisons = [r for r in facts['link_observations'] if r['link_kind'] == 'COMPARISON'
         and valid_product_url(r['source_url'], product_key.split(':',1)[1])]
     comparison = latest(comparisons, ['source_url'])
@@ -95,6 +95,11 @@ def gold(product_key, observations, policy):
     for slot, values in by_slot.items():
         at = max(i['raw_collected_at'] for i in values)
         current = [i for i in values if i['raw_collected_at'] == at]
+        # A never-acquired equal-time ref of a stored image's source URL is not a conflict.
+        acquired = {i.get('source_url') for i in current if i['available'] and i.get('sha256') and i.get('object_key')
+                    and i.get('source_url') is not None}
+        current = [i for i in current if not (not i['available'] and not i.get('sha256') and not i.get('object_key')
+                                              and i.get('source_url') in acquired)]
         if len({(i.get('sha256'),i.get('bucket'),i.get('object_key'),i['available']) for i in current}) != 1:
             continue
         image = current[0]

@@ -27,7 +27,7 @@ CLI → 구성(bootstrap) → capture / Coordinator / Processor
 서버 모드                         Mongo     Delta   MySQL
 ```
 
-서버 모드도 같은 새 유스케이스를 호출한다. 기존 `product_pipeline`에서는 원천 계약 검사·사실 파서·SQL 연결/스키마 검사·lease·Garage 연결 기반만 가져온다. 기존 CLI, FLOW worker, Gold 결정기, 검수·활성화 실행기는 가져오지 않는다. AST 의존 검사로 이 경계를 확인한다.
+서버 모드도 같은 새 유스케이스를 호출한다. 원천 계약 검사·사실 파서·SQL 연결/스키마 검사·lease·Garage 연결 기반은 기존 `product_pipeline`의 복사본 [`pipeline_v2/legacy`](pipeline_v2/legacy/README.md)에서 가져온다. v1(`src/data_pipeline`)은 v2 착수 전 상태로 보존하며 v2는 v1 패키지를 import하지 않는다. 기존 CLI, FLOW worker, Gold 결정기, 검수·활성화 실행기는 가져오지 않는다. AST 의존 검사로 이 경계를 확인한다.
 
 ## 로컬 실행
 

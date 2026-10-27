@@ -11,14 +11,14 @@ python -B src/data_pipeline_v2/tools/release.py build C:/Temp/product-pipeline-v
 python -B src/data_pipeline_v2/tools/release.py verify C:/Temp/product-pipeline-v2.zip
 ```
 
-묶음에는 `v2/`의 코드·문서·설정 예제와 `legacy/`의 사실 파서/연결 기반 소스·기존 의존성 잠금 3종을 넣는다. 의존 모듈의 전이 import가 있으므로 legacy Python 패키지 전체를 동봉하지만 새 실행기는 허용한 파서/연결 모듈만 호출한다. 기존 운영 CLI를 새 실행기로 실행하는 방식은 아니다. 가상환경, 실제 설정, 데이터, 캐시, DB dump, 이미지, 모델, 임베딩은 제외한다.
+묶음에는 `v2/`의 코드·문서·설정 예제와 `legacy/`의 기존 의존성 잠금 3종·`pyproject.toml`을 넣는다. 사실 파서/연결 기반 소스는 v1 패키지가 아니라 v2 안의 복사본 `v2/pipeline_v2/legacy/`(전이 import 포함 43개 모듈)로 들어가며, 새 실행기는 그중 허용한 파서/연결 모듈만 호출한다. 기존 운영 CLI를 새 실행기로 실행하는 방식은 아니다. 가상환경, 실제 설정, 데이터, 캐시, DB dump, 이미지, 모델, 임베딩은 제외한다.
 
 `manifest.json`은 각 소스 바이트의 SHA-256과 기준 Git HEAD를 기록한다. 작업 트리의 내용이 기준 커밋과 같다고 가정하지 않는다. 서버에서 ZIP을 풀기 전에 전송한 파일의 SHA-256을 별도 대조하고 `release.py verify`로 파일 구성과 해시를 확인한다. manifest 자체의 인증 서명은 아니므로 신뢰한 전송 경로와 별도 전달한 해시가 필요하다.
 
 ## 서버 사전 준비
 
 1. 검토·커밋한 소스를 새 버전 디렉터리로 옮긴다. 기존 서비스 경로와 v1의 Delta/checkpoint/state를 보존한다. 서버 venv를 복사하지 않고 서버의 검증된 Python/잠금 의존성을 사용한다. v2는 Python 3.11~3.14, 기존 파서 의존성과 PySpark/Delta 4.0.1, PyMySQL 1.1.2를 기준으로 한다. 서버 Java·JAR·CA·Garage 연결은 기존 환경의 실제 설치 버전과 먼저 대조한다.
-2. 서버 `PYTHONPATH`에 해시를 검증한 `v2`와 `legacy`를 지정한다. 기존 설치 패키지가 의도치 않게 우선하지 않는지 `pipeline_v2.__file__`, `product_pipeline.__file__`을 출력해 확인한다. 패키지 설치 방식이면 두 로컬 소스를 같은 검증된 venv에 설치하고 dependency 해석으로 다른 0.1.0 배포본이 섞이지 않게 한다.
+2. 서버 `PYTHONPATH`에 해시를 검증한 `v2`를 지정한다. 기존 설치 패키지가 의도치 않게 우선하지 않는지 `pipeline_v2.__file__`, `pipeline_v2.legacy.__file__`을 출력해 확인한다. 패키지 설치 방식이면 두 로컬 소스를 같은 검증된 venv에 설치하고 dependency 해석으로 다른 0.1.0 배포본이 섞이지 않게 한다.
 3. `server.example.json`을 서버의 보호된 설정 경로로 복사하고 모든 `replace-with-*`를 실제 논리 target, 원천 run, DB 정보로 바꾼다. 첫 canary는 `mongo.source_product_ids`에 원천에 실제 존재하는 상품 ID 1개를 지정한다. 해당 상품의 고정 run 내 진입 여부를 확인하며, 정제 시에는 그 상품의 전체 관측 이력을 읽는다. 전체 범위 실행에서만 이 값을 `null`로 둔다. 상태 디렉터리는 지속 로컬 디스크에 둔다. `lake_root`는 새 `/direct-v2` 경로로 제한한다. 서버 설정에 Windows 경로를 넣지 않는다.
 4. URI·MySQL 비밀번호·CA 경로는 예제의 `*_env`가 지정한 환경변수에 둔다. Spark 옵션은 `PIPELINE_V2_SPARK_OPTIONS` JSON, Garage는 기존 `PIPELINE_SPARK_S3_PROFILE=garage_v241`, HTTPS endpoint·공통 JAR·CA truststore·credentials 파일을 사용한다. 키를 Spark 옵션이나 명령 인자로 직접 넣지 않는다. lease 컬렉션에 TTL 인덱스를 만들지 않는다.
 5. MySQL 기존 참조 스키마·카테고리 FK·안정 키를 읽기 검사하고, 기존 상품마다 `pipeline_product_versions` baseline이 있는지 확인한다. 누락되면 임의 baseline을 만들지 않고 이전 게시 근거로 별도 정합성을 확인한다. 새 실행기는 DDL이나 검수 원장 쓰기를 하지 않는다.

@@ -4,8 +4,8 @@ from ..domain.transform import VERSION
 
 def normalized_schema():
     from pyspark.sql import types as T
-    from product_pipeline.silver.schemas import columns, ARRAYS, LONGS
-    from product_pipeline.silver.normalize import TABLES
+    from pipeline_v2.legacy.silver.schemas import columns, ARRAYS, LONGS
+    from pipeline_v2.legacy.silver.normalize import TABLES
     tables = T.StructType([T.StructField(table,T.ArrayType(T.StructType([
         T.StructField(k,T.ArrayType(T.StringType()) if k in ARRAYS else
             T.LongType() if k in LONGS else T.StringType(),True) for k in columns(table)])))
@@ -88,6 +88,14 @@ def build_gold(history, policies, gold_policy, retracted=None):
     images = parsed.select('product_key',F.explode('n.direct_images').alias('image')).select('product_key','image.*')
     image_window = Window.partitionBy('product_key','image_slot')
     recent = images.withColumn('_max_at',F.max('raw_collected_at').over(image_window)).filter('raw_collected_at = _max_at')
+    # A never-acquired equal-time ref of a stored image's source URL is not a conflicting variant
+    # (spark_product._without_unacquired_twins).
+    blank = lambda name:F.col(name).isNull() | (F.col(name) == '')
+    acquired = recent.filter(F.coalesce(F.col('available'),F.lit(False)) & ~blank('sha256') & ~blank('object_key')
+        & F.col('source_url').isNotNull()).select('product_key','image_slot','source_url').distinct().withColumn('_acquired',F.lit(True))
+    recent = (recent.join(acquired,['product_key','image_slot','source_url'],'left')
+        .filter(~(~F.coalesce(F.col('available'),F.lit(False)) & blank('sha256') & blank('object_key')
+                  & F.coalesce(F.col('_acquired'),F.lit(False)))).drop('_acquired'))
     variants = recent.groupBy('product_key','image_slot').agg(
         F.countDistinct(F.struct('sha256','bucket','object_key','available')).alias('_variants'))
     recent = recent.join(variants,['product_key','image_slot']).filter('_variants = 1')

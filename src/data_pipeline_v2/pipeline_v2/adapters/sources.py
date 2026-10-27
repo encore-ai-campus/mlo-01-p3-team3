@@ -83,7 +83,7 @@ class MongoSource:
             collection_run_id=self.run, source_product_ids=source_product_ids)
 
     def _states(self, docs):
-        from product_pipeline.mongo import wire_document
+        from pipeline_v2.legacy.mongo import wire_document
         wired = [wire_document(d) for d in docs]
         states = {s['observation_key']:s for s in self.states.find({'observation_key':{'$in':[d['observation_key'] for d in wired]}},
             {'_id':0,'observation_key':1,'image_state_vector':1,'image_state_revision':1,'image_state_fingerprint':1,'image_state_checked_at':1})}
@@ -129,7 +129,7 @@ class MongoSource:
 
     def read_many(self, references):
         from bson import ObjectId
-        from product_pipeline.mongo import wire_document
+        from pipeline_v2.legacy.mongo import wire_document
         cursor=self.raw.find({'_id':{'$in':[ObjectId(r['raw_document_id']) for r in references]}}).limit(len(references)+1)
         docs=[];amount=0
         try:

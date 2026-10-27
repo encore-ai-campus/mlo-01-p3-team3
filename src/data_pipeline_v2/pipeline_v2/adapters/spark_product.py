@@ -36,8 +36,8 @@ def _strings(value):
 
 def schema():
     """Field layout of the normalized observation, as `spark_gold.normalized_schema` declares it."""
-    from product_pipeline.silver.schemas import columns, ARRAYS, LONGS
-    from product_pipeline.silver.normalize import TABLES
+    from pipeline_v2.legacy.silver.schemas import columns, ARRAYS, LONGS
+    from pipeline_v2.legacy.silver.normalize import TABLES
     tables = {table:[(k,_strings if k in ARRAYS else _long if k in LONGS else _text) for k in columns(table)] for table in TABLES}
     image = [(k,_text) for k in IMAGE_STRINGS] + [(k,_long) for k in IMAGE_LONGS] + [('available',lambda v:v if isinstance(v,bool) else None)]
     return tables, image
@@ -151,6 +151,18 @@ def gold(product_key, normalized, policy_hash, gold_policy, retracted, layout):
     return output
 
 
+def _without_unacquired_twins(recent):
+    """Equal-time copies of a slot where one observation stored the image and another did not try.
+
+    A ref that was never acquired (not available, no sha256/object_key) says nothing about the
+    image, so it does not conflict with a stored image of the same source URL. `spark_gold` and
+    `domain.transform.gold` apply the same rule."""
+    acquired = {v['source_url'] for v in recent if v['available'] and v['sha256'] and v['object_key']
+                and v['source_url'] is not None}
+    return [v for v in recent if not (not v['available'] and not v['sha256'] and not v['object_key']
+                                      and v['source_url'] in acquired)]
+
+
 def _images(parsed):
     slots = {}
     for n in parsed:
@@ -160,7 +172,7 @@ def _images(parsed):
     usable = []
     for values in slots.values():
         newest = max((v['raw_collected_at'] for v in values if v['raw_collected_at'] is not None), default=None)
-        recent = [v for v in values if newest is not None and v['raw_collected_at'] == newest]
+        recent = _without_unacquired_twins([v for v in values if newest is not None and v['raw_collected_at'] == newest])
         if not recent or _distinct([[v['sha256'],v['bucket'],v['object_key'],v['available']] for v in recent]) != 1:
             continue
         # Native ordered by raw_document_id only; the full row breaks a remaining tie deterministically.

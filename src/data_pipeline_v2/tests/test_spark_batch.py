@@ -95,6 +95,14 @@ class NativeGoldTests(unittest.TestCase):
         twin = dict(first['direct_images'][0],raw_document_id='000000000000000000000000',url='https://images.example/twin.png')
         clash = dict(first['direct_images'][0],image_slot='gallery-1',sha256='different')
         first['direct_images'] = first['direct_images'] + [twin,clash,dict(clash,sha256='another')]
+        # Equal-time slot pairs where one observation stored the image and the other never acquired it:
+        # the same source URL merges, another URL still conflicts.
+        empty = dict(available=False,sha256=None,bucket=None,object_key=None,bytes=None,width=None,height=None,format=None)
+        kept = dict(first['direct_images'][0],image_slot='gallery-2',order=7,source_url='https://images.example/kept.png')
+        lost = dict(first['direct_images'][0],image_slot='gallery-3',order=8,source_url='https://images.example/lost.png')
+        first['direct_images'] = first['direct_images'] + [kept,lost]
+        second['direct_images'] = [dict(kept,raw_document_id='ffffffffffffffffffffffff',**empty),
+            dict(lost,raw_document_id='ffffffffffffffffffffffff',source_url='https://images.example/other.png',**empty)]
         normalized['danawa:14'] = [first,second]
 
         policy_hash = digest(dict(version=VERSION,**{k:fixtures.POLICY[k] for k in ('mappings','rules')}))
@@ -112,6 +120,9 @@ class NativeGoldTests(unittest.TestCase):
             self.assertTrue(synthetic['offers'])
             self.assertEqual(synthetic['comparison_url'],'https://x/1')
             self.assertIsNone(synthetic['display_name'])
+            synthetic_slots = {i['image_slot'] for i in synthetic['images']}
+            self.assertIn('gallery-2',synthetic_slots)
+            self.assertNotIn('gallery-3',synthetic_slots)
             self.assertEqual(native['danawa:12']['retracted_raw_document_ids'],['r1','r2'])
             for product, values in normalized.items():
                 mine = spark_product.gold(product,[canonical(v) for v in values],policy_hash,gold_policy,retracted.get(product),layout)

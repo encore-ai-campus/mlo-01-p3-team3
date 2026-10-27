@@ -22,11 +22,8 @@ def build(output, root=ROOT):
     for name in ('README.md','pyproject.toml','run_pipeline.py','config/local.example.json','config/server.example.json',
                  'config/batch.local.example.json','config/batch.server.example.json'):
         files['v2/'+name]=(root/name).read_bytes()
-    # Ship the exact parser/transport dependency, including its transitive imports.
+    # The parser/transport code ships inside pipeline_v2/legacy above; only the environment locks come from v1.
     legacy=root.parent/'data_pipeline'
-    for path in sorted((legacy/'product_pipeline').rglob('*.py')):
-        if '__pycache__' not in path.parts and not path.is_symlink():
-            files['legacy/'+path.relative_to(legacy).as_posix()]=path.read_bytes()
     files['legacy/pyproject.toml']=(legacy/'pyproject.toml').read_bytes()
     for name in ('requirements.lock.txt','requirements-bronze.lock.txt','requirements-publication.lock.txt'):
         files['legacy/'+name]=(legacy/name).read_bytes()

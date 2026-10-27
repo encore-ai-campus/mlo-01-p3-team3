@@ -26,7 +26,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     from pymongo import MongoClient, ReadPreference
     from pymongo.read_concern import ReadConcern
-    from product_pipeline.mongo import wire_document
+    from pipeline_v2.legacy.mongo import wire_document
     from pipeline_v2.domain.batch import batch_id, source_contract
     from pipeline_v2.domain.contracts import canonical, utc
     batch_id(args.batch)

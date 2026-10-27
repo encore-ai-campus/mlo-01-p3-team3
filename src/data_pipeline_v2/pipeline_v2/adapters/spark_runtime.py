@@ -20,8 +20,8 @@ class ServerLake:
     def _open(self):
         if self.inner is not None:return self.inner
         from pyspark.sql import SparkSession
-        from product_pipeline.bronze.lease import MongoLease
-        from product_pipeline.spark_storage import storage_options, bind_spark_credentials
+        from pipeline_v2.legacy.bronze.lease import MongoLease
+        from pipeline_v2.legacy.spark_storage import storage_options, bind_spark_credentials
         config=self.config
         if self.lease_role:
             uri=os.environ.get(config['lease']['uri_env'])

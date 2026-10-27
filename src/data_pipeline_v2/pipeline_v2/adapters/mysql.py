@@ -2,8 +2,8 @@
 import re
 from contextlib import contextmanager, nullcontext
 
-from product_pipeline.publication.mysql import MySQL
-from product_pipeline.publication.schema import TABLES, PRIMARY, UNIQUE, FKS
+from pipeline_v2.legacy.publication.mysql import MySQL
+from pipeline_v2.legacy.publication.schema import TABLES, PRIMARY, UNIQUE, FKS
 from ..domain.contracts import canonical, digest, Invalid
 
 

@@ -68,22 +68,19 @@ def event_from(message):
     return event
 
 
-def validate_raw(doc, event, document_verified=False):
-    """document_verified: the caller already proved document_hash matches this exact document."""
+def validate_raw(doc, event):
     try:
         if not isinstance(doc, dict) or doc['_id'] != event['payload']['raw_document_id']:
             raise ValueError()
-        if not document_verified and digest({k: v for k, v in doc.items() if k != 'document_hash'}) != doc['document_hash']:
+        if digest({k: v for k, v in doc.items() if k != 'document_hash'}) != doc['document_hash']:
             raise ValueError()
         raw = {**doc['collector_metadata'], 'payload': doc['payload']}
         images = doc['image_refs']
-        # Each large hash once: observation_key reuses them (same values as computing them again).
-        raw_hash = gallery_hash = None
         if (doc['schema_version'] != 'danawa-ingest-1' or doc['ingest_contract_version'] != 1
                 or collector_payload_hash(doc['payload']) != doc['payload_hash']
-                or (raw_hash := digest(raw)) != doc['source_observation_hash']
-                or (gallery_hash := digest([image_projection(i) for i in images])) != doc['gallery_acquisition_hash']
-                or observation_key(raw, images, raw_hash, gallery_hash) != doc['observation_key']
+                or digest(raw) != doc['source_observation_hash']
+                or digest([image_projection(i) for i in images]) != doc['gallery_acquisition_hash']
+                or observation_key(raw, images) != doc['observation_key']
                 or doc['source_product_id'] != raw['product_id']
                 or doc['source_code'] != raw['source']
                 or doc['collection_run_id'] != raw['job_id']

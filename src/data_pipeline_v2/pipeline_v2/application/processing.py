@@ -28,12 +28,12 @@ class Processor:
         self.metrics['source_rows'] += len(items)
         result = {}
         for chunk in pages(items, self.limits):
-            from product_pipeline.bronze.contracts import validate_raw
-            from product_pipeline.contracts import event_for
+            from pipeline_v2.legacy.bronze.contracts import validate_raw
+            from pipeline_v2.legacy.contracts import event_for
             from ..domain.transform import RUN
             bronze=[];observations=[]
             valid=[]
-            from product_pipeline.bronze.contracts import Poison
+            from pipeline_v2.legacy.bronze.contracts import Poison
             for item in chunk:
                 doc=item['document']
                 try:validate_raw(doc,event_for(doc,RUN,doc['collected_at']))
@@ -61,7 +61,7 @@ class Processor:
                     normalized = normalize(item, policies[doc['source_code']+':'+doc['source_product_id']])
                 records = {}
                 product = doc['source_code']+':'+doc['source_product_id']
-                from product_pipeline.silver.normalize import KEYS
+                from pipeline_v2.legacy.silver.normalize import KEYS
                 for table, rows in normalized['tables'].items():
                     encoded = [row(value[KEYS[table]], product, value) for value in rows]
                     output['silver_'+table].extend(encoded)

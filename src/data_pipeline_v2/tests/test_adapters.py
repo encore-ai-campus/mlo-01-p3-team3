@@ -59,7 +59,8 @@ class AdapterTests(unittest.TestCase):
             with zipfile.ZipFile(path) as archive:
                 names=archive.namelist()
                 self.assertIn('v2/pipeline_v2/application/coordinator.py',names)
-                self.assertIn('legacy/product_pipeline/silver/normalize.py',names)
+                self.assertIn('v2/pipeline_v2/legacy/silver/normalize.py',names)
+                self.assertFalse(any(n.startswith('legacy/product_pipeline/') for n in names))
                 self.assertIn('legacy/requirements-bronze.lock.txt',names)
                 self.assertFalse(any('/data/' in n or '.local.json' in n or '.env' in n or '__pycache__' in n for n in names))
             with zipfile.ZipFile(path,'a') as archive:archive.writestr('../outside','bad')

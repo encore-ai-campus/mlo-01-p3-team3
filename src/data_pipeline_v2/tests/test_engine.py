@@ -209,13 +209,19 @@ class EngineTests(unittest.TestCase):
         self.assertIn('"status": "COMPLETED"',output.getvalue())
 
     def test_dependency_direction_has_no_old_orchestration_imports(self):
-        allowed={'product_pipeline.silver.normalize','product_pipeline.silver.inputs','product_pipeline.bronze.contracts',
-            'product_pipeline.silver.schemas','product_pipeline.errors',
-            'product_pipeline.contracts','product_pipeline.mongo','product_pipeline.publication.mysql',
-            'product_pipeline.publication.policy','product_pipeline.publication.schema','product_pipeline.bronze.lease','product_pipeline.spark_storage'}
+        # v2 never imports the preserved v1 package; it uses its own copy (pipeline_v2.legacy) of these modules.
+        allowed={'pipeline_v2.legacy.'+m for m in ('silver.normalize','silver.inputs','bronze.contracts',
+            'silver.schemas','errors','contracts','mongo','publication.mysql',
+            'publication.policy','publication.schema','bronze.lease','spark_storage')}
+        legacy=HERE/'pipeline_v2'/'legacy'
         for path in (HERE/'pipeline_v2').rglob('*.py'):
             for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
-                if isinstance(node,ast.ImportFrom) and (node.module or '').startswith('product_pipeline.'):
+                if isinstance(node,ast.Import):
+                    self.assertFalse(any(a.name.split('.')[0]=='product_pipeline' for a in node.names),path)
+                if isinstance(node,ast.ImportFrom):
+                    self.assertNotEqual((node.module or '').split('.')[0],'product_pipeline',path)
+                if legacy in path.parents:continue
+                if isinstance(node,ast.ImportFrom) and (node.module or '').startswith('pipeline_v2.legacy.'):
                     self.assertIn(node.module,allowed)
                 if isinstance(node,ast.ImportFrom):self.assertNotIn('activation',(node.module or '').split('.'))
 

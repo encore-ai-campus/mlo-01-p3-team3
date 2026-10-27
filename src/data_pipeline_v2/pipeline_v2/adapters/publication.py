@@ -261,7 +261,7 @@ class MySQLPublisher:
         return [receipts[d['job_id']] for d in deliveries]
 
     def _product(self, db, group, key, at, old):
-        from product_pipeline.publication.policy import guarded_projection, attribute_projection
+        from pipeline_v2.legacy.publication.policy import guarded_projection, attribute_projection
         category=db.get('categories',dict(id=UUID(group['category_id']).hex))
         if not category or not category['active'] or category['code']!=group['category_code']:raise Invalid('CATEGORY_CHANGED')
         baseline=db.get('pipeline_product_versions',dict(product_key=group['product_key']))
