@@ -5,7 +5,7 @@ import sys
 
 def main():
     print("[준비] 다나와 수집기를 시작합니다.", flush=True)
-    dependencies = Path(__file__).resolve().parent.parent / ".local-deps"
+    dependencies = Path(__file__).resolve().parents[2] / ".local-deps"
     if dependencies.is_dir():
         sys.path.insert(0, str(dependencies))
     try:

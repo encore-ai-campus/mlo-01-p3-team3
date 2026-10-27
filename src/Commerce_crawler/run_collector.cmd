@@ -3,13 +3,13 @@ setlocal
 chcp 65001 >nul
 set "PYTHONIOENCODING=utf-8"
 cd /d "%~dp0"
-set "PYTHONPATH=%~dp0..\.local-deps;%PYTHONPATH%"
+set "PYTHONPATH=%~dp0..\..\.local-deps;%PYTHONPATH%"
 if exist "%~dp0.venv\Scripts\python.exe" (
     set "COLLECTOR_PYTHON=%~dp0.venv\Scripts\python.exe"
     goto run
 )
-if exist "%~dp0..\.venv\Scripts\python.exe" (
-    set "COLLECTOR_PYTHON=%~dp0..\.venv\Scripts\python.exe"
+if exist "%~dp0..\..\.venv\Scripts\python.exe" (
+    set "COLLECTOR_PYTHON=%~dp0..\..\.venv\Scripts\python.exe"
     goto run
 )
 if exist "%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" (
