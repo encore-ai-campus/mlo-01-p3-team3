@@ -1,5 +1,8 @@
+.local-deps/
 .venv/
 __pycache__/
+*.pyc
+*.log
 .pytest_cache/
 *.egg-info/
 .env
@@ -7,7 +10,10 @@ __pycache__/
 !src/.env.example
 outputs/
 data/
+data/danawa/
+config/danawa_pagination.local.json
+*.local.json
 /src/interior_recommender/sample/
-
 build/
 dist/
+/.lan_transfer/

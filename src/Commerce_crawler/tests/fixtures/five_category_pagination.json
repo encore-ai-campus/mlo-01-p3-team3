@@ -1,0 +1,1528 @@
+{
+  "provenance": {
+    "source_run_id": "96c884b5-9459-4f1c-898a-7afda7146eaa",
+    "captured_at": "2026-10-14T09:22:56+00:00",
+    "selection": "first two selected product records per page; full page IDs retained separately"
+  },
+  "categories": [
+    {
+      "category_id": "15241194",
+      "metadata": {
+        "public_category_id": "15241194",
+        "category_name": "침대",
+        "categoryCode": "41194",
+        "physicsCate1": "1826",
+        "physicsCate2": "11241",
+        "physicsCate3": "11242",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      },
+      "payload": [
+        {
+          "categoryCode": "41194",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11241",
+          "physicsCate3": "11242",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "selected_ids": [
+            96056663,
+            92361362,
+            5097200,
+            122661898,
+            5837678,
+            17553017,
+            11186961,
+            5615781,
+            11126139,
+            14370671,
+            11126391,
+            11102241,
+            6705595,
+            3325415,
+            124088489,
+            124237427,
+            103480052,
+            5363474,
+            2998631,
+            73770485,
+            18920477,
+            12617456,
+            1916221,
+            122716671,
+            5101816,
+            92043758,
+            124260510,
+            28602251,
+            124087100,
+            69869495
+          ],
+          "products": [
+            {
+              "productCode": 96056663,
+              "name": {
+                "maker": "지누스",
+                "brand": "",
+                "product": "스마트베이스 엘리트 침대 SS",
+                "full": "지누스 스마트베이스 엘리트 침대 SS",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11241,
+                  11242,
+                  11251
+                ],
+                "names": [
+                  "가구/침구",
+                  "침실가구",
+                  "침대",
+                  "슈퍼싱글(SS)"
+                ]
+              },
+              "price": {
+                "min": 377240,
+                "minFormatted": "377,240",
+                "total": 377240,
+                "totalFormatted": "377,240",
+                "member": 377240,
+                "memberFormatted": "377,240",
+                "memberTotal": 377240,
+                "memberTotalFormatted": "377,240",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 0
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/663/056/096/21bacac29f4f4898815517bd32d98989.jpg?shrink=130:130&_v=20261014165118",
+                "version": "20261014165118",
+                "alt": "지누스 스마트베이스 엘리트 침대 SS 상품 이미지"
+              },
+              "dates": {
+                "register": "18.02.",
+                "make": "2018.02.01"
+              }
+            },
+            {
+              "productCode": 92361362,
+              "name": {
+                "maker": "지누스",
+                "brand": "",
+                "product": "퀵스냅 침대 SS",
+                "full": "지누스 퀵스냅 침대 SS",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11241,
+                  11242,
+                  11251
+                ],
+                "names": [
+                  "가구/침구",
+                  "침실가구",
+                  "침대",
+                  "슈퍼싱글(SS)"
+                ]
+              },
+              "price": {
+                "min": 397900,
+                "minFormatted": "397,900",
+                "total": 397900,
+                "totalFormatted": "397,900",
+                "member": 397900,
+                "memberFormatted": "397,900",
+                "memberTotal": 397900,
+                "memberTotalFormatted": "397,900",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 0
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/362/361/092/de268bf99f7f4399a7168bb944164da4.jpg?shrink=130:130&_v=20261014080449",
+                "version": "20261014080449",
+                "alt": "지누스 퀵스냅 침대 SS 상품 이미지"
+              },
+              "dates": {
+                "register": "20.09.",
+                "make": "2020.09.01"
+              }
+            }
+          ]
+        },
+        {
+          "page": 2,
+          "selected_ids": [
+            20481089,
+            18920447,
+            103480142,
+            15124472,
+            6635008,
+            15326894,
+            69057932,
+            72914603,
+            75990491,
+            91042121,
+            2822858,
+            20590625,
+            122636446,
+            15326918,
+            30350831,
+            5325157,
+            27302324,
+            11477352,
+            28833350,
+            92361485,
+            92046602,
+            123742894,
+            82958288,
+            122716013,
+            95280698,
+            21570380,
+            1723434,
+            7792636,
+            4346034,
+            122642975
+          ],
+          "products": [
+            {
+              "productCode": 20481089,
+              "name": {
+                "maker": "스칸디아",
+                "brand": "",
+                "product": "스테이 호텔 수납 LED침대 LK+협탁2개",
+                "full": "스칸디아 스테이 호텔 수납 LED침대 LK+협탁2개",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11241,
+                  11242,
+                  11254
+                ],
+                "names": [
+                  "가구/침구",
+                  "침실가구",
+                  "침대",
+                  "킹(K)"
+                ]
+              },
+              "price": {
+                "min": 1112640,
+                "minFormatted": "1,112,640",
+                "total": 1159000,
+                "totalFormatted": "1,159,000",
+                "member": 1112640,
+                "memberFormatted": "1,112,640",
+                "memberTotal": 1159000,
+                "memberTotalFormatted": "1,159,000",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 1096470
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/089/481/020/c891de21483a4618ba2a4ebc57067395.jpg?shrink=130:130&_v=20261014080614",
+                "version": "20261014080614",
+                "alt": "스칸디아 스테이 호텔 수납 LED침대 LK+협탁2개 상품 이미지"
+              },
+              "dates": {
+                "register": "23.06.",
+                "make": "2023.06.09"
+              }
+            },
+            {
+              "productCode": 18920447,
+              "name": {
+                "maker": "파로마",
+                "brand": "",
+                "product": "에밋 저상형 일반형 LED침대 SS",
+                "full": "파로마 에밋 저상형 일반형 LED침대 SS",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11241,
+                  11242,
+                  11251
+                ],
+                "names": [
+                  "가구/침구",
+                  "침실가구",
+                  "침대",
+                  "슈퍼싱글(SS)"
+                ]
+              },
+              "price": {
+                "min": 166410,
+                "minFormatted": "166,410",
+                "total": 211410,
+                "totalFormatted": "211,410",
+                "member": 166410,
+                "memberFormatted": "166,410",
+                "memberTotal": 211410,
+                "memberTotalFormatted": "211,410",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 0
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/447/920/018/032d0ec82dab48ab8b0cb9e87ac2384b.jpg?shrink=130:130&_v=20261014080446",
+                "version": "20261014080446",
+                "alt": "파로마 에밋 저상형 일반형 LED침대 SS 상품 이미지"
+              },
+              "dates": {
+                "register": "23.02.",
+                "make": "2023.02.03"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "15240504",
+      "metadata": {
+        "public_category_id": "15240504",
+        "category_name": "책상",
+        "categoryCode": "40504",
+        "physicsCate1": "1826",
+        "physicsCate2": "11123",
+        "physicsCate3": "58840",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      },
+      "payload": [
+        {
+          "categoryCode": "40504",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11123",
+          "physicsCate3": "58840",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "selected_ids": [
+            73695098,
+            68787620,
+            102408614,
+            15422003,
+            122707810,
+            106046381,
+            122931555,
+            91869548,
+            96259091,
+            90435137,
+            106711787,
+            58913093,
+            4018172,
+            18880619,
+            15507140,
+            42941165,
+            15414716,
+            106045934,
+            28469474,
+            102551420,
+            7801261,
+            15953411,
+            107775797,
+            55043144,
+            15184808,
+            75990008,
+            20628488,
+            29961470,
+            62161724,
+            16555940
+          ],
+          "products": [
+            {
+              "productCode": 73695098,
+              "name": {
+                "maker": "카멜인터내셔널",
+                "brand": "카멜마운트",
+                "product": "핏쳐 E2 고강도 듀얼 스퀘어 프레임 모션 스탠딩 책상",
+                "full": "카멜인터내셔널 카멜마운트 핏쳐 E2 고강도 듀얼 스퀘어 프레임 모션 스탠딩 책상",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11123,
+                  58840,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "홈오피스가구",
+                  "책상"
+                ]
+              },
+              "price": {
+                "min": 321030,
+                "minFormatted": "321,030",
+                "total": 321030,
+                "totalFormatted": "321,030",
+                "member": 321030,
+                "memberFormatted": "321,030",
+                "memberTotal": 321030,
+                "memberTotalFormatted": "321,030",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 298560
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/098/695/073/8ad61f4430af45e1bcf7648b685e2af2.jpg?shrink=130:130&_v=20261014160258",
+                "version": "20261014160258",
+                "alt": "카멜인터내셔널 카멜마운트 핏쳐 E2 고강도 듀얼 스퀘어 프레임 모션 스탠딩 책상 상품 이미지"
+              },
+              "dates": {
+                "register": "25.01.",
+                "make": "2025.01.02"
+              }
+            },
+            {
+              "productCode": 68787620,
+              "name": {
+                "maker": "데스커",
+                "brand": "",
+                "product": "컴퓨터 책상 2.0",
+                "full": "데스커 컴퓨터 책상 2.0",
+                "model": "DSDBB1206"
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11123,
+                  58840,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "홈오피스가구",
+                  "책상"
+                ]
+              },
+              "price": {
+                "min": 193920,
+                "minFormatted": "193,920",
+                "total": 193920,
+                "totalFormatted": "193,920",
+                "member": 193920,
+                "memberFormatted": "193,920",
+                "memberTotal": 193920,
+                "memberTotalFormatted": "193,920",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 184230
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/620/787/068/d7f941b79fdf40949f6450eaf81a963c.jpg?shrink=130:130&_v=20261014080449",
+                "version": "20261014080449",
+                "alt": "데스커 컴퓨터 책상 2.0 상품 이미지"
+              },
+              "dates": {
+                "register": "24.10.",
+                "make": "2024.10.16"
+              }
+            }
+          ]
+        },
+        {
+          "page": 2,
+          "selected_ids": [
+            18274901,
+            20628635,
+            107775821,
+            31409162,
+            11973608,
+            102003428,
+            15220268,
+            6986671,
+            77282714,
+            93176939,
+            63896105,
+            67979972,
+            29961578,
+            97705553,
+            20201489,
+            100693184,
+            28333688,
+            79405742,
+            122616967,
+            12049082,
+            90701522,
+            102408650,
+            13931585,
+            95283641,
+            17005952,
+            74810612,
+            81714983,
+            13277186,
+            77018441,
+            17006042
+          ],
+          "products": [
+            {
+              "productCode": 18274901,
+              "name": {
+                "maker": "데스커",
+                "brand": "",
+                "product": "프리미엄 모션 스탠딩 책상",
+                "full": "데스커 프리미엄 모션 스탠딩 책상",
+                "model": "DSDDM1407"
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11123,
+                  58840,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "홈오피스가구",
+                  "책상"
+                ]
+              },
+              "price": {
+                "min": 745920,
+                "minFormatted": "745,920",
+                "total": 745920,
+                "totalFormatted": "745,920",
+                "member": 745920,
+                "memberFormatted": "745,920",
+                "memberTotal": 745920,
+                "memberTotalFormatted": "745,920",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 708630
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/901/274/018/c4a6edb8fc7548799cde4f7aa8733938.jpg?shrink=130:130&_v=20261014080431",
+                "version": "20261014080431",
+                "alt": "데스커 프리미엄 모션 스탠딩 책상 상품 이미지"
+              },
+              "dates": {
+                "register": "22.11.",
+                "make": "2022.11.15"
+              }
+            },
+            {
+              "productCode": 20628635,
+              "name": {
+                "maker": "e스마트",
+                "brand": "",
+                "product": "와이즈 학생 수납 전면 책상 풀세트+서랍장 타공판",
+                "full": "e스마트 와이즈 학생 수납 전면 책상 풀세트+서랍장 타공판",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11123,
+                  58840,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "홈오피스가구",
+                  "책상"
+                ]
+              },
+              "price": {
+                "min": 366730,
+                "minFormatted": "366,730",
+                "total": 424000,
+                "totalFormatted": "424,000",
+                "member": 366730,
+                "memberFormatted": "366,730",
+                "memberTotal": 424000,
+                "memberTotalFormatted": "424,000",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 355524
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/635/628/020/e05f55f8a0fc46bd91252b227bee10b6.jpg?shrink=130:130&_v=20261014080559",
+                "version": "20261014080559",
+                "alt": "e스마트 와이즈 학생 수납 전면 책상 풀세트+서랍장 타공판 상품 이미지"
+              },
+              "dates": {
+                "register": "23.06.",
+                "make": "2023.06.21"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "1523647",
+      "metadata": {
+        "public_category_id": "1523647",
+        "category_name": "학생/사무용의자",
+        "categoryCode": "3647",
+        "physicsCate1": "1826",
+        "physicsCate2": "32303",
+        "physicsCate3": "32346",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      },
+      "payload": [
+        {
+          "categoryCode": "3647",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "32303",
+          "physicsCate3": "32346",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "selected_ids": [
+            37927139,
+            97363133,
+            34811405,
+            19077677,
+            17299001,
+            14868701,
+            19034972,
+            18260507,
+            97566515,
+            92360519,
+            28214150,
+            122623596,
+            18143777,
+            93381455,
+            11759906,
+            123845104,
+            16855280,
+            59761190,
+            92360567,
+            98086547,
+            123845055,
+            72816494,
+            122632395,
+            20591357,
+            72816611,
+            18783116,
+            122727843,
+            98768885,
+            19034252,
+            12041498
+          ],
+          "products": [
+            {
+              "productCode": 37927139,
+              "name": {
+                "maker": "시디즈",
+                "brand": "",
+                "product": "베이직 오피스 체어",
+                "full": "시디즈 베이직 오피스 체어",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  32303,
+                  32346,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "의자",
+                  "학생/사무의자"
+                ]
+              },
+              "price": {
+                "min": 168530,
+                "minFormatted": "168,530",
+                "total": 208530,
+                "totalFormatted": "208,530",
+                "member": 168530,
+                "memberFormatted": "168,530",
+                "memberTotal": 208530,
+                "memberTotalFormatted": "208,530",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 231525
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/139/927/037/6597b147878543a580e90fbd66ce2f69.jpg?shrink=130:130&_v=20261014175828",
+                "version": "20261014175828",
+                "alt": "시디즈 베이직 오피스 체어 상품 이미지"
+              },
+              "dates": {
+                "register": "24.02.",
+                "make": "2024.02.27"
+              }
+            },
+            {
+              "productCode": 97363133,
+              "name": {
+                "maker": "듀오백",
+                "brand": "",
+                "product": "T-ZERO 메쉬 사무용 컴퓨터 책상 의자",
+                "full": "듀오백 T-ZERO 메쉬 사무용 컴퓨터 책상 의자",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  32303,
+                  32346,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "의자",
+                  "학생/사무의자"
+                ]
+              },
+              "price": {
+                "min": 124200,
+                "minFormatted": "124,200",
+                "total": 124200,
+                "totalFormatted": "124,200",
+                "member": 124200,
+                "memberFormatted": "124,200",
+                "memberTotal": 124200,
+                "memberTotalFormatted": "124,200",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 120560
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/133/363/097/d2c46c52649e4810bd61adc677e297a4.jpg?shrink=130:130&_v=20261014085958",
+                "version": "20261014085958",
+                "alt": "듀오백 T-ZERO 메쉬 사무용 컴퓨터 책상 의자 상품 이미지"
+              },
+              "dates": {
+                "register": "25.09.",
+                "make": "2025.09.09"
+              }
+            }
+          ]
+        },
+        {
+          "page": 2,
+          "selected_ids": [
+            122689803,
+            34391414,
+            17298935,
+            124376049,
+            124376057,
+            124351630,
+            124375986,
+            31369793,
+            122727813,
+            123134101,
+            105967784,
+            64268276,
+            29395916,
+            68777810,
+            78310532,
+            33989222,
+            98086481,
+            20358791,
+            18812468,
+            64268300,
+            124376060,
+            64268294,
+            124376045,
+            97704428,
+            11892613,
+            64268306,
+            124376023,
+            124258923,
+            74005982,
+            122704130
+          ],
+          "products": [
+            {
+              "productCode": 122689803,
+              "name": {
+                "maker": "CORSAIR",
+                "brand": "",
+                "product": "TC80 패브릭 게이밍 의자",
+                "full": "CORSAIR TC80 패브릭 게이밍 의자",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  32303,
+                  32346,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "의자",
+                  "학생/사무의자"
+                ]
+              },
+              "price": {
+                "min": 216900,
+                "minFormatted": "216,900",
+                "total": 216900,
+                "totalFormatted": "216,900",
+                "member": 216900,
+                "memberFormatted": "216,900",
+                "memberTotal": 216900,
+                "memberTotalFormatted": "216,900",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 244000
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/803/689/122/5f9ed5645467440dab415d5fe6abaa54.jpeg?shrink=130:130&_v=20261014100448",
+                "version": "20261014100448",
+                "alt": "CORSAIR TC80 패브릭 게이밍 의자 상품 이미지"
+              },
+              "dates": {
+                "register": "26.06.",
+                "make": "2026.06.04"
+              }
+            },
+            {
+              "productCode": 34391414,
+              "name": {
+                "maker": "핀란디아",
+                "brand": "",
+                "product": "제노아 X-100 헤드형 책상의자",
+                "full": "핀란디아 제노아 X-100 헤드형 책상의자",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  32303,
+                  32346,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "의자",
+                  "학생/사무의자"
+                ]
+              },
+              "price": {
+                "min": 219000,
+                "minFormatted": "219,000",
+                "total": 223000,
+                "totalFormatted": "223,000",
+                "member": 219000,
+                "memberFormatted": "219,000",
+                "memberTotal": 223000,
+                "memberTotalFormatted": "223,000",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 212930
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/414/391/034/855e0bad392c46cfa0e068efb27a4ccb.jpg?shrink=130:130&_v=20261014173348",
+                "version": "20261014173348",
+                "alt": "핀란디아 제노아 X-100 헤드형 책상의자 상품 이미지"
+              },
+              "dates": {
+                "register": "24.02.",
+                "make": "2024.02.02"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "15241240",
+      "metadata": {
+        "public_category_id": "15241240",
+        "category_name": "식탁",
+        "categoryCode": "41240",
+        "physicsCate1": "1826",
+        "physicsCate2": "11287",
+        "physicsCate3": "59859",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      },
+      "payload": [
+        {
+          "categoryCode": "41240",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11287",
+          "physicsCate3": "59859",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "selected_ids": [
+            96712301,
+            77082152,
+            98246123,
+            96712460,
+            81468107,
+            32503400,
+            5955121,
+            108228320,
+            10898895,
+            64375166,
+            96655394,
+            99480116,
+            124057807,
+            29810189,
+            106785365,
+            104988788,
+            69466652,
+            81530348,
+            91768940,
+            124130634,
+            15871526,
+            19054304,
+            13872512,
+            122653007,
+            1055371,
+            15456998,
+            65304533,
+            102127181,
+            28576310,
+            103482362
+          ],
+          "products": [
+            {
+              "productCode": 96712301,
+              "name": {
+                "maker": "삼익가구",
+                "brand": "",
+                "product": "아벨로 포세린 통세라믹 원목 식탁 1400",
+                "full": "삼익가구 아벨로 포세린 통세라믹 원목 식탁 1400",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11287,
+                  59859,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "주방가구",
+                  "식탁"
+                ]
+              },
+              "price": {
+                "min": 341040,
+                "minFormatted": "341,040",
+                "total": 389010,
+                "totalFormatted": "389,010",
+                "member": 341040,
+                "memberFormatted": "341,040",
+                "memberTotal": 389010,
+                "memberTotalFormatted": "389,010",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 317180
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/301/712/096/240503cd1c3b471ba99c081777ec244d.jpg?shrink=130:130&_v=20261014150159",
+                "version": "20261014150159",
+                "alt": "삼익가구 아벨로 포세린 통세라믹 원목 식탁 1400 상품 이미지"
+              },
+              "dates": {
+                "register": "25.08.",
+                "make": "2025.08.27"
+              }
+            },
+            {
+              "productCode": 77082152,
+              "name": {
+                "maker": "스칸디나",
+                "brand": "",
+                "product": "멜리토 포세린 통세라믹 원목 식탁 1300",
+                "full": "스칸디나 멜리토 포세린 통세라믹 원목 식탁 1300",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11287,
+                  59859,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "주방가구",
+                  "식탁"
+                ]
+              },
+              "price": {
+                "min": 369540,
+                "minFormatted": "369,540",
+                "total": 439000,
+                "totalFormatted": "439,000",
+                "member": 369540,
+                "memberFormatted": "369,540",
+                "memberTotal": 439000,
+                "memberTotalFormatted": "439,000",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 343690
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/152/082/077/6e1a01721b814ed5bee4cad790087cbb.jpg?shrink=130:130&_v=20261014080427",
+                "version": "20261014080427",
+                "alt": "스칸디나 멜리토 포세린 통세라믹 원목 식탁 1300 상품 이미지"
+              },
+              "dates": {
+                "register": "25.02.",
+                "make": "2025.02.28"
+              }
+            }
+          ]
+        },
+        {
+          "page": 2,
+          "selected_ids": [
+            98544596,
+            98246261,
+            29977130,
+            12888848,
+            79404995,
+            98924606,
+            21676277,
+            96582350,
+            79405046,
+            19034090,
+            14941409,
+            104373590,
+            17887082,
+            62640287,
+            32503478,
+            122719504,
+            1053634,
+            14499512,
+            97410305,
+            96655652,
+            74011124,
+            7129501,
+            74011178,
+            99324764,
+            123235197,
+            97410590,
+            99714038,
+            67624766,
+            61421345,
+            6340321
+          ],
+          "products": [
+            {
+              "productCode": 98544596,
+              "name": {
+                "maker": "라로퍼니처",
+                "brand": "",
+                "product": "베키 포세린 통세라믹 식탁 1800",
+                "full": "라로퍼니처 베키 포세린 통세라믹 식탁 1800",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11287,
+                  59859,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "주방가구",
+                  "식탁"
+                ]
+              },
+              "price": {
+                "min": 183440,
+                "minFormatted": "183,440",
+                "total": 188240,
+                "totalFormatted": "188,240",
+                "member": 183440,
+                "memberFormatted": "183,440",
+                "memberTotal": 188240,
+                "memberTotalFormatted": "188,240",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 174270
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/596/544/098/3d2f1d2b52524028b9088068898be55b.jpg?shrink=130:130&_v=20261014080428",
+                "version": "20261014080428",
+                "alt": "라로퍼니처 베키 포세린 통세라믹 식탁 1800 상품 이미지"
+              },
+              "dates": {
+                "register": "25.10.",
+                "make": "2025.10.01"
+              }
+            },
+            {
+              "productCode": 98246261,
+              "name": {
+                "maker": "삼익가구",
+                "brand": "",
+                "product": "시에나 와이드 포세린 통세라믹 원목 식탁 1600",
+                "full": "삼익가구 시에나 와이드 포세린 통세라믹 원목 식탁 1600",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11287,
+                  59859,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "주방가구",
+                  "식탁"
+                ]
+              },
+              "price": {
+                "min": 521110,
+                "minFormatted": "521,110",
+                "total": 609010,
+                "totalFormatted": "609,010",
+                "member": 521110,
+                "memberFormatted": "521,110",
+                "memberTotal": 609010,
+                "memberTotalFormatted": "609,010",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 484640
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/261/246/098/e858af07a9934d4da8276d05005a8d4d.jpg?shrink=130:130&_v=20261014080613",
+                "version": "20261014080613",
+                "alt": "삼익가구 시에나 와이드 포세린 통세라믹 원목 식탁 1600 상품 이미지"
+              },
+              "dates": {
+                "register": "25.09.",
+                "make": "2025.09.26"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "15227279",
+      "metadata": {
+        "public_category_id": "15227279",
+        "category_name": "선반",
+        "categoryCode": "27279",
+        "physicsCate1": "1826",
+        "physicsCate2": "11182",
+        "physicsCate3": "11186",
+        "physicsCate4": "",
+        "group": 15,
+        "depth": 2,
+        "bSearchOptionMultiCategoryYN": "N",
+        "metadata_origin": "server_rendered.viewModel"
+      },
+      "payload": [
+        {
+          "categoryCode": "27279",
+          "page": 1,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "11182",
+          "physicsCate3": "11186",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "selected_ids": [
+            3373257,
+            2408079,
+            68786036,
+            2705089,
+            58113341,
+            3788521,
+            3367496,
+            74253650,
+            3373424,
+            101624225,
+            2653142,
+            851452,
+            13923113,
+            1478161,
+            3012357,
+            2278044,
+            1035812,
+            13997708,
+            46888982,
+            56063399,
+            1650912,
+            534131,
+            11061849,
+            16658750,
+            101080379,
+            2277817,
+            17271290,
+            79251575,
+            57708530,
+            72061787
+          ],
+          "products": [
+            {
+              "productCode": 3373257,
+              "name": {
+                "maker": "영진산업",
+                "brand": "스피드랙",
+                "product": "앵글선반 5단 900x400",
+                "full": "영진산업 스피드랙 앵글선반 5단 900x400",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11182,
+                  11186,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "수납가구",
+                  "선반/팬트리"
+                ]
+              },
+              "price": {
+                "min": 31350,
+                "minFormatted": "31,350",
+                "total": 34040,
+                "totalFormatted": "34,040",
+                "member": 31350,
+                "memberFormatted": "31,350",
+                "memberTotal": 34040,
+                "memberTotalFormatted": "34,040",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 38110
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/257/373/003/d1a3d7a2cbcc44be9b016d68aa46ab2b.jpg?shrink=130:130&_v=20261014175838",
+                "version": "20261014175838",
+                "alt": "영진산업 스피드랙 앵글선반 5단 900x400 상품 이미지"
+              },
+              "dates": {
+                "register": "15.08.",
+                "make": "2015.08.01"
+              }
+            },
+            {
+              "productCode": 2408079,
+              "name": {
+                "maker": "코스트코",
+                "brand": "WHALEN",
+                "product": "고릴라랙 5단 선반",
+                "full": "코스트코 WHALEN 고릴라랙 5단 선반",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11182,
+                  11186,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "수납가구",
+                  "선반/팬트리"
+                ]
+              },
+              "price": {
+                "min": 102390,
+                "minFormatted": "102,390",
+                "total": 115390,
+                "totalFormatted": "115,390",
+                "member": 102390,
+                "memberFormatted": "102,390",
+                "memberTotal": 115390,
+                "memberTotalFormatted": "115,390",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 0
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/079/408/002/f7a7312a376e429ab396e9f0b09af105.jpg?shrink=130:130&_v=20261014080434",
+                "version": "20261014080434",
+                "alt": "코스트코 WHALEN 고릴라랙 5단 선반 상품 이미지"
+              },
+              "dates": {
+                "register": "14.01.",
+                "make": "2014.01.01"
+              }
+            }
+          ]
+        },
+        {
+          "page": 2,
+          "selected_ids": [
+            16658588,
+            56138003,
+            4964665,
+            3370433,
+            74251532,
+            17568557,
+            11877703,
+            4651222,
+            17408495,
+            49536317,
+            21436055,
+            54323708,
+            4780872,
+            17242433,
+            16888550,
+            12183875,
+            2286814,
+            2705107,
+            88208903,
+            36203819,
+            115919046,
+            104939651,
+            4991059,
+            9551826,
+            58113347,
+            63465371,
+            101129684,
+            15247328,
+            101014562,
+            70672322
+          ],
+          "products": [
+            {
+              "productCode": 16658588,
+              "name": {
+                "maker": "수나비",
+                "brand": "피피랙",
+                "product": "무소음 조립식 앵글선반 3단 600x300",
+                "full": "수나비 피피랙 무소음 조립식 앵글선반 3단 600x300",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11182,
+                  11186,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "수납가구",
+                  "선반/팬트리"
+                ]
+              },
+              "price": {
+                "min": 49860,
+                "minFormatted": "49,860",
+                "total": 49860,
+                "totalFormatted": "49,860",
+                "member": 49860,
+                "memberFormatted": "49,860",
+                "memberTotal": 49860,
+                "memberTotalFormatted": "49,860",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 0
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/588/658/016/68292705d92041958ea3530c699034b6.jpg?shrink=130:130&_v=20261014080614",
+                "version": "20261014080614",
+                "alt": "수나비 피피랙 무소음 조립식 앵글선반 3단 600x300 상품 이미지"
+              },
+              "dates": {
+                "register": "21.03.",
+                "make": "2021.03.01"
+              }
+            },
+            {
+              "productCode": 56138003,
+              "name": {
+                "maker": "영진산업",
+                "brand": "스피드랙",
+                "product": "5단 앵글선반 400x600",
+                "full": "영진산업 스피드랙 5단 앵글선반 400x600",
+                "model": ""
+              },
+              "category": {
+                "codes": [
+                  1826,
+                  11182,
+                  11186,
+                  0
+                ],
+                "names": [
+                  "가구/침구",
+                  "수납가구",
+                  "선반/팬트리"
+                ]
+              },
+              "price": {
+                "min": 77360,
+                "minFormatted": "77,360",
+                "total": 77360,
+                "totalFormatted": "77,360",
+                "member": 77360,
+                "memberFormatted": "77,360",
+                "memberTotal": 77360,
+                "memberTotalFormatted": "77,360",
+                "initial": 0,
+                "initialTypeName": "",
+                "promotionMinPriceQ": 83970
+              },
+              "image": {
+                "url": "https://img.danuri.io/catalog-image/003/138/056/d486faec16c348fea8edbd47f3d20d03.jpg?shrink=130:130&_v=20261014080614",
+                "version": "20261014080614",
+                "alt": "영진산업 스피드랙 5단 앵글선반 400x600 상품 이미지"
+              },
+              "dates": {
+                "register": "24.06.",
+                "make": "2024.06.04"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

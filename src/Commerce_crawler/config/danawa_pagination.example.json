@@ -1,0 +1,38 @@
+{
+  "headers": {},
+  "categories": {
+    "1523647": {
+      "payload": [
+        {
+          "categoryCode": "3647",
+          "page": 5,
+          "listCount": 30,
+          "sortMethod": "BEST",
+          "viewMethod": "LIST",
+          "searchMaker": "$undefined",
+          "searchBrand": "$undefined",
+          "searchAttributeValue": "$undefined",
+          "priceRangeMinPrice": "$undefined",
+          "priceRangeMaxPrice": "$undefined",
+          "innerSearchKeyword": "$undefined",
+          "innerDetailSearchKeyword": "$undefined",
+          "registerDateRange": "$undefined",
+          "sDiscountProductRate": "$undefined",
+          "zeroPriceYN": "Y",
+          "addDelivery": "N",
+          "coupangMemberSort": "N",
+          "physicsCate1": "1826",
+          "physicsCate2": "32303",
+          "physicsCate3": "32346",
+          "physicsCate4": "",
+          "group": 15,
+          "depth": 2,
+          "bSearchOptionMultiCategoryYN": "N",
+          "finderAttributeValue": "$undefined",
+          "bGamingNotebookFinderCategory": "$undefined",
+          "sCompanyCategoryYN": "N"
+        }
+      ]
+    }
+  }
+}
