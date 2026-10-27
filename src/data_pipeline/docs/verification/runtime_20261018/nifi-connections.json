@@ -1,0 +1,1 @@
+{"role": "nifi", "database_written": false, "s3": "HEAD_BUCKET_VERIFIED", "kafka": {"status": "MTLS_METADATA_VERIFIED", "broker_count": 3, "cluster_id": "AGceilLlygifiV1hss1Rbw", "raw_topic_visible": false, "topic_error_code": null}, "duration_ms": 389}

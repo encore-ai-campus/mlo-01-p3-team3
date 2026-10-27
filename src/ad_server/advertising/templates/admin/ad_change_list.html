@@ -1,0 +1,4 @@
+{% extends "admin/change_list.html" %}{% load admin_urls %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">광고 운영 홈</a> › {{ ad_model_label }}</div>{% endblock %}
+{% block content %}<section class="ad-context-guide"><strong>{{ ad_guide_title }}</strong><p>{{ ad_guide_description }}</p></section>{{ block.super }}{% endblock %}
+{% block object-tools-items %}{% if has_add_permission %}<li><a href="{% url cl.opts|admin_urlname:'add' %}" class="addlink">{% if cl.opts.model_name == 'revision' %}새 광고 버전 제출{% else %}새 항목 등록{% endif %}</a></li>{% endif %}{% endblock %}

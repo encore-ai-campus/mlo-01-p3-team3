@@ -1,0 +1,13 @@
+{% extends "advertising/base.html" %}{% block content %}
+<div class="eyebrow">PHASE 03 · TEMPLATE CHECK</div><h1>배너 연결과 표시를 한눈에</h1>
+<p class="muted">준비된 10종 소재를 하나씩 확인합니다. 이 화면은 입찰·타기팅·노출 성과를 기록하지 않습니다.</p>
+<div class="layout"><section class="panel"><h2>이미지 템플릿 <span class="tag">10종</span></h2><div class="tiles">
+{% for t in templates %}<button class="tile" data-id="{{t.id}}" data-name="{{t.name}}" aria-pressed="false"><span>{{forloop.counter|stringformat:"02d"}} &nbsp; {{t.name}}</span><small>{{t.status}}</small></button>{% endfor %}</div>
+<div class="checks"><h2 id="selected-name">배너 확인</h2><p id="load-status" class="status" role="status" aria-live="polite">이미지를 선택하세요.</p><p class="muted">원본 600×1200 · 표시 300×600 · 비율 1:2<br>원본을 자르거나 늘리지 않고 표시합니다.</p><label for="embed-path">선택한 배너의 독립 표시 경로</label><input id="embed-path" readonly aria-label="배너 경로"><p class="muted">다른 서비스에서는 이 경로를 별도 광고 자리에 연결할 수 있습니다. 현재 서비스 소스는 수정하지 않았습니다.</p></div></section>
+<aside class="panel"><div class="banner"><div class="ad-label">광고 · 표시 테스트</div><img id="preview" alt="선택한 광고 배너" hidden></div></aside></div>
+{{templates|json_script:"template-data"}}
+{% endblock %}{% block script %}<script>
+const rows=JSON.parse(document.getElementById('template-data').textContent);let revision=0;const img=document.getElementById('preview'),statusEl=document.getElementById('load-status');
+function choose(id){const t=rows.find(x=>x.id===id),v=++revision;document.querySelectorAll('.tile').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));document.getElementById('selected-name').textContent=t.name;document.getElementById('embed-path').value='/embed/'+id+'/';statusEl.textContent='연결 확인 중…';img.hidden=true;const probe=new Image();probe.onload=()=>{if(v!==revision)return;img.src=probe.src;img.alt=t.name+' 광고 배너';img.hidden=false;statusEl.textContent='정상 로드 · '+probe.naturalWidth+' × '+probe.naturalHeight+' px';};probe.onerror=()=>{if(v!==revision)return;img.removeAttribute('src');statusEl.textContent='로드 실패 · 파일과 제공 경로를 확인하세요.';};probe.src='/assets/'+id+'/';}
+document.querySelectorAll('.tile').forEach(b=>b.addEventListener('click',()=>choose(b.dataset.id)));choose('moisturizer');
+</script>{% endblock %}

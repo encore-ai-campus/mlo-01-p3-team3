@@ -1,0 +1,15 @@
+{% extends "admin/change_form.html" %}{% load admin_urls %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">광고 운영 홈</a> › <a href="{% url opts|admin_urlname:'changelist' %}">{{ ad_model_label }}</a> › {% if add %}새로 등록{% else %}상세 확인{% endif %}</div>{% endblock %}
+{% block form_top %}
+{% if ad_journey %}<ol class="ad-flow-progress" aria-label="광고 등록 진행 단계">{% for step in ad_steps %}<li{% if step.current %} class="current" aria-current="step"{% endif %}><b>{{ step.number }}</b>{{ step.label }}</li>{% endfor %}</ol>{% endif %}
+{% if ad_guided %}<input type="hidden" name="_guided" value="1">{% endif %}
+<section class="ad-context-guide"><strong>{{ ad_guide_title }}</strong><p>{{ ad_guide_description }}</p>{% if ad_guided %}<p>연결 정보가 자동으로 채워집니다. 확인 후 아래 버튼으로 진행하세요.</p>{% endif %}{% if opts.model_name == 'revision' and add and ad_guided %}<p>시연 기본값: 브랜드 배너 · 일반 후보 · 900포인트. 필요하면 수정하세요. 실제 결제는 없습니다.</p>{% endif %}</section>
+{% endblock %}
+{% block after_field_sets %}{{ block.super }}
+{% if ad_review_url %}<section class="ad-review-panel" id="review-panel"><h2>제출 내용을 확인했나요?</h2><p>승인 후에도 집행은 시작하지 않습니다. 다음 화면에서 직접 집행을 켜야 합니다.</p><label for="ad-review-reason">심사 사유</label><input id="ad-review-reason" name="_review_reason" minlength="2" maxlength="500" required placeholder="내용을 확인한 근거를 두 글자 이상 입력하세요"><div class="ad-flow-actions"><button type="submit" formaction="{{ ad_review_url }}" formmethod="post" name="decision" value="APPROVED">승인하고 집행 설정으로 →</button><button type="submit" formaction="{{ ad_review_url }}" formmethod="post" name="decision" value="REJECTED" class="ad-secondary">반려하기</button></div></section>
+{% elif opts.model_name == 'revision' and not add %}<section class="ad-context-guide"><strong>다음 단계</strong><p>승인된 버전만 집행할 수 있습니다. 반려되었거나 내용을 변경하려면 새 버전을 작성하세요.</p>{% if ad_campaign_url %}<a href="{{ ad_campaign_url }}">캠페인 집행 설정 열기 →</a>{% endif %}{% if ad_new_revision_url %}<br><a href="{{ ad_new_revision_url }}">내용을 수정해 새 버전 작성 →</a>{% endif %}</section>{% endif %}
+{% endblock %}
+{% block submit_buttons_bottom %}
+{% if ad_next_label and ad_guided %}<div class="submit-row ad-flow-actions"><button type="submit" name="_next_step" value="1" class="ad-flow-primary">{{ ad_next_label }} →</button><button type="submit" name="_save" value="1" class="ad-secondary">저장만 하기</button></div>
+{% else %}{{ block.super }}{% if ad_next_label %}<div class="ad-flow-actions"><button type="submit" name="_next_step" value="1">{{ ad_next_label }} →</button></div>{% endif %}{% endif %}
+{% endblock %}

@@ -1,0 +1,14 @@
+{% load static %}
+{% if ad_delivery_enabled %}
+<aside class="ad-rail ad-delivery" data-ad-delivery data-slot="{{ ad_slot }}" data-project="{{ ad_project_id }}" data-run="{{ ad_run_id }}" hidden aria-label="광고">
+  <span class="ad-slot-label">ADVERTISEMENT</span>
+  <div class="ad-delivery-frame">
+    <button type="button" class="ad-delivery-link" aria-label="광고 자세히 보기">
+      <img class="ad-delivery-image" width="300" height="600" alt="">
+      <span class="ad-delivery-cta"><span>광고</span> 자세히 보기 <span aria-hidden="true">↗</span></span>
+    </button>
+  </div>
+</aside>
+<link rel="stylesheet" href="{% static 'sketch/ad-delivery.css' %}?v=1">
+<script type="module" src="{% static 'sketch/ad-delivery.mjs' %}?v=1"></script>
+{% else %}{% include 'sketch/ad_placeholder.html' %}{% endif %}

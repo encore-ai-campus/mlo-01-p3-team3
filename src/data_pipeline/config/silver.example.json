@@ -1,0 +1,17 @@
+{
+  "environment_id": "replace-with-approved-environment",
+  "mongo_database": "replace-with-approved-database",
+  "bronze_path": "s3a://project-lake/bronze/raw_products",
+  "silver_root": "s3a://project-lake/silver",
+  "checkpoint_path": "s3a://project-checkpoints/product-silver",
+  "mongo_replica_set": "rs-products",
+  "mongo_uri_env": "PIPELINE_MONGO_URI",
+  "spark_options_env": "SILVER_SPARK_OPTIONS",
+  "lease_database": "pipeline_ops",
+  "lease_collection": "pipeline_writer_leases",
+  "lease_uri_env": "SILVER_LEASE_MONGO_URI",
+  "lease_seconds": 120,
+  "lease_heartbeat_seconds": 10,
+  "max_records": 20,
+  "max_raw_bytes": 33554432
+}

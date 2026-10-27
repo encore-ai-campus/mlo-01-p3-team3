@@ -1,0 +1,12 @@
+{
+  "status": "QUIESCED_AND_BACKED_UP",
+  "logical_target": "replace-with-same-logical-deployment-identity",
+  "evidence_ref": "replace-with-operator-stop-and-backup-report",
+  "services": {
+    "mongo": {"backup_id": "replace-with-consistent-backup-id", "identity_digest": "replace-with-verified-id-event-state-digest"},
+    "mysql": {"backup_id": "replace-with-consistent-backup-id", "identity_digest": "replace-with-uuid-fk-state-digest"},
+    "objects": {"backup_id": "replace-with-object-inventory-id", "identity_digest": "replace-with-key-checksum-digest"},
+    "kafka": {"backup_id": "replace-with-offset-event-preservation-id", "identity_digest": "replace-with-event-topic-offset-digest"},
+    "delta": {"backup_id": "replace-with-data-and-log-backup-id", "identity_digest": "replace-with-table-version-checkpoint-digest"}
+  }
+}

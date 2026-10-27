@@ -2,7 +2,7 @@
 
 2026-10-15 신규 직접 추천의 필드/관계는 [직접 추천 속성](09-direct-recommendation.md)과 [통합 계약](../12-direct-recommendation.md)을 먼저 따른다. 기존 입력·상품·노출/행동·작업 공통 컬럼은 유지하되 아래의 생성/scene_object/template 필수 연결·생성 이벤트는 신규 흐름에 적용하지 않는다. 이전 필드 목록은 이력/공통 참조를 위해 보존하며 실제 DDL 전환 완료를 뜻하지 않는다.
 
-신규 run은 input_revision_id와 검증된 context_id를 사용하고 크기 추정·관찰과 명시 요구·상품 실측·행동 라벨을 분리한다. 학습 데이터/라벨은 오프라인으로 관리하고 검증된 scikit-learn 모델은 CPU 운영 추천에 연결한다. run별 모델 버전·특징·점수를 고정한다.
+신규 run은 input_revision_id와 검증된 context_id를 사용하고 크기 추정·관찰과 명시 요구·상품 실측·행동 라벨을 분리한다. 초기는 라벨 없이 scikit-learn 유사도와 수동 가중합으로 실제 추천한다. run별 정책/가중치·인덱스 버전·점수 기여분을 고정하고 학습 라벨은 후속 평가에만 사용한다.
 
 <details>
 <summary>이전 상세 필드 — 공통 속성과 생성 중심 이력</summary>
@@ -412,3 +412,9 @@ Delta Silver 벡터 행을 찾는 참조.
 - 해석: COMPARISON_LINK_CLICKED 기준. PURCHASE_LINK_CLICKED의 link_click_count와 별도이며 반복 클릭·재전달은 노출당 한 번 집계한다. 구매 완료가 아니다.
 
 </details>
+
+## 골드 추천 이미지와 요청별 점수
+
+`gold_recommendation_images`는 상품 UUID·이미지 자산 UUID·상품별 연결·checksum·임베딩 모델/차원/전처리·벡터 참조·고정 인덱스 버전을 대응시킨다. [실버·골드 필드 계약](01-raw-delta.md#실버골드-필드-계약-적용-범위)을 따른다. 벡터는 `product_embeddings`의 이미지 asset 단위로 재사용하고 각 상품의 활성 연결과 이용 범위는 따로 확인한다.
+
+`recommendation_ready`가 확인된 이미지 연결만 서비스 카탈로그 준비에 사용한다. 비교/구매 링크 준비 여부는 별도다. 요청별 유사도·선호 색상 기여분·수동 가중합은 `recommendation_items.ranking_score`·`score_components_json`과 run의 정책 버전에 저장한다. 상품 Gold에 요청별 점수를 고정하거나 `model_score`를 현재 학습 예측값으로 만들지 않는다. 학습 모델 참조는 후속 선택 사항이다.

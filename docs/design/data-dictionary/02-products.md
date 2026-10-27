@@ -1,5 +1,20 @@
 # 상품과 판매 속성 사전
 
+## Gold 게시 필수 확장 컬럼
+
+2026-10-18: [Gold→MySQL 필수 컬럼표](../13-gold-mysql-publication.md#2-ddl-작성-시-반드시-포함할-필드)의 타입·NULL·FK·고유 제약을 기존 아래 사전과 함께 적용한다. 후보 컬럼 목록이 아니라 이번 서비스 DDL 작성 시 포함해야 하는 설계 계약이다. 실제 DB/ORM에 존재한다는 뜻은 아니다.
+
+| 테이블 | 기존 사전에 더해 반드시 포함할 컬럼 |
+|---|---|
+| `products` | `manufacturer`, `attributes_json`, `field_status_json`, `field_lineage_json`, `source_refs_json`, `price_krw`, `first_collected_at`, `catalog_ready`, `recommendation_ready`, `comparison_link_ready`, `purchase_link_ready`, `quality_reason_codes`, `publication_status`, `publication_reason_codes`, `representative_image_id`, `embedding_json`, `gold_snapshot_ref_json` |
+| `product_images` | `image_relation_key`, `gold_recommendation_approved`, `gold_review_snapshot_hash`, `source_evidence_json`, `gold_snapshot_ref_json` |
+| `offers`, `offer_snapshots` | 각각 `gold_snapshot_ref_json` |
+| `product_link_observations` | `id`, `product_id`, `link_observation_key`, `gold_evaluation_key`, `link_kind`, `source_url`, `offer_key`, `usable`, `raw_document_id`, `evidence_json`, `gold_snapshot_ref_json`, `created_at` |
+
+`attributes_json`은 원천 속성 배열과 상태·옵션·적용 부위·근거를 보존한다. 단일 `color`는 호환용 표시값이며 전체 속성 원문을 대체하지 않는다. 규격 숫자와 상태/출처를 함께 해석한다. `price_krw`는 대표가격으로 판매처 가격과 별개다. 준비 boolean은 Gold의 평가 결과이며 서비스 검수·활성의 자동 승인이 아니다.
+
+필수 JSON에는 미제공을 나타내는 빈 배열/객체 또는 계약상 JSON null과 상태를 기록하고 SQL NULL/임의 확정값으로 대체하지 않는다. `embedding_json` 미제공은 JSON null이다. `gold_snapshot_ref_json`의 필수 키·원문 보존·필드별 유지값 출처는 상세 계약을 따른다. 실제 migration 전 기존 행의 검증된 baseline과 보강 방식을 정하며 허위 기본값으로 NOT NULL을 통과시키지 않는다.
+
 2026-10-15: 원천·상품·링크의 공통 필드는 유지한다. 신규 추천 연결·크기 추정·오프라인 특징은 [직접 추천 속성](09-direct-recommendation.md)을 따른다. 생성/템플릿을 전제로 한 예시는 이전 이력이며 AI 추정으로 상품 실측·가격·링크를 덮어쓰지 않는다.
 
 현재 논리 설계의 각 속성에 무엇을 저장하는지 설명한다. 형식·값·상태 코드는 후보이며, 예시는 테스트 설명용으로 실제 계정이나 상품을 뜻하지 않는다.
@@ -744,3 +759,11 @@ Object Storage에 저장한 파일의 메타데이터 행을 마지막으로 수
 - 형식 후보: UTC 날짜와 시각
 - 예시: `2026-10-12T01:01:00Z`
 - 해석: UTC로 저장한다. 행의 최종 갱신 시각이며 원천 가격의 수집 시각이나 파일 내용 변경 시각을 대신하지 않는다.
+
+## 실버·골드 상품 속성과 서비스 대응
+
+2026-10-16 상세 정제 입력은 [실버·골드 필드 계약](01-raw-delta.md#실버골드-필드-계약-적용-범위)을 따른다. `name.maker`·`name.brand`·`name.model`은 제조사·브랜드·모델로 구분하고 `display_name`→`products.name`, `model`→`products.model_name`에 대응한다. `manufacturer`·`normalized_name`·속성별 provenance·복수 색상/재질/형태·네 가지 준비 상태는 논리 확장이며 현행 ORM에 존재한다고 가정하지 않는다. [서비스 저장 대응](../03-data-model.md#실버골드와-서비스-원장-대응)을 확정한 후 DDL을 작성한다.
+
+규격은 상품/포장/부속품·옵션·축·단위를 확인한 값만 mm에 배정한다. `120×60×75cm`처럼 축 설명이 없으면 파싱 숫자와 원문은 보존하고 각 축은 NULL로 남긴다. 속성은 미제공·추출 실패·충돌·의미 미확인을 구분한다. AI 추정이나 상품명 후보가 원장 확인값을 덮어쓰지 않는다.
+
+목록 최저가의 `price_krw`·`price_kind`·조건/시각은 상품 가격 관측이다. 판매처 식별이 없으면 Offer를 만들지 않는다. 일반 판매가격·혜택가격·배송 조건은 기존 판매 원장과 snapshot의 의미를 유지한다. 수집 실패만으로 이전 확인 규격을 지우지 않고 값별 출처·관측 시각을 함께 조회한다.

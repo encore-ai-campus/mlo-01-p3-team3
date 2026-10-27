@@ -1,0 +1,8 @@
+{
+  "room_image": "room.jpg",
+  "sketch_image": null,
+  "text": "사진의 왼쪽 영역에 나무 의자 하나를 배치해주세요.",
+  "requested_region": {"x_min": 0.1, "y_min": 0.3, "x_max": 0.45, "y_max": 0.9},
+  "categories": ["CHAIR", "SOFA", "TABLE"],
+  "template_id": "chair-01"
+}

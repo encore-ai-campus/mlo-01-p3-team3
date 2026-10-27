@@ -1,5 +1,7 @@
 # Kafka와 작업 관리: 입력 기반 직접 추천
 
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 2026-10-15 현행. [직접 추천의 요청·실패 계약](12-direct-recommendation.md#요청작업실패-계약)을 따른다. 실제 v2 스키마/Consumer/마이그레이션 구현은 별도다.
 
 ## 입력 Bronze와 직접 추천 단계 계약
@@ -15,7 +17,7 @@ v2 입력/보존/해석 메시지는 input_revision_id·recommendation_run_id·i
 - user.action.recorded 및 기존 원천/실패 전달: 실제 노출·반응·링크/상품 공통 계약 유지.
 - scene.generation.requested, scene.objects.analysis.requested, template.*: 신규 직접 추천에서 발행하지 않음.
 
-해석→코드 검증/맥락 확정→Application Consumer의 광고 서버 내부 HTTP→결과 저장 순서다. 질의/상품 벡터 생성 책임은 광고 서버, 추천 이력과 사용자 이벤트 쓰기는 Application이다. scikit-learn 학습은 매 요청 선행 단계가 아니지만 검증된 모델의 CPU 추론은 실제 순위 결정의 필수 단계다. run별 모델/특징 버전을 고정하고 재시도에서 바꾸지 않는다. 모델 미준비/추론 실패는 해당 단계 오류로 보존하고 해석 API를 다시 호출하지 않는다.
+해석→코드 검증/맥락 확정→Application Consumer의 광고 서버 내부 HTTP→결과 저장 순서다. 질의/상품 벡터 생성 책임은 광고 서버, 추천 이력과 사용자 이벤트 쓰기는 Application이다. 초기 scikit-learn 콘텐츠 추천은 학습 선행 단계가 없다. run별 수동 가중치/정책·인덱스를 고정하고 INDEX_NOT_READY/RANKING_FAILED를 해당 단계 오류로 보존한다. 로컬 계산/저장 실패로 성공한 해석/임베딩 API를 다시 호출하지 않는다.
 
 ## 발행과 복구
 

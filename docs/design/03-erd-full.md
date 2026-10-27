@@ -1,5 +1,23 @@
 # 전체 ERD: 직접 추천
 
+## Gold 게시 확장 관계
+
+2026-10-18: 아래 기존 ERD/그림만으로 DDL을 만들지 않는다. [게시 필수 컬럼·타입·NULL·제약](13-gold-mysql-publication.md#2-ddl-작성-시-반드시-포함할-필드)과 [속성 사전](data-dictionary/02-products.md#gold-게시-필수-확장-컬럼)을 합쳐야 모든 필수 필드가 포함된다. 실제 migration은 미적용이다.
+
+```mermaid
+erDiagram
+    products ||--o{ product_images : images
+    assets ||--o{ product_images : file
+    products |o--o| product_images : representative_image_id
+    products ||--o{ product_link_observations : link_evaluations
+    assets ||--o{ product_embeddings : embeddings
+    pipeline_publications ||--o{ pipeline_publication_staging : pinned_gold
+```
+
+대표 이미지는 선택 사항이며 한 이미지 관계는 소속 상품의 대표로만 선택한다. 순환 FK의 삽입 순서·동일 상품 검증·RESTRICT 삭제는 상세 계약을 따른다. `gold_snapshot_ref_json`과 `offer_key`, Mongo 원천 ID는 논리 참조로서 이 그림의 물리 FK와 구분한다. 기존 운영자 검수·활성 원장은 Gold 평가 필드와 분리한다.
+
+2026-10-18 로컬 구현 추가: SketchOn은 SQLite `recommendations` 작업 원장과 별도 워커·native async Gemini·제한된 공유 풀을 사용한다. [실행/상태/복구/스키마와 후속 연결](../interior-recommender/execution.md)을 따른다. 아래 MySQL·Kafka·Bronze·광고 서버의 운영 계약은 후속 통합 범위이며 이번 migration이 해당 구축 완료를 뜻하지 않는다.
+
 2026-10-15 신규 관계는 아래와 같다. 생성 중심 기존 그림/필드는 접힘 영역에 보존하며 공통 상품/이벤트 관계 외 신규 필수 계약으로 사용하지 않는다. [현행 속성](data-dictionary/09-direct-recommendation.md)과 [논리 변경안](12-direct-recommendation.md#논리-데이터와-erd-변경안)을 함께 읽는다. 실제 ORM/DDL 변경은 별도다.
 
 ```mermaid
@@ -17,7 +35,22 @@ erDiagram
 접수 중에는 context_id가 NULL일 수 있고 검색 전에는 확정 맥락이 필요하다. 후보 전체/특징/버전은 run의 manifest로, 반환 항목 설명은 item 스냅샷으로 연결하며 반응 라벨은 실제 impression에 연결한다. 원천/벡터/작업의 나머지 공통 관계는 기존 목록을 유지한다.
 
 
-운영 scikit-learn 추천은 run별 ranking_model_ref_json·feature_schema_version·ranking_version·인덱스 버전을 고정하고 item별 model_score를 보존한다. 모델 artifact/전처리/특징·실행 환경의 호환성과 checksum을 배포 전 확인한다. 기존 원장을 덮어쓰지 않고 새 run이 활성 모델을 사용하며 미준비/추론 오류는 별도 상태다. 상세 필드와 학습/배포 계약은 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)을 따른다. 실제 코드/DDL 도입은 별도 작업이다.
+운영 추천은 run별 ranking_policy_json(수동 가중치·결측/미선호 정책·MANUAL_INITIAL)·ranking_version·인덱스/임베딩 버전을 고정한다. item별 ranking_score·score_components_json과 조건별 상태를 보존한다. 초기에는 학습 모델 artifact가 필요 없으며 후속 학습 모델 참조는 선택 사항이다. 상세 필드는 [직접 추천 속성](data-dictionary/09-direct-recommendation.md)을 따른다. 실제 DB/DDL 반영은 별도 작업이다.
+
+## 실버·골드의 논리 연결과 원장 경계
+
+2026-10-16 상품 처리 관계를 반영했다. 아래는 Delta 관측/게시 데이터의 논리 연결이며 MySQL FK나 생성 완료 테이블 목록이 아니다. 정확한 필드와 서비스 확장은 [데이터 모델](03-data-model.md#실버골드와-서비스-원장-대응), 원문 대응·행 기준은 [Delta 속성 사전](data-dictionary/01-raw-delta.md#실버골드-필드-계약-적용-범위)을 따른다.
+
+| 원천·Silver | 논리 연결 | Gold·서비스 |
+|---|---|---|
+| `raw_products` → `silver_product_observations` | 원천 관측 ID·업무 키·관측 시각 | `gold_product_catalog` → `products` |
+| `silver_product_attributes` | 같은 관측·상품/옵션의 확인 속성 | 카탈로그 속성, 값별 출처·확인 상태 |
+| `silver_price_observations` | 상품/옵션·가격 종류·판매 항목 참조 | 목록 가격은 카탈로그 가격, 확인 Offer는 `gold_offers_current`·`gold_offer_snapshots` |
+| `silver_product_images` | 상품별 이미지 연결·자산 checksum·원천 버전 | `gold_recommendation_images` → `product_images`·`assets`·이미지별 벡터 참조 |
+| `silver_link_observations` | 비교/구매 종류·상품/판매 항목·검증 시각 | `gold_product_links`·확인 Offer 링크 |
+| `silver_quality_issues`와 각 정제 결과 | 대상·필드·실패/보류 사유·처리 버전 | `gold_catalog_quality_daily`, 네 가지 준비 상태와 사유 |
+
+상품–이미지·가격·속성은 한 상품에 여러 관측이 연결된다. 이를 모두 펼친 조인 결과를 상품 행 수로 세지 않는다. `gold_recommendation_images.product_id`는 연결된 서비스 상품 UUID지만 벡터 원장의 소유 키는 이미지 asset이다. 같은 이미지로 서로 다른 상품을 합치지 않는다. 상품 품질 일별 집계와 사용자 반응 집계의 키·분모는 별도다.
 
 <details>
 <summary>이전 상세 설계 — 공통 계약은 유지, 생성 중심 단계/관계는 신규 사용 안 함</summary>

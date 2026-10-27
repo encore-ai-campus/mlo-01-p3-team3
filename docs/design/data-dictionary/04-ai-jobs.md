@@ -1,8 +1,10 @@
 # AI와 작업 속성 사전 — 직접 추천 변경 안내
 
+2026-10-18 SQLite 로컬 실행 원장은 `recommendations.{RecommendationJob,RecommendationAttempt,QueueControl,WorkerPresence,ProviderGate,ProviderPermit}`다. UUID/고유 요청 키·lease/token·available_at·시도/대기 시간은 [로컬 작업 속성](../../interior-recommender/execution.md#상태와-로컬-원장)을 따른다. 운영 MySQL 엔터티와 별도이며 기존 API receipt/상품 벡터를 이관·재생성하지 않는다.
+
 2026-10-15 신규 직접 추천의 필드/관계는 [직접 추천 속성](09-direct-recommendation.md)과 [통합 계약](../12-direct-recommendation.md)을 먼저 따른다. 기존 입력·상품·노출/행동·작업 공통 컬럼은 유지하되 아래의 생성/scene_object/template 필수 연결·생성 이벤트는 신규 흐름에 적용하지 않는다. 이전 필드 목록은 이력/공통 참조를 위해 보존하며 실제 DDL 전환 완료를 뜻하지 않는다.
 
-신규 run은 input_revision_id와 검증된 context_id를 사용하고 크기 추정·관찰과 명시 요구·상품 실측·행동 라벨을 분리한다. 학습 데이터/라벨은 오프라인으로 관리하고 검증된 scikit-learn 모델은 CPU 운영 추천에 연결한다. run별 모델 버전·특징·점수를 고정한다.
+신규 run은 input_revision_id와 검증된 context_id를 사용하고 크기 추정·관찰과 명시 요구·상품 실측·행동 라벨을 분리한다. 초기는 라벨 없이 scikit-learn 유사도와 수동 가중합으로 실제 추천한다. run별 정책/가중치·인덱스 버전·점수 기여분을 고정하고 학습 라벨은 후속 평가에만 사용한다.
 
 <details>
 <summary>이전 상세 필드 — 공통 속성과 생성 중심 이력</summary>

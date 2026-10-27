@@ -13,6 +13,7 @@
 | 확인할 데이터 | 사전 |
 |---|---|
 | 직접 추천 맥락·FK·특징·실험 변경안 | [직접 추천](09-direct-recommendation.md) |
+| 실버·골드 입력 매핑·테이블·준비 상태 | [실버·골드 필드 계약](01-raw-delta.md#실버골드-필드-계약-적용-범위) |
 | MongoDB 원천과 Delta 추적 필드 | [원천과 Delta](01-raw-delta.md) |
 | 상품·판매처·가격·이미지·검수 | [상품과 판매](02-products.md) |
 | 계정·공간·스케치·추천·관심 및 이전 배치안 | [사용자와 추천](03-user-flow.md) |
@@ -71,4 +72,4 @@ MongoDB raw_products._id를 문자열로 기록한 원천 추적 값이다. DB �
 
 업무별 ERD는 핵심 관계를 먼저 보여주고 전체 필드는 접힌 표로 제공한다. 생략된 공통 FK·업무 간 관계는 전체 관계 목록에서 확인한다. 이 사전의 필드는 그림의 표시 여부와 관계없이 유지한다. placements는 이전 배치안 참고이며 신규 생성·추천 흐름에서는 사용하지 않는다.
 
-운영 scikit-learn 추천은 run별 ranking_model_ref_json·feature_schema_version·ranking_version·인덱스 버전을 고정하고 item별 model_score를 보존한다. 모델 artifact/전처리/특징·실행 환경의 호환성과 checksum을 배포 전 확인한다. 기존 원장을 덮어쓰지 않고 새 run이 활성 모델을 사용하며 미준비/추론 오류는 별도 상태다. 상세 필드와 학습/배포 계약은 [직접 추천 속성](09-direct-recommendation.md)을 따른다. 실제 코드/DDL 도입은 별도 작업이다.
+운영 추천은 run별 ranking_policy_json(수동 가중치·결측/미선호 정책·MANUAL_INITIAL)·ranking_version·인덱스/임베딩 버전을 고정한다. item별 ranking_score·score_components_json과 조건별 상태를 보존한다. 초기에는 학습 모델 artifact가 필요 없으며 후속 학습 모델 참조는 선택 사항이다. 상세 필드는 [직접 추천 속성](09-direct-recommendation.md)을 따른다. 실제 DB/DDL 반영은 별도 작업이다.
