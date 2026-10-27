@@ -10,7 +10,7 @@ import json
 from itertools import groupby
 
 from ..domain.contracts import canonical, digest, Invalid
-from ..domain.transform import related_policy, VERSION
+from ..domain.transform import related_policy, condition_identity, VERSION
 
 SCALARS = ('display_name','manufacturer','brand','model','width_mm','depth_mm','height_mm')
 IMAGE_STRINGS = ('url observed_url role origin selector resolution_status sha256 format extension acquisition_state '
@@ -193,16 +193,19 @@ def _offers(parsed, product_key):
     for key, rows in identities.items():
         # observed_at DESC NULLS LAST, raw_document_id; the full row breaks a remaining tie.
         identity = min(rows, key=lambda r:(r.get('observed_at') is None, _desc(r.get('observed_at')), order(r.get('raw_document_id')), order(r)))
-        candidates = [p for p in prices if p.get('offer_key') == key and p.get('numeric_status') == 'CONFIRMED' and p.get('currency') == 'KRW']
-        selected = latest(candidates,['amount','currency','condition_json'])
+        candidates = [dict(p, _condition=condition_identity(p.get('condition_json'))) for p in prices
+                      if p.get('offer_key') == key and p.get('numeric_status') == 'CONFIRMED' and p.get('currency') == 'KRW']
+        selected = latest(candidates,['amount','currency','_condition'])
         if selected is None:
             continue
         # Native joined the selection back to every price row of that offer, raw id and time.
-        matched = [p for p in prices if p.get('offer_key') == key and p.get('raw_document_id') == selected['_raw']
+        matched = [{k:v for k,v in p.items() if k != '_condition'} for p in candidates if p.get('raw_document_id') == selected['_raw']
                    and selected['_raw'] is not None and p.get('observed_at') == selected['_at']]
         if not matched:
             continue
-        offers.append(dict(identity=identity, price=min(matched, key=order), purchase_ready=False))
+        # One document can list the same price twice (two paths); the smallest price_observation_key wins.
+        price = min(matched, key=lambda p:(p.get('price_observation_key') is None, order(p.get('price_observation_key')), order(p)))
+        offers.append(dict(identity=identity, price=price, purchase_ready=False))
     return sorted(offers, key=order)
 
 

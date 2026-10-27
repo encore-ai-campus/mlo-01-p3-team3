@@ -1,5 +1,5 @@
 """Gold selection with DataFrame joins, windows and aggregations on Executors."""
-from ..domain.transform import VERSION
+from ..domain.transform import EVIDENCE_KEYS, VERSION
 
 
 def normalized_schema():
@@ -119,13 +119,19 @@ def build_gold(history, policies, gold_policy, retracted=None):
     identities = identities.withColumn('_rank',F.row_number().over(identity_window)).filter('_rank = 1').drop('_rank')
     identity = identities.select('product_key','offer_key',
         F.struct(*[F.col(k) for k in identities.columns]).alias('identity'))
-    selected_prices = latest(prices.filter("numeric_status = 'CONFIRMED' AND currency = 'KRW' AND offer_key IS NOT NULL"),
-        ['amount','currency','condition_json'],by=('product_key','offer_key'))
-    price = prices.alias('p').join(selected_prices.alias('s'),
+    # Price agreement ignores the condition's provenance keys (domain.transform.condition_identity).
+    confirmed = prices.filter("numeric_status = 'CONFIRMED' AND currency = 'KRW' AND offer_key IS NOT NULL")
+    selected_prices = latest(confirmed.withColumn('_condition',F.regexp_replace('condition_json',EVIDENCE_KEYS,'"$1":null')),
+        ['amount','currency','_condition'],by=('product_key','offer_key'))
+    price = confirmed.alias('p').join(selected_prices.alias('s'),
         (F.col('p.product_key') == F.col('s.product_key')) & (F.col('p.offer_key') == F.col('s.offer_key')) &
         (F.col('p.raw_document_id') == F.col('s._raw')) & (F.col('p.observed_at') == F.col('s._at')), 'inner')
+    # One document can list the same price twice (two paths); the smallest price_observation_key wins.
     price = price.select(F.col('p.product_key').alias('product_key'),F.col('p.offer_key').alias('offer_key'),
-        F.struct(*[F.col('p.'+k).alias(k) for k in prices.columns]).alias('price')).dropDuplicates(['product_key','offer_key'])
+        F.col('p.price_observation_key').alias('_price_key'),F.struct(*[F.col('p.'+k).alias(k) for k in prices.columns]).alias('price'))
+    price = (price.withColumn('_rank',F.row_number().over(Window.partitionBy('product_key','offer_key')
+        .orderBy(F.col('_price_key').asc_nulls_last(),F.to_json('price'))))
+        .filter('_rank = 1').drop('_rank','_price_key'))
     offers = identity.join(price,['product_key','offer_key'])
     add_array(offers,'offers',F.struct('identity','price',F.lit(False).alias('purchase_ready')))
 

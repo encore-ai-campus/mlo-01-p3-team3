@@ -1,4 +1,5 @@
 """Reuse fact parsing only. Gold selection has no approval or activation dependency."""
+import re
 from collections import defaultdict
 from uuid import UUID
 
@@ -49,6 +50,16 @@ def normalize(item, policy, raw_verified=False):
             raw_document_id=doc['_id'], raw_payload_hash=doc['payload_hash'], raw_collected_at=doc['collected_at']))
     result['raw_ref'] = {k:doc[k] for k in ('_id','observation_key','document_hash','collected_at','source_code','source_product_id')}
     return result
+
+
+# A price condition carries provenance keys made from its raw document id (legacy silver evidence()),
+# so the same price seen by two observations differs only there. Price agreement compares the
+# condition with them blanked; spark_product and spark_gold apply the same pattern.
+EVIDENCE_KEYS = r'"(unresolved_evidence_key|option_evidence_key)":("[^"]*"|null)'
+
+
+def condition_identity(condition_json):
+    return None if condition_json is None else re.sub(EVIDENCE_KEYS, r'"\1":null', condition_json)
 
 
 def latest(rows, fields):
@@ -107,9 +118,16 @@ def gold(product_key, observations, policy):
             current_images.append(image)
     offers = []
     for identity in {r['offer_key']:r for r in facts['normalized_offers']}.values():
-        price = latest([p for p in facts['price_observations'] if p.get('offer_key') == identity['offer_key']
-            and p['numeric_status'] == 'CONFIRMED' and p['currency'] == 'KRW'], ['amount','currency','condition_json'])
+        candidates = [dict(p, _condition=condition_identity(p.get('condition_json'))) for p in facts['price_observations']
+            if p.get('offer_key') == identity['offer_key'] and p['numeric_status'] == 'CONFIRMED' and p['currency'] == 'KRW']
+        price = latest(candidates, ['amount','currency','_condition'])
         if price:
+            # The agreeing row of the smallest raw document id, then of the smallest price observation
+            # key (one document can list the same price twice), as the native selection keeps.
+            at = [p for p in candidates if p['observed_at'] == price['observed_at']]
+            raw = min(p['raw_document_id'] for p in at)
+            price = min(({k:v for k,v in p.items() if k != '_condition'} for p in at if p['raw_document_id'] == raw),
+                        key=lambda p:(p.get('price_observation_key') is None, p.get('price_observation_key') or '', canonical(p)))
             offers.append(dict(identity=identity, price=price, purchase_ready=False))
     issues = []
     if not scalars['display_name']: issues.append('NAME_MISSING_OR_CONFLICT')

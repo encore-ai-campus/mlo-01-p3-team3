@@ -87,6 +87,14 @@ class NativeGoldTests(unittest.TestCase):
         for key, when, raw, amount in [('o1',at,'a','100'),('o1',at,'b','200'),('o1','2026-10-14T00:00:00.000Z','a','90'),('o2',at,'c','300')]:
             price = dict(offer,offer_key=key,observed_at=when,raw_document_id=raw,amount=amount,currency='KRW',numeric_status='CONFIRMED')
             prices.append(price)
+        # Offer o3: one price seen by two observations, whose conditions differ only in provenance keys.
+        condition = json.loads(offer['condition_json']) if offer.get('condition_json') else {}
+        for raw, key in (('e','k-e'),('f','k-f')):
+            identity = {k:None for k in offer}
+            identity.update(offer_key='o3',observed_at=at,raw_document_id=raw,seller_name='twin')
+            offers.append(identity)
+            prices.append(dict(offer,offer_key='o3',observed_at=at,raw_document_id=raw,amount='500',currency='KRW',
+                numeric_status='CONFIRMED',condition_json=canonical(dict(condition,unresolved_evidence_key=key))))
         first['tables']['price_observations'] = first['tables']['price_observations'] + prices
         # Newest link time, so it is not an equal-time conflict with the fixture's own comparison link.
         link = dict(first['tables']['link_observations'][0],link_kind='COMPARISON',structure_status='VALID',source_url='https://x/1',
@@ -120,6 +128,7 @@ class NativeGoldTests(unittest.TestCase):
             self.assertTrue(synthetic['offers'])
             self.assertEqual(synthetic['comparison_url'],'https://x/1')
             self.assertIsNone(synthetic['display_name'])
+            self.assertIn('o3',{o['identity']['offer_key'] for o in synthetic['offers']})
             synthetic_slots = {i['image_slot'] for i in synthetic['images']}
             self.assertIn('gallery-2',synthetic_slots)
             self.assertNotIn('gallery-3',synthetic_slots)
