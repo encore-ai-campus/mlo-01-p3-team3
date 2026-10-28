@@ -102,7 +102,23 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 
 ### 상세 HTML 보관 정책
 
-`details/`가 있는 수집 실행 디렉터리는 **최근 2회 수집분**까지 보관한다. 그보다 오래된 실행 디렉터리는 운영자가 확인한 뒤 삭제한다. 수집기는 자동 삭제하지 않는다. 삭제한 수집분은 재수집 없이 재추출할 수 없다. 재추출 결과와 다른 위치로 내보낸 스냅샷은 `run_report.detail_evidence_dirs`의 원래 실행 디렉터리에서 HTML을 읽으므로, 원래 실행을 지우면 함께 재추출할 수 없게 된다. 이 정책은 수집기를 실행하는 호스트의 로컬 파일에만 적용한다. 운영에서는 NiFi VM이 수집기를 실행하므로 NiFi VM의 실행 디렉터리가 대상이다. NiFi 주간 자동 실행에서는 운영자가 직접 지울 수 없으므로, 실행을 관리하는 주간 작업이 완료·적재 확인된 실행 중 최근 2회분만 남기도록 정리한다(수집기 밖의 별도 작업). 이미 MongoDB에 적재된 원천 문서(0.3 이하 수집분, payload에 HTML 포함)의 정리는 별도 결정 사항이다.
+`details/`가 있는 수집 실행 디렉터리는 **완료·적재 확인된 최근 2회 수집분**까지 보관한다. 수집기 자체는 지우지 않으며, 정리는 `product_collector.prune`이 맡는다. 운영에서는 NiFi VM이 수집기를 실행하므로 NiFi VM의 실행 루트가 대상이고, 주간 작업이 적재 확인 뒤 `--apply`로 실행한다.
+
+```bash
+python -m product_collector.prune --output <수집기 --output 경로>            # 삭제 대상만 출력
+python -m product_collector.prune --output <수집기 --output 경로> --apply    # 실제 삭제
+```
+
+삭제 대상은 다음 조건을 모두 만족하는 실행 중 최근 2회(`--keep`)를 제외한 것이다. 하나라도 빠지면 지우지 않고 보고서의 `kept`에 사유를 남긴다.
+
+- `run_config.json`과 `checkpoint_state.json`이 있고 상태가 `completed`
+- 적재기가 Mongo·Garage 저장을 확인한 뒤 실행 디렉터리에 남긴 `pipeline_loaded.json`의 `job_id`가 `run_config.json`·`checkpoint_state.json`의 `job_id`와 같음(비어 있으면 미확인). 적재기가 이 파일을 쓰기 전까지는 아무것도 지우지 않는다
+- `active_run.json`이 가리키는 진행 중 실행이 아니고, 다른 실행 루트에서 `--resume-from`으로 재개 중이어서 실행의 `writer.lock`이 잡혀 있지도 않음(`in_use`)
+- 남는 실행(내보낸 스냅샷·재추출 결과)의 `run_report.detail_evidence_dirs`가 가리키지 않음. 같은 실행 루트 안의 참조만 확인한다
+
+수집 중에는 수집기와 같은 `.collection.lock`을 잡지 못해 거부된다. 삭제는 `.deleting-<이름>`으로 이름을 바꾼 뒤 지우고, 중간에 멈춘 삭제는 다음 `--apply`에서 마저 지운다. 정렬 기준은 `checkpoint_state.json`의 `updated_at`(완료 시각)이다. 삭제한 수집분은 재수집 없이 재추출할 수 없다.
+
+이미 MongoDB에 적재된 원천 문서(0.3 이하 수집분, payload에 HTML 포함)의 정리는 별도 결정 사항이다.
 
 ## 중단·재개·내보내기
 

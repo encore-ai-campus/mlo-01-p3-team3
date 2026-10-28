@@ -248,11 +248,15 @@ def open_collection(output, adapter, config, resume_from=None, new_run=False, pr
         directory = Path(resume_from) if resume_from else None
         if directory is None and not new_run and active.exists():
             directory = Path(json.loads(active.read_text(encoding='utf-8'))['directory'])
+        resuming = directory is not None
         if directory is None:
             directory = output / str(uuid4())
         elif not (directory / 'run_config.json').is_file():
             raise ValueError(f'파일 체크포인트가 없습니다. 기존 자료는 보존되며 --new-run으로 새 작업을 시작할 수 있습니다: {directory}')
         with writer_lock(directory / 'writer.lock'):
+            # prune may move the run between the check above and this lock; never start it empty.
+            if resuming and not (directory / 'run_config.json').is_file():
+                raise ValueError(f'재개할 체크포인트가 정리되었습니다: {directory}')
             store = CollectionCheckpoint(directory, adapter, config, progress=progress, repair_files=repair_files)
             atomic_json(active, {'directory': str(directory.resolve())})
             try:
