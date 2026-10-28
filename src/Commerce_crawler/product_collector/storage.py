@@ -61,8 +61,18 @@ def save_detail_html(directory: Path, product_id: str, url: str, html: str, coll
     body = json.dumps({"product_id": str(product_id), "url": url, "html": html, "collected_at": collected_at},
                       ensure_ascii=False).encode("utf-8")
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_bytes(gzip.compress(body, mtime=0))
+    # The journal record that points here is fsynced next, and resume will not refetch this page.
+    with temporary.open("wb") as stream:
+        stream.write(gzip.compress(body, mtime=0))
+        stream.flush()
+        os.fsync(stream.fileno())
     temporary.replace(path)
+    if os.name == "posix":  # persist the rename; Windows cannot open a directory for fsync
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 def load_detail_html(directories, product_id: str, url: str, collected_at: str | None = None):
@@ -79,8 +89,11 @@ def load_detail_html(directories, product_id: str, url: str, collected_at: str |
         for path in candidates + [base / f"{product_id}.json"]:
             if not path.is_file():
                 continue
-            text = gzip.decompress(path.read_bytes()).decode("utf-8") if path.suffix == ".gz" else path.read_text(encoding="utf-8")
-            saved = json.loads(text)
+            try:
+                text = gzip.decompress(path.read_bytes()).decode("utf-8") if path.suffix == ".gz" else path.read_text(encoding="utf-8")
+                saved = json.loads(text)
+            except (OSError, EOFError, UnicodeDecodeError) as exc:  # gzip.BadGzipFile is an OSError
+                raise ValueError(f"saved detail evidence is unreadable: {product_id}: {type(exc).__name__}") from exc
             if saved.get("product_id") != str(product_id) or saved.get("url") != url:
                 raise ValueError(f"saved detail evidence identity mismatch: {product_id}")
             return saved

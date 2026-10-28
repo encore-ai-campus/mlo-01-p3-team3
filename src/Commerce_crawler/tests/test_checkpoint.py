@@ -106,6 +106,14 @@ class CheckpointTests(unittest.TestCase):
             audit = audit_saved_assets(snapshot, Path(root) / 'audit')
             self.assertEqual((audit['missing_details'], audit['products_with_gallery'], audit['saved_evidence_result']),
                              ([], 2, 'passed'))
+            # A truncated page is that product's error; the audit still checks the rest and writes its report.
+            first = raw[0]
+            path = detail_html_path(directory, first['product_id'], first['payload']['detail']['collected_at'])
+            path.write_bytes(path.read_bytes()[:20])
+            audit = audit_saved_assets(snapshot, Path(root) / 'audit-damaged')
+            self.assertEqual([e['product_id'] for e in audit['errors']], [first['product_id']])
+            self.assertEqual((audit['products_with_gallery'], audit['saved_evidence_result']), (1, 'failed'))
+            self.assertTrue((Path(root) / 'audit-damaged' / 'audit' / 'verification_report.json').is_file())
 
     def test_retried_detail_keeps_the_page_an_earlier_snapshot_used(self):
         url = 'https://prod.danawa.com/info/?pcode=11'
@@ -118,6 +126,12 @@ class CheckpointTests(unittest.TestCase):
             self.assertIsNone(load_detail_html([root], '11', url, '2026-10-29T00:09:00Z'))
             with self.assertRaisesRegex(ValueError, 'identity mismatch'):
                 load_detail_html([root], '11', 'https://prod.danawa.com/info/?pcode=12', '2026-10-29T00:00:00Z')
+            path = detail_html_path(Path(root), '11', '2026-10-29T00:00:00Z')
+            intact = path.read_bytes()
+            for damaged in (b'not gzip', intact[:20]):  # BadGzipFile, then EOFError
+                path.write_bytes(damaged)
+                with self.assertRaisesRegex(ValueError, 'unreadable'):
+                    load_detail_html([root], '11', url, '2026-10-29T00:00:00Z')
 
 
     def test_half_page_transaction_rolls_back_without_advancing_cursor(self):
