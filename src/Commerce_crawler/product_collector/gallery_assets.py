@@ -16,7 +16,7 @@ from .core import BudgetExhausted, RequestClient, payload_hash, utc_now, parse_l
 from .danawa import DanawaAdapter
 from .reprocess import apply_detail
 from .media import ImageFetcher, localize_images
-from .storage import atomic_json, read_jsonl, write_jsonl
+from .storage import atomic_json, load_detail_html, read_jsonl, write_jsonl
 from .validation import verify_assets
 
 
@@ -43,6 +43,9 @@ def enrich_saved_run(run: Path, output: Path, client, progress=None, cache_dir: 
                     existing["categories"].append(category)
             existing["payload"]["listings"].extend(copy.deepcopy(original["payload"]["listings"]))
     raw = list(grouped.values())
+    run_report = run / "run_report.json"
+    evidence_dirs = [run] + (json.loads(run_report.read_text(encoding="utf-8")).get("detail_evidence_dirs", [])
+                             if run_report.exists() else [])
     report = {"started_at": utc_now(), "input_run": str(run.resolve()), "products": len(raw),
               "detail_requests": 0, "detail_cached": 0, "errors": [], "result": "partial"}
     stopped = False
@@ -73,6 +76,9 @@ def enrich_saved_run(run: Path, output: Path, client, progress=None, cache_dir: 
             saved = json.loads(path.read_text(encoding="utf-8"))
         elif cache_dir is not None and (cache_dir / "details" / f"{code}.json").exists():
             saved = json.loads((cache_dir / "details" / f"{code}.json").read_text(encoding="utf-8"))
+        elif (record["payload"].get("detail") or {}).get("collected_at"):
+            # Collector 0.4+ keeps the page beside the run (or the run its report points to), not in the payload.
+            saved = load_detail_html(evidence_dirs, code, url, record["payload"]["detail"]["collected_at"])
         if saved is not None:
             if saved.get("product_id") != code or saved.get("url") != url:
                 raise ValueError(f"detail cache identity mismatch: {code}")

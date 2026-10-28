@@ -88,6 +88,7 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 | 경로 | 용도 |
 |---|---|
 | `product_raw/`, `products/` | 처리 후 갱신되는 상품별 원본·정규화 JSON |
+| `details/<product_id>/<수집 시각>.json.gz` | 상세 응답 HTML 전체(gzip, 로컬 재추출 근거). 응답마다 파일 하나. `product_raw` payload에는 넣지 않으며 적재 대상이 아님 |
 | `run_config.json`, `checkpoint_events.jsonl`, `checkpoint_state.json` | 설정·복구용 이력·진행 요약 |
 | `product_raw.jsonl`, `products.jsonl`, `run_report.json` | 종료·Ctrl+C·내보내기 시점의 통합 결과 |
 | `media/products_with_local_images.jsonl` | **상품·이미지 연결 manifest**. 별도 `manifest.jsonl` 파일은 만들지 않음 |
@@ -98,6 +99,10 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 원본과 정규화 결과는 `source + product_id`, `job_id`, `payload_hash/raw_payload_hash`로 연결한다. POST 상품 객체는 원본의 `payload.listings[].api_product`에 보존한다. API 원본 필드와 수집기가 만든 메타데이터·가공 필드는 구분한다. [필드 명세](docs/data_fields.md)
 
 사진 파일은 하드링크 생성이 가능하면 캐시와 공유하고, 실패하면 복사한다. 일반 NAS 전송이 관계를 보존한다고 가정하지 않는다. 경로는 manifest가 있는 `media/`를 기준으로 한다.
+
+### 상세 HTML 보관 정책
+
+`details/`가 있는 수집 실행 디렉터리는 **최근 2회 수집분**까지 보관한다. 그보다 오래된 실행 디렉터리는 운영자가 확인한 뒤 삭제한다. 수집기는 자동 삭제하지 않는다. 삭제한 수집분은 재수집 없이 재추출할 수 없다. 재추출 결과와 다른 위치로 내보낸 스냅샷은 `run_report.detail_evidence_dirs`의 원래 실행 디렉터리에서 HTML을 읽으므로, 원래 실행을 지우면 함께 재추출할 수 없게 된다. 이 정책은 크롤러 PC의 로컬 파일에만 적용한다. 이미 MongoDB에 적재된 원천 문서(0.3 이하 수집분, payload에 HTML 포함)의 정리는 별도 결정 사항이다.
 
 ## 중단·재개·내보내기
 

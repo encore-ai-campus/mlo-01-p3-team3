@@ -355,9 +355,9 @@ class DanawaAdapter:
         product, matched_by = select_product(blocks, listing)
         gallery = extract_gallery(soup, product, listing["product_url"])
         # Keep all parsed JSON-LD and script strings even if selection/decoding fails.
-        specs, fragments = [], []
+        # The full page is local evidence (storage.save_detail_html); its HTML fragments are not kept.
+        specs = []
         for table in soup.select(".spec_tbl, .spec_table, .prod_spec table, #productDescription table"):
-            fragments.append(str(table))
             for row in table.select("tr"):
                 pending = None
                 for cell in row.find_all(["th", "td"], recursive=False):
@@ -371,8 +371,6 @@ class DanawaAdapter:
         description_html = str(description_node) if description_node else None
         spec_node = soup.select_one(".spec_set .spec_list")
         spec_text = spec_node.get_text(" ", strip=True) if spec_node else None
-        if spec_node:
-            fragments.append(str(spec_node))
         # Explicit label/value segments, preserving units and composite dimensions.
         if spec_text:
             for segment in re.split(r"\s+/\s+", re.sub(r"\[[^]]*\]", "", spec_text)):
@@ -388,9 +386,8 @@ class DanawaAdapter:
                     manufacturer = match.group(1)
                     break
         month = re.search(r"등록월\s*:\s*([0-9]{4}\.[0-9]{2}\.?)", made_text)
-        seller_offers, seller_fragments = [], []
+        seller_offers = []
         for item in soup.select(".list__mall-price > li"):
-            seller_fragments.append(str(item))
             logo = item.select_one(".box__logo img[alt]")
             price = item.select_one(".sell-price")
             link = item.select_one("a.link__full-cover[href]")
@@ -406,21 +403,18 @@ class DanawaAdapter:
                     or (m.get("property") or "").startswith("og:")}
         title = soup.title.get_text(" ", strip=True) if soup.title else None
         recognized = bool(product or specs or spec_text or manufacturer or description_node or seller_offers)
+        # description_html stays: normalize() falls back to its text.
         return {"status": "ok" if recognized else "unrecognized",
-                "html": html,
                 "page_title": title, "json_ld_scripts": scripts, "json_ld": blocks,
                 "json_ld_errors": errors, "selected_product": product, "matched_by": matched_by,
-                "specifications": specs, "specification_html": fragments,
+                "specifications": specs,
                 "description_html": description_html,
                 "spec_text": spec_text, "manufacturer": manufacturer or None,
                 "registered_month": month.group(1) if month else None,
-                "made_info_html": str(made_node) if made_node else None,
-                "seller_offers": seller_offers, "seller_offer_html": seller_fragments,
+                "seller_offers": seller_offers,
                 "metadata": metadata,
                 "gallery_images": gallery,
-                "gallery_status": "observed" if gallery else "not_found_in_html",
-                # A failed selector still leaves source evidence for parser repair.
-                "unrecognized_html": html if not recognized else None}
+                "gallery_status": "observed" if gallery else "not_found_in_html"}
 
     def normalize(self, raw: dict) -> dict:
         listings = raw["payload"]["listings"]

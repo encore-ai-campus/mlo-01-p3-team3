@@ -81,7 +81,7 @@ def main() -> int:
             parser.error(f"이미지 다운로드 의존성이 없습니다: {exc.name}. 실행에 사용하는 Python으로 python -m pip install -r requirements-collector.txt 를 먼저 실행해주세요.")
     if args.reprocess_from:
         try:
-            raw, normalized, report = reprocess_run(args.reprocess_from)
+            raw, normalized, report = reprocess_run(args.reprocess_from, args.output)
             destination = save_run(args.output, raw, normalized, report)
         except (ValueError, TypeError, OSError) as exc:
             parser.error(str(exc))

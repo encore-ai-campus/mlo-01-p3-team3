@@ -7,7 +7,7 @@ from pathlib import Path
 from .core import utc_now
 from .danawa import DanawaAdapter, image_identity
 from .reprocess import apply_detail
-from .storage import atomic_json, read_jsonl
+from .storage import atomic_json, load_detail_html, read_jsonl
 from .validation import image_errors
 
 
@@ -20,17 +20,27 @@ def audit_saved_assets(run: Path, output: Path, limit=None, report_path=None) ->
               "checked_products": len(selected), "details_saved": 0, "products_with_gallery": 0,
               "gallery_image_links": 0, "errors": [], "missing_details": []}
     adapter, counts, urls = DanawaAdapter(), Counter(), set()
+    # Exported snapshots and reprocessed runs point to the run that holds their details/.
+    run_report = run / "run_report.json"
+    evidence_dirs = (json.loads(run_report.read_text(encoding="utf-8")).get("detail_evidence_dirs", [])
+                     if run_report.exists() else [])
     for record in selected:
         code = str(record["product_id"])
-        path = output / "details" / f"{code}.json"
-        if not path.exists():
+        expected = f"https://prod.danawa.com/info/?pcode={code}"
+        try:
+            # gallery_assets output keeps details/<id>.json; collector 0.4+ runs keep gzip pages per response.
+            saved = load_detail_html([output, run] + evidence_dirs, code, expected,
+                                     (record["payload"].get("detail") or {}).get("collected_at"))
+        except ValueError as exc:
+            report["details_saved"] += 1
+            report["errors"].append({"product_id": code, "reason": str(exc)})
+            continue
+        if saved is None:
             report["missing_details"].append(code)
             continue
         report["details_saved"] += 1
         try:
-            saved = json.loads(path.read_text(encoding="utf-8"))
-            expected = f"https://prod.danawa.com/info/?pcode={code}"
-            if saved["product_id"] != code or saved["url"] != expected or record["payload"]["listings"][0]["product_url"] != expected:
+            if record["payload"]["listings"][0]["product_url"] != expected:
                 raise ValueError("saved detail/product ID/URL mismatch")
             apply_detail(record, adapter, saved["html"], saved["collected_at"])
             row = adapter.normalize(record)

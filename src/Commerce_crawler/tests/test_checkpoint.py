@@ -1,4 +1,5 @@
 """Disk durability, live export and resume tests; all responses are synthetic."""
+import gzip
 import json
 import os
 from pathlib import Path
@@ -11,7 +12,7 @@ from unittest.mock import patch
 from product_collector.checkpoint import open_collection, export_checkpoint
 from product_collector.core import Category, RequestClient, collect
 from product_collector.danawa import DanawaAdapter
-from product_collector.storage import read_jsonl
+from product_collector.storage import detail_html_path, load_detail_html, read_jsonl, save_detail_html
 from test_pagination_gallery import PagingSession, response, templates
 from test_product_collector import FakeSession, listing
 from test_gallery_assets import gallery
@@ -69,6 +70,55 @@ class CheckpointTests(unittest.TestCase):
                 self.assertEqual(len(session.calls), 1)
                 self.assertTrue(session.calls[0][0].endswith('pcode=12'))
                 self.assertTrue(all(r['detail_status'] == 'ok' for r in raw))
+
+    def test_detail_html_is_kept_beside_the_run_and_reprocess_reads_it(self):
+        from product_collector.reprocess import reprocess_run
+        adapter, categories = DanawaAdapter(), [Category('1')]
+        pages = {adapter.category_url('1'): listing('11', '12'),
+                 'https://prod.danawa.com/info/?pcode=11': gallery('11', 2)[0],
+                 'https://prod.danawa.com/info/?pcode=12': gallery('12', 1)[0]}
+        with tempfile.TemporaryDirectory() as root:
+            with open_collection(Path(root), adapter, {}) as store:
+                raw, normalized, _ = collect(adapter, RequestClient(None, interval=0, session=FakeSession(pages)),
+                                             categories, total_limit=None, checkpoint=store)
+                store.export()
+                directory = store.directory
+            for record in raw:
+                code, detail = record['product_id'], record['payload']['detail']
+                path = detail_html_path(directory, code, detail['collected_at'])
+                saved = json.loads(gzip.decompress(path.read_bytes()).decode('utf-8'))
+                self.assertEqual(saved['html'], pages[f'https://prod.danawa.com/info/?pcode={code}'])
+                self.assertEqual(saved['collected_at'], detail['collected_at'])
+                self.assertNotIn(saved['html'], json.dumps(record, ensure_ascii=False))
+                self.assertEqual(record['extractor_version'], '0.4')
+            snapshot = export_checkpoint(directory)
+            for run in (directory, snapshot):
+                with patch('requests.Session.get', side_effect=AssertionError('network forbidden')):
+                    reparsed, renormalized, _ = reprocess_run(run)
+                self.assertEqual([r['payload_hash'] for r in reparsed], [r['payload_hash'] for r in raw])
+                self.assertEqual([len(n['images']) for n in renormalized], [len(n['images']) for n in normalized])
+            # Gallery enrichment of the exported snapshot follows its evidence pointer instead of refetching.
+            from product_collector.gallery_assets import enrich_saved_run
+            with patch('requests.Session.request', side_effect=AssertionError('network forbidden')):
+                report = enrich_saved_run(snapshot, Path(root) / 'gallery', RequestClient(None, interval=0))
+            self.assertEqual((report['detail_cached'], report['detail_requests'], report['with_gallery']), (2, 0, 2))
+            from product_collector.audit_assets import audit_saved_assets
+            audit = audit_saved_assets(snapshot, Path(root) / 'audit')
+            self.assertEqual((audit['missing_details'], audit['products_with_gallery'], audit['saved_evidence_result']),
+                             ([], 2, 'passed'))
+
+    def test_retried_detail_keeps_the_page_an_earlier_snapshot_used(self):
+        url = 'https://prod.danawa.com/info/?pcode=11'
+        with tempfile.TemporaryDirectory() as root:
+            save_detail_html(Path(root), '11', url, '<p>first</p>', '2026-10-29T00:00:00Z')
+            save_detail_html(Path(root), '11', url, '<p>retry</p>', '2026-10-29T00:05:00Z')
+            self.assertEqual(load_detail_html([root], '11', url, '2026-10-29T00:00:00Z')['html'], '<p>first</p>')
+            self.assertEqual(load_detail_html([root], '11', url, '2026-10-29T00:05:00Z')['html'], '<p>retry</p>')
+            self.assertEqual(load_detail_html([root], '11', url)['html'], '<p>retry</p>')
+            self.assertIsNone(load_detail_html([root], '11', url, '2026-10-29T00:09:00Z'))
+            with self.assertRaisesRegex(ValueError, 'identity mismatch'):
+                load_detail_html([root], '11', 'https://prod.danawa.com/info/?pcode=12', '2026-10-29T00:00:00Z')
+
 
     def test_half_page_transaction_rolls_back_without_advancing_cursor(self):
         class Interrupted(DanawaAdapter):

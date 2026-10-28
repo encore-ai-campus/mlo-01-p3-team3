@@ -15,7 +15,7 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from .storage import atomic_json, write_jsonl
+from .storage import atomic_json, detail_html_path, save_detail_html, write_jsonl
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -316,7 +316,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
                                 if limit_reached(len(records), total_limit):
                                     continue
                                 records[key] = {'source': adapter.source, 'product_id': row['product_id'],
-                                    'collected_at': utc_now(), 'job_id': job_id, 'schema_version': '1.2', 'extractor_version': '0.3',
+                                    'collected_at': utc_now(), 'job_id': job_id, 'schema_version': '1.2', 'extractor_version': '0.4',
                                     'categories': [], 'payload': {'listings': [], 'detail': None},
                                     'detail_status': 'not_requested' if collect_details else 'disabled', 'detail_error': None}
                                 outcome['new_products'] += 1
@@ -381,7 +381,15 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             continue
         try:
             html = client.get(listing["product_url"])
-            record["payload"]["detail"] = {"url": listing["product_url"], "collected_at": utc_now(),
+            collected_at = utc_now()
+            # The page file is keyed by this second-precision time; a retry in the same second waits for the next.
+            while checkpoint and detail_html_path(checkpoint.directory, record["product_id"], collected_at).exists():
+                time.sleep(0.2)
+                collected_at = utc_now()
+            if checkpoint:
+                # Saved before the record so a resumed run that skips this detail still has its HTML.
+                save_detail_html(checkpoint.directory, record["product_id"], listing["product_url"], html, collected_at)
+            record["payload"]["detail"] = {"url": listing["product_url"], "collected_at": collected_at,
                                                **adapter.parse_detail(html, listing)}
             record["detail_status"] = record["payload"]["detail"]["status"]
             record["detail_error"] = None
@@ -414,7 +422,10 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
 
 def save_run(output_root: Path, raw: list[dict], normalized: list[dict], report: dict) -> Path:
     destination = output_root / report["job_id"]
-    destination.mkdir(parents=True, exist_ok=False)
+    # A reprocess may already have written this job's details/; anything else is another run.
+    if destination.exists() and {p.name for p in destination.iterdir()} - {"details"}:
+        raise FileExistsError(f"run directory already exists: {destination}")
+    destination.mkdir(parents=True, exist_ok=True)
     write_jsonl(destination / "product_raw.jsonl", raw)
     write_jsonl(destination / "products.jsonl", normalized)
     atomic_json(destination / "run_report.json", report)

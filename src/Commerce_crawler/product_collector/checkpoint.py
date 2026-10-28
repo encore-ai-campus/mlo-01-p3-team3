@@ -222,7 +222,9 @@ class CollectionCheckpoint:
         target.mkdir(parents=True, exist_ok=True)
         write_jsonl(target / 'product_raw.jsonl', self.records.values())
         write_jsonl(target / 'products.jsonl', self.normalized.values())
-        atomic_json(target / 'run_report.json', self.current_report())
+        # Detail pages stay in the run's details/, also for a snapshot exported elsewhere.
+        atomic_json(target / 'run_report.json', {**self.current_report(),
+                                                 'detail_evidence_dirs': [str(self.directory.resolve())]})
         return target
 
     def export(self):

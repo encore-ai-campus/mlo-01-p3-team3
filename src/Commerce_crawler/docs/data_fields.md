@@ -12,7 +12,7 @@
 |---|---|
 | 상품명·가격·규격 등 활용 | `products.jsonl` |
 | 값이 어디에서 추출됐는지 대조 | `products.provenance`와 `product_raw.payload` |
-| selector 수정 후 다시 추출 | `product_raw.jsonl`과 `run_report.json`을 포함한 실행 디렉터리 |
+| selector 수정 후 다시 추출 | `product_raw.jsonl`, `run_report.json`, `details/`를 포함한 실행 디렉터리 |
 | 실패·생략·요청량·확보율 확인 | `run_report.json` |
 
 `products`는 공통 필드로 정리한 결과다. 모든 치수·무게·카테고리를 완전히 표준화한 Silver 결과를 뜻하지 않는다. 문자열 규격의 단위와 복합 치수는 원문 형태로 남긴다.
@@ -103,9 +103,11 @@ API 원본 필드는 `product_raw.payload.listings[].api_product` 안의 제공�
 | 원본 경로 | 보존 내용 |
 |---|---|
 | payload.listings[] | 발견 카테고리, 목록 URL·page, 해당 시각, 상품 ID·이름·이미지·가격·규격·등록월 원문. GET은 카드 html/variant_prices, POST는 format=action_product와 api_product 전체 객체 |
-| payload.detail | 상세 URL·수집 시각·응답 html, 제목, JSON-LD 원문·파싱 결과·오류, selected_product·matched_by, 규격·설명·제조·등록월·판매 제안·메타데이터, gallery_images/gallery_status와 관련 HTML |
+| payload.detail | 상세 URL·수집 시각, 제목, JSON-LD 원문·파싱 결과·오류, selected_product·matched_by, 규격·설명(description_html)·제조·등록월·판매 제안·메타데이터, gallery_images/gallery_status |
 
 원본은 HTTP 통신 전체를 저장한 자료가 아니다. 목록은 관련 카드 HTML만 저장하며 응답 헤더·쿠키는 저장하지 않는다. 상세 미요청·예산 소진·요청 실패에서는 payload.detail이 null일 수 있다.
+
+extractor_version 0.4부터 상세 응답 HTML 전체는 payload가 아니라 실행 디렉터리의 `details/<product_id>/<수집 시각>.json.gz`(gzip)에 둔다. 재추출은 payload의 `detail.collected_at`으로 같은 응답 파일을 찾는다. 보관 기간은 [README의 보관 정책](../README.md#상세-html-보관-정책)을 따른다. 규격·판매처·제조 정보 영역의 HTML 조각(specification_html, seller_offer_html, made_info_html)과 unrecognized_html도 저장하지 않는다. 인식 실패 페이지의 원문도 `details/`에 있다. 이 HTML은 재추출 근거이며 적재·파이프라인 입력이 아니다. 0.3 이하 실행은 payload의 html을 그대로 읽어 재추출하고, CLI 재추출(`--reprocess-from`)은 그 HTML을 새 결과의 `details/`에 옮겨 저장한다. 다른 위치로 내보낸 스냅샷과 재추출 결과의 `run_report.detail_evidence_dirs`는 `details/`가 있는 원래 실행 디렉터리를 가리킨다.
 
 ## 상태와 보고서 읽기
 

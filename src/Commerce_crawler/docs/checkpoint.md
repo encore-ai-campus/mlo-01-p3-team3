@@ -13,6 +13,7 @@
 | `checkpoint_state.json` | 저장 완료 commit·상태·상품 수·카테고리별 마지막 완료 페이지 |
 | `product_raw/danawa_<id>.json` | 원본 상품. 목록·상세 추가에 따라 갱신 |
 | `products/danawa_<id>.json` | 같은 상품의 가공 필드·원본 연결 해시 |
+| `details/<id>/<수집 시각>.json.gz` | 상세 응답 HTML 전체·URL·수집 시각(gzip). 상품 기록보다 먼저 저장하므로 재개 시 건너뛴 상세도 남아 있음. 재시도 응답은 새 파일이라 이전 스냅샷이 쓴 HTML을 바꾸지 않음 |
 | `product_raw.jsonl`, `products.jsonl`, `run_report.json` | 정상 종료·수집 Ctrl+C·내보내기에서 만든 통합 결과 |
 | `exports/<snapshot_id>/` | 실행 중 요청한 시점의 통합 내보내기 |
 

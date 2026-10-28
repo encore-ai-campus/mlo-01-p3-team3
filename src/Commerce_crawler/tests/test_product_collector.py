@@ -12,6 +12,7 @@ import requests
 from product_collector.core import Category, RequestClient, BudgetExhausted, collect, load_categories, save_run
 from product_collector.danawa import DanawaAdapter, amount
 from product_collector.reprocess import reprocess_run
+from product_collector.storage import save_detail_html
 
 
 def card(code, legacy=False, price="최저가 12,000원"):
@@ -189,6 +190,11 @@ class CollectorTests(unittest.TestCase):
         raw, normal, report, _ = self.pipeline(pages, [Category("1")])
         with tempfile.TemporaryDirectory() as directory:
             output = save_run(Path(directory), raw, normal, report)
+            with self.assertRaisesRegex(ValueError, "saved full detail HTML is missing"):
+                reprocess_run(output)
+            # The collector writes this beside its checkpointed run (see test_checkpoint).
+            save_detail_html(output, "11", "https://prod.danawa.com/info/?pcode=11", detail("11"),
+                             raw[0]["payload"]["detail"]["collected_at"])
             with patch('requests.Session.get', side_effect=AssertionError("network forbidden")) as get:
                 reparsed, normalized, replay_report = reprocess_run(output)
                 get.assert_not_called()
@@ -196,6 +202,25 @@ class CollectorTests(unittest.TestCase):
             self.assertEqual(replay_report["original_request_count"], 2)
             self.assertEqual(reparsed[0]["collected_at"], raw[0]["collected_at"])
             self.assertEqual(normalized[0]["name"], normal[0]["name"])
+
+    def test_reprocessing_a_pre_0_4_run_keeps_its_page_for_the_next_reprocess(self):
+        pages = {self.adapter.category_url("1"): listing("11"),
+                 "https://prod.danawa.com/info/?pcode=11": detail("11")}
+        raw, normal, report, _ = self.pipeline(pages, [Category("1")])
+        raw[0]["payload"]["detail"]["html"] = detail("11")  # 0.3 kept the page in the payload
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = save_run(Path(directory) / "legacy", raw, normal, report)
+            first = reprocess_run(legacy, Path(directory) / "out")
+            once = save_run(Path(directory) / "out", *first)
+            self.assertNotIn("html", first[0][0]["payload"]["detail"])
+            with patch('requests.Session.get', side_effect=AssertionError("network forbidden")):
+                again, normalized, _ = reprocess_run(once)
+            self.assertEqual(again[0]["payload_hash"], first[0][0]["payload_hash"])
+            self.assertEqual(normalized[0]["name"], normal[0]["name"])
+            # Without an output root the embedded page has nowhere else to go, so it stays.
+            kept = save_run(Path(directory) / "kept", *reprocess_run(legacy))
+            with patch('requests.Session.get', side_effect=AssertionError("network forbidden")):
+                self.assertEqual(reprocess_run(kept)[0][0]["payload"]["detail"]["html"], detail("11"))
 
     def test_json_ld_nan_rejected_with_html_fallback(self):
         row = self.adapter.parse_listing(listing("11"), 2)[0][0]
@@ -231,7 +256,14 @@ class CollectorTests(unittest.TestCase):
         data = self.adapter.parse_detail(detail("99"), row)
         self.assertIsNone(data["selected_product"])
         self.assertEqual(data["status"], "unrecognized")
-        self.assertIsNotNone(data["unrecognized_html"])
+
+    def test_detail_payload_keeps_no_page_html(self):
+        row = self.adapter.parse_listing(listing("11"), 2)[0][0]
+        for page in (detail("11"), detail("99")):
+            data = self.adapter.parse_detail(page, row)
+            self.assertFalse({"html", "unrecognized_html", "specification_html", "seller_offer_html",
+                              "made_info_html"} & set(data))
+            self.assertNotIn(page, json.dumps(data, ensure_ascii=False))
 
     def test_json_ld_array_types_and_reference_offers(self):
         row = self.adapter.parse_listing(listing("11"), 2)[0][0]
