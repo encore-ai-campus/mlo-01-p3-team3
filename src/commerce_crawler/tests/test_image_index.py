@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import requests
 
@@ -43,6 +44,9 @@ def not_found():
 
 class IndexTests(unittest.TestCase):
     def setUp(self):
+        waits = patch('product_collector.media.RETRY_WAITS', (0.0, 0.0))  # the retry passes, without waiting
+        waits.start()
+        self.addCleanup(waits.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.root = Path(self.directory.name)
         self.index = self.root / '_image_index'
@@ -175,8 +179,9 @@ class IndexTests(unittest.TestCase):
 
         other = 'https://img.example/b.png'
         for _ in range(GIVE_UP_AFTER + 1):
+            # Never given up; each run tries it once more in each retry pass.
             _, fetcher, _ = self.collect({other: requests.ConnectionError('reset')}, store, (other,))
-            self.assertEqual(fetcher.calls, [other])
+            self.assertEqual(fetcher.calls, [other] * 3)
 
     def test_a_non_image_response_counts_as_a_permanent_failure(self):
         for _ in range(GIVE_UP_AFTER):

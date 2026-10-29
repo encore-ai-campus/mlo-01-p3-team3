@@ -280,7 +280,8 @@ def main() -> int:
     opened = False
     try:
         with open_collection(args.output, adapter, config, args.resume_from, args.new_run,
-                             progress=show_progress, repair_files=args.repair_files) as checkpoint:
+                             progress=show_progress, repair_files=args.repair_files,
+                             image_policy_version=RETRY_POLICY_VERSION if args.download_images else None) as checkpoint:
             opened = True
             destination = checkpoint.directory
             previous = checkpoint.current_report()
@@ -343,6 +344,12 @@ def main() -> int:
                     report["image_download"] = {"result": media_report["result"], "verification": verified["result"],
                                                 **{k: media_report[k] for k in ("downloaded", "stored", "failed", "gave_up",
                                                                                 "store_checks", "store_errors")}}
+                    # Final URL states and alerts of the image step (crawler-optimization/image-retry.md).
+                    for key in ("failures", "alerts", "storage_unverified"):
+                        if media_report.get(key):
+                            report["image_download"][key] = media_report[key]
+                    if (media_report.get("retry") or {}).get("passes"):
+                        report["image_download"]["retry"] = media_report["retry"]
                     if media_report.get("stop_reason"):
                         # A 403/429 from the image host, so one report tells the launcher about any block.
                         report["image_download"]["stop_reason"] = media_report["stop_reason"]

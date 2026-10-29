@@ -40,7 +40,37 @@ def product_images(product: dict) -> list[dict]:
 
 DELIVERED = {"downloaded", "stored"}  # statuses that give the pipeline the image
 GIVE_UP_AFTER = 3  # consecutive permanent failures before a URL is skipped without --retry-failed
-RETRY_POLICY_VERSION = 1  # GIVE_UP_AFTER and permanent_failure; fixed per run in image_settings.json
+# GIVE_UP_AFTER, permanent_failure, the retry passes, the failure rate and storage_unverified;
+# fixed per run in image_settings.json (crawler-optimization/image-retry.md).
+RETRY_POLICY_VERSION = 2
+RETRY_WAITS = (60.0, 300.0)  # seconds before each extra pass over this run's transient failures
+FAILURE_LIMIT = 0.01         # transient and internal failures left among the run's unique image URLs
+FAILURE_MIN_SAMPLE = 50      # fewer URLs: any such failure leaves the step partial
+EXTERNAL_ALERT_LIMIT = 0.05  # images the site no longer serves: recorded, an alert above this rate
+UNFINISHED = {"pending", "budget_exhausted", "stopped_after_block"}  # never tried: the step is partial
+
+
+class ImageTooLarge(ValueError):
+    """The response is bigger than max_bytes; the same URL answers the same next time."""
+
+
+def failure_kind(entry: dict) -> str:
+    """blocked (403/429), external (the site does not serve a usable image), internal (this
+    collector could not use what it got) or transient (worth another try in this run).
+
+    Read from a recorded failure, so failures kept from earlier attempts are classified alike."""
+    code = entry.get("http_status")
+    if code in {403, 429}:
+        return "blocked"
+    if code is not None and 400 <= code < 500 and code != 408:
+        return "external"
+    kind, message = entry.get("error_type"), entry.get("error") or ""
+    if (kind in {"UnidentifiedImageError", "ImageTooLarge", "UnsupportedImageFormat"}
+            or "exceeds max_bytes" in message or "unsupported downloaded image format" in message):
+        return "external"
+    if kind == "ValueError":  # an invalid URL, an unconfirmed checksum: not the site's answer
+        return "internal"
+    return "transient"
 
 
 def permanent_failure(exc) -> bool:
@@ -107,7 +137,7 @@ class ImageFetcher:
             for chunk in response.iter_content(chunk_size=64 * 1024):
                 count += len(chunk)
                 if count > self.max_bytes:
-                    raise ValueError("image response exceeds max_bytes")
+                    raise ImageTooLarge("image response exceeds max_bytes")
                 chunks.append(chunk)
             # Recorded only, to judge later whether conditional requests are worth it.
             self.last_headers = {key: response.headers.get(name) for key, name in (
@@ -276,6 +306,7 @@ class ImageStep:
             self.prepared = True
             self.save_progress('downloading')
             self.drain()
+            self.settle()
         finally:
             self.end()
         return self.report
@@ -309,6 +340,15 @@ class ImageStep:
                       stored=0, store_checks=0, store_missing=0, store_mismatch=0, store_errors=0)
         self.report = report
         self.store_errors_in_row = 0
+        self.storage_checks = {}  # url -> found/missing/mismatch/error, this attempt's HEAD answers
+        # Retries belong to this run directory: its attempts (run ids) and the tries per URL.
+        path = destination / 'image_retry.json'
+        state = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
+        if state.get('retry_policy_version') != RETRY_POLICY_VERSION:
+            state = {'retry_policy_version': RETRY_POLICY_VERSION, 'runs': [], 'rounds': {}, 'ready_at': {}}
+        state.setdefault('runs', []).append(self.run_id)
+        atomic_json(path, state)
+        self.retry_state, self.settled = state, False
         # Without storage settings no image may be "stored": before the pipeline loads it,
         # a stored image would arrive as an image without bytes.
         self.store_configured = self.object_store is not None
@@ -346,7 +386,10 @@ class ImageStep:
         self.products_path, self.input_hash = Path(products_path), expected_sha256
         self.report["input_sha256"] = expected_sha256
         self.prepared = True
-        self.end()
+        try:
+            self.settle()
+        finally:
+            self.end()
         return self.report
 
     def abort(self) -> None:
@@ -358,10 +401,18 @@ class ImageStep:
         if self.cancel.is_set():
             raise StepCancelled()
 
-    def in_storage(self, meta):
+    def in_storage(self, meta, url=None):
+        """Ask object storage; the answer per URL (found/missing/mismatch/error) is kept for settle()."""
+        state = self.storage_state(meta)
+        if url is not None and state != 'not_checked':
+            self.storage_checks[url] = state
+        return state == 'found'
+
+    def storage_state(self, meta):
         report = self.report
         if self.object_store is None:
-            return False
+            # Configured but given up after repeated errors: the object is unknown, not missing.
+            return 'error' if self.store_configured else 'not_checked'
         report['store_checks'] += 1
         try:
             found = self.object_store.head(object_key(meta))
@@ -372,15 +423,15 @@ class ImageStep:
             if self.store_errors_in_row >= STORE_ERROR_LIMIT:
                 self.object_store = None
                 report['store_disabled'] = 'consecutive_errors'
-            return False
+            return 'error'
         self.store_errors_in_row = 0
         if found is None:
             report['store_missing'] += 1
-            return False
+            return 'missing'
         if found.get('bytes') != meta['bytes'] or found.get('sha256') != meta['sha256']:
             report['store_mismatch'] += 1
-            return False
-        return True
+            return 'mismatch'
+        return 'found'
 
     def record(self, entry):
         # Success/failure is published before a lightweight progress marker.
@@ -428,7 +479,7 @@ class ImageStep:
             known = shared.get(url, {})
             success = success_part(known)
             meta = stored_metadata(success)
-            if meta and self.in_storage(meta):
+            if meta and self.in_storage(meta, url):
                 current[url] = dict(url=url, status='stored', **meta, local_path=None,
                                     downloaded_at=success.get('downloaded_at'),
                                     checked_at=utc_now(), run_id=self.run_id)
@@ -467,11 +518,14 @@ class ImageStep:
             if self.downloads % self.progress_every == 0:
                 self.save_progress('downloading' if self.products_path is not None else 'overlap')
 
-    def download(self, url):
+    def download(self, url, retry_round=0):
         report, store, memo, fetcher = self.report, self.store, self.memo, self.fetcher
         report['requests'] += 1
         attempted_at = utc_now()
-        before = (self.shared if self.index is not None else self.previous).get(url, {})
+        if retry_round:
+            before = self.current[url]  # this run's failure: its attempts and last success go on
+        else:
+            before = (self.shared if self.index is not None else self.previous).get(url, {})
         attempts = int(before.get('attempts', 0)) + 1
         try:
             data = fetcher.fetch(url)
@@ -505,8 +559,121 @@ class ImageStep:
             if status_code in {403, 429}:
                 self.stopped = True
                 report['stop_reason'] = f'http_{status_code}'
+        if retry_round:
+            entry['retry_round'] = retry_round
+        check = self.storage_checks.get(url) or (before.get('storage_check') if retry_round else None)
+        if check:
+            entry['storage_check'] = check
         self.record(entry)
         self.current[url] = entry
+
+    def settle(self):
+        """Normal end of the downloads, before the final manifest: retry this run's transient
+        failures, then let an unconfirmed but earlier stored image stand in for a failed one.
+
+        Never on an exception or a stop: end() then publishes what there is."""
+        self.retry_passes()
+        self.unverified_stand_ins()
+        self.settled = True
+
+    def retry_passes(self):
+        """Up to len(RETRY_WAITS) extra tries per URL in this run directory, kept across resumes.
+
+        image_retry.json counts the tries before each request, so a crash costs a try, never adds one."""
+        report, current = self.report, self.current
+        path, state = self.destination / 'image_retry.json', self.retry_state
+        tries, ready = state['rounds'], state['ready_at']
+        summary = report.setdefault('retry', {'waits': list(RETRY_WAITS), 'passes': []})
+        for number, wait in enumerate(RETRY_WAITS, 1):
+            targets = [url for url, entry in current.items()
+                       if entry.get('status') == 'failed' and failure_kind(entry) == 'transient'
+                       and not entry.get('gave_up') and tries.get(url, 0) < number and self.own(entry)]
+            if self.stopped or limit_reached(report['requests'], self.max_requests):
+                break
+            if not targets:
+                continue  # a resume after a try of this pass: only later passes are left
+            key = str(number)
+            if key not in ready:
+                ready[key] = time.time() + wait
+                atomic_json(path, state)
+            if self.cancel.wait(max(0.0, ready[key] - time.time())):
+                raise StepCancelled()
+            done = dict(round=number, targets=len(targets), attempted=0, recovered=0)
+            summary['passes'].append(done)
+            self.save_progress('retrying')
+            for url in targets:
+                self.check_cancel()
+                if self.stopped or limit_reached(report['requests'], self.max_requests):
+                    done['stopped'] = report.get('stop_reason') or 'budget'
+                    break
+                tries[url] = number
+                atomic_json(path, state)
+                self.download(url, retry_round=number)
+                done['attempted'] += 1
+                done['recovered'] += current[url]['status'] == 'downloaded'
+
+    def own(self, entry):
+        """A failure of this run directory, not one a shared cache keeps from another run."""
+        return entry.get('run_id') in self.retry_state['runs']
+
+    def unverified_stand_ins(self):
+        """With storage checks on, a URL whose last download is known, whose HEAD failed (or was
+        given up) and whose new download still failed is handed over as that earlier stored image.
+
+        Only in the manifest: the history keeps the failure and the last success. Ingestion checks
+        the object itself and fails just that slot if it is gone."""
+        if not self.store_configured or self.stopped:
+            return
+        count = 0
+        for url, entry in self.current.items():
+            if (entry.get('status') != 'failed' or entry.get('storage_check') != 'error'
+                    or failure_kind(entry) != 'transient' or not self.own(entry)):
+                continue
+            success = success_part(entry)
+            meta = stored_metadata(success)
+            if not meta:
+                continue
+            self.current[url] = dict(url=url, status='stored', **meta, local_path=None,
+                                     downloaded_at=success.get('downloaded_at'), run_id=self.run_id,
+                                     storage_unverified=True, unverified_reason=entry.get('error'),
+                                     failed_at=entry.get('failed_at'))
+            count += 1
+        self.report['storage_unverified'] = count
+
+    def failure_summary(self):
+        """Final state of every unique image URL of the input; the request counters are attempts."""
+        report, current = self.report, self.current
+        kinds = {'transient': 0, 'internal': 0, 'external': 0, 'blocked': 0}
+        unfinished, samples = 0, []
+        for url, entry in current.items():
+            status = entry.get('status')
+            if status in UNFINISHED:
+                unfinished += 1
+            elif status == 'failed':
+                kind = failure_kind(entry)
+                kinds[kind] += 1
+                if kind != 'external' and len(samples) < 50:
+                    samples.append(url)
+        total = len(current)
+        counted = kinds['transient'] + kinds['internal'] + kinds['blocked']
+        rate = counted / total if total else 0.0
+        passed = (counted == 0) if total < FAILURE_MIN_SAMPLE else rate <= FAILURE_LIMIT
+        external_rate = kinds['external'] / total if total else 0.0
+        blocked_by = [reason for reason, hit in (
+            ('not_prepared', not self.prepared), (report.get('stop_reason') or 'blocked', self.stopped),
+            # A 403/429 kept from before a resume was never tried again: still blocked.
+            ('blocked_failures', kinds['blocked'] > 0 and not self.stopped), ('unfinished', unfinished > 0),
+            # Cancelled or failed before the retries ended: what there is gets published, not passed.
+            ('interrupted', self.prepared and not self.settled)) if hit]
+        summary = dict(unique_urls=total, failed=counted, rate=round(rate, 6), limit=FAILURE_LIMIT,
+                       min_sample=FAILURE_MIN_SAMPLE, passed=passed and not blocked_by, by_kind=kinds,
+                       unfinished=unfinished, blocked_by=blocked_by,
+                       external_rate=round(external_rate, 6), external_alert_limit=EXTERNAL_ALERT_LIMIT,
+                       storage_unverified=report.get('storage_unverified', 0), failed_url_sample=samples)
+        alerts = ([{'signal': 'image_permanent_failures', 'count': kinds['external'], 'total': total,
+                    'rate': round(external_rate, 6), 'limit': EXTERNAL_ALERT_LIMIT}]
+                  if external_rate > EXTERNAL_ALERT_LIMIT else [])
+        return summary, alerts
 
     def end(self):
         self.report['finished_at'] = utc_now()
@@ -539,7 +706,8 @@ class ImageStep:
         # bytes read must be the ones the URL list came from, or the manifest is not published.
         report, current, memo = self.report, self.current, self.memo
         target = self.destination / "products_with_local_images.jsonl"
-        counts = dict(products_with_local_images=0, products_complete=0, products_with_stored_images=0)
+        counts = dict(products_with_local_images=0, products_complete=0, products_with_stored_images=0,
+                      products_affected=0, products_without_delivered_images=0)
 
         def manifest():
             products, reread = scan_products(self.products_path)
@@ -548,6 +716,9 @@ class ImageStep:
                 counts["products_with_local_images"] += any(e["status"] == "downloaded" for e in row["images"])
                 counts["products_complete"] += row["image_download_status"] == "completed"
                 counts["products_with_stored_images"] += any(e["status"] == "stored" for e in row["images"])
+                counts["products_affected"] += row["image_download_status"] == "partial"
+                counts["products_without_delivered_images"] += bool(row["images"]) and not any(
+                    e["status"] in DELIVERED for e in row["images"])
                 yield row
             # Raised here, before write_jsonl replaces the published file.
             if reread.hexdigest() != self.input_hash:
@@ -571,8 +742,10 @@ class ImageStep:
         report.update(**counts, products_without_gallery=self.without_gallery,
                       unique_files=len({e["sha256"] for e in current.values() if e.get("status") == "downloaded"}),
                       updated_at=utc_now())
-        report["result"] = ("completed" if self.product_count and report["products_complete"] == self.product_count
-                            else "partial")
+        # A few failed images or galleries the site has none of leave the step completed; the
+        # quality gate judges missing galleries. Blocks, budget stops and too many failures do not.
+        report["failures"], report["alerts"] = self.failure_summary()
+        report["result"] = "completed" if self.product_count and report["failures"]["passed"] else "partial"
         atomic_json(self.destination / "download_report.json", report)
 
     def manifest_row(self, product):

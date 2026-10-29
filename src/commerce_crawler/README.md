@@ -109,7 +109,10 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 - **`--image-store-config <파일>`:** 이미지 버킷 읽기 전용 접속 설정이다. 서버 적재가 v2 `ingest-*`로 전환된 뒤에만 켠다(v1 적재는 stored를 이미지 없음으로 처리). 설정이 없으면 재개한 실행에서도 stored를 만들지 않고 다시 받는다. 이력에 성공 기록이 있는 URL은 파이프라인 객체 키 `images/sha256/<앞 2자>/<sha256>.<extension>`에 HEAD를 보낸다. 크기와 `sha256` 메타데이터가 같으면 다운로드하지 않고 이미지 항목을 `status: "stored"`로 기록한다. stored 항목에는 메타데이터만 있고 `local_path`·`filename`·`category_paths`는 비어 있다. 최종 무결성은 파이프라인 적재가 객체 전체 sha256으로 확인한다.
 - 객체가 없거나 값이 다르거나 HEAD가 실패하면 지금처럼 받는다. HEAD 오류가 연속 20회면 그 실행에서는 저장소 확인을 멈춘다. 설정이 없으면 모두 받는다.
 - 설정 파일은 Git 밖에 두고(권한 600) `key=value`로 쓴다. 필수 `endpoint`(https), `bucket`, `accessKey`, `secretKey`, 선택 `caBundle`, `region`(기본 us-east-1). boto3가 필요하다.
-- **실패 재시도:** 타임아웃·연결 오류·5xx는 다음 실행마다 다시 시도한다. 404 등 클라이언트 오류와 이미지가 아닌 응답이 연속 3회면 `gave_up`으로 두고 `--retry-failed`를 줄 때만 다시 시도한다. 실패해도 이전 성공 기록(`last_success`)은 유지한다. 같은 실행을 재개할 때는 그 실행에서 실패한 URL을 다시 요청하지 않는다.
+- **실패 재시도:** 같은 실행 안에서, 본 다운로드가 정상으로 끝난 뒤 최종 manifest를 쓰기 전에 이번 실행 폴더의 일시 실패(타임아웃·연결 오류·DNS·5xx)를 60초, 300초 뒤 최대 2회 다시 시도한다. URL별 시도 수는 `media/image_retry.json`에 남아 재개해도 2회를 넘지 않는다. 중단·차단(403/429)·예산 소진 때는 재시도하지 않는다. 그 뒤에도 남은 일시 실패는 다음 실행에서 다시 시도한다. 404 등 클라이언트 오류와 이미지가 아닌 응답이 연속 3회면 `gave_up`으로 두고 `--retry-failed`를 줄 때만 다시 시도한다. 실패해도 이전 성공 기록(`last_success`)은 유지한다.
+- **사진 실패 판정:** 이미지 단계는 입력 상품의 고유 사진 URL 전체 대비 일시 실패·내부 오류·차단 실패가 1% 이하면 completed다(URL 50개 미만이면 하나라도 남으면 partial). 사이트에 없는 사진(403·408·429를 뺀 4xx, 이미지 아님, 크기 상한 초과)은 판정에서 빼고, 5%를 넘으면 `image_permanent_failures` 경보를 남긴다. 준비 미완료, 403/429 차단, 예산 때문에 남은 URL, 중단은 비율과 관계없이 partial이다. 사진 목록이 없는 상품은 완료를 막지 않고 품질 관문(`no_images`)이 판정한다. 결과는 `run_report.image_download.failures`·`alerts`·`retry`에 남는다.
+- **확인되지 않은 stored:** 저장소 확인을 켠 실행에서, HEAD가 오류였고 이전 성공 기록이 있는 사진이 재시도 뒤에도 일시 실패하면 manifest에만 `stored`와 `storage_unverified: true`, 원래 실패 사유를 쓴다. 공유 이력에는 실패로 남는다. 적재가 실제 객체를 확인하고, 없으면 그 슬롯만 실패로 처리한다.
+- **재시도 규칙 버전:** `RETRY_POLICY_VERSION`은 2다. 버전 1로 시작한 실행은 재개를 거부하므로(종료 코드 3) `python -m product_collector.abandon`으로 포기하고 새로 시작한다.
 - 이력 경로, 저장소(endpoint·bucket, 키 제외), 재시도 규칙 버전은 `media/image_settings.json`에 고정된다. 다른 설정으로는 재개하지 않는다. 결과 건수는 `media/download_report.json`(`stored`, `store_checks`, `store_missing`, `store_mismatch`, `store_errors`)과 `run_report.image_download`에 남는다.
 - 같은 URL은 같은 사진으로 본다. 다나와가 같은 주소의 사진을 바꾸는 경우는 아직 감지하지 않는다.
 

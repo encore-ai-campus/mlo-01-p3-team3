@@ -2,14 +2,15 @@
  "failures": {
   "files": {
    "_image_index/image_downloads.jsonl": "e2a1c30d3b56d287c3e0c1d47adb0aca022f56a90c92aadf0d4eec5faf4514c3",
-   "run0/checkpoint_events.jsonl": "f97c6b35dafaf3b5aa85834b8a3c32d8e9cc9628ea0b8f8745127080706014f3",
+   "run0/checkpoint_events.jsonl": "0546af3b92ad9fd7afb8cccf118154fc93ebeb975725c897dd55fd67838a42cc",
    "run0/checkpoint_state.json": "3c727a14b4ee95be64885bc91d9f27540c2e8521467d6322f28d379c5131dd8c",
-   "run0/media/download_report.json": "0ac07dba443e25f1310825cdc510bb3b43b0ac9bd1c4249148ec504786ccc2d9",
+   "run0/media/download_report.json": "bac739a5f5431c23294399b7d91a5bcec519d530602e4eade1c375f9becc500f",
    "run0/media/image_downloads.jsonl": "04cbdbe63d88af013de0ee9fbf1a16c1a739de4c7daf46543edec7a108b28d84",
-   "run0/media/image_resume.json": "436d43cef44491f4ccdddf82712a7bb4ad2acf566c2a6c314a77df6e773a21b7",
-   "run0/media/image_settings.json": "9abc62d383fdb5a2a69ad48f60d258a41a6adb22298228bfdbd203d5d027e333",
+   "run0/media/image_resume.json": "3e71a5f40b1f76159d0fcffc90c416635aed215899e9bb9b88140b50e652b449",
+   "run0/media/image_retry.json": "7517b1597a28f5a95f6aecdd3277cb2552d2842edc8604f065b629bb1cbe0eae",
+   "run0/media/image_settings.json": "e9061e675ec805898609ede9087ef3223acef43d4dde127ae51e1d17ab66f108",
    "run0/media/products_with_local_images.jsonl": "506d8c6d263020d79b78dfa22c957b17325e87bec550af91bebd1a4ff200820c",
-   "run0/media/verification_report.json": "909dc60569fd277af59ec92dec6846065331cab1516d5dd3934d46d019d40280",
+   "run0/media/verification_report.json": "b1eca8182d63c60e8443a6173f16baaa0cf9181d6f16386e5d914fd7f751bbcd",
    "run0/product_raw.jsonl": "705e73efb41bd1d5368dbacd026c24c2136bdff39171bdd7efeae6a61b0fd2b2",
    "run0/product_raw/danawa_11.json": "b2e9bf9272987bfc7414587306a54f78005244c17fa3a30e2a997337db0d1a18",
    "run0/product_raw/danawa_12.json": "639490ed9e153f631f57534a16373821a942ca5e1eab82fb9263739df3c59412",
@@ -20,7 +21,7 @@
    "run0/products/danawa_12.json": "eebc91ebe5fa5fb136444d859186c3511c09609a7c0cadfbddf7b1fc261d4803",
    "run0/products/danawa_13.json": "47fa4de3c5bf5bc6a118983f4f9a262bc0f821f534f375e8d4bed45a4975e212",
    "run0/products/danawa_14.json": "34914c70b4bfbe8d7b9a99a5bb82202f226b641212eebd42535598cfde5a200e",
-   "run0/run_report.json": "47a6de9da42b526914ef9746d183708fdd728e3b120b9a10a9632c5afac64fb7"
+   "run0/run_report.json": "7a61a5690d1209a535eecd168884d77feaa2dceb1164437db5296ccc8836c4c7"
   },
   "gets": null
  },
@@ -28,7 +29,7 @@
   "files": {
    "00000000-0000-0000-0000-000000000005/product_raw.jsonl": "7df10205b57765688312be8e477ec398ab32e13b6c0d76ba2c8fae8ec307cebb",
    "00000000-0000-0000-0000-000000000005/products.jsonl": "27efa3cd2b4a2463d326dec59452f884c8e2328e9a0a34b4aadb83b4c9b19e38",
-   "00000000-0000-0000-0000-000000000005/run_report.json": "55982bb863b227f4b46c5d8cd2a796322c98fb94a1141935e9e0b753f1a31e3f"
+   "00000000-0000-0000-0000-000000000005/run_report.json": "2c25b6ac865bc24c7c677635b396d8c442fc5de6d59f7e59b9509cbce4ac27c1"
   },
   "gets": null
  },
@@ -36,21 +37,22 @@
   "files": {
    "00000000-0000-0000-0000-000000000004/product_raw.jsonl": "f4c166c08216ebe4d832a3b5b09a791846d79898ba55aef3daa022b757226308",
    "00000000-0000-0000-0000-000000000004/products.jsonl": "48b6398965bc996c3352abbddb08d490792b625f26be30bfc52d984ef51c04b5",
-   "00000000-0000-0000-0000-000000000004/run_report.json": "2133640127053b5f715ef833244a0cde78c139f48b885f4860c904297486dbfa"
+   "00000000-0000-0000-0000-000000000004/run_report.json": "5afcddd7e4ffc4de65a8048f7a53aae989877047778e14e0628f4d15e829db22"
   },
   "gets": null
  },
  "resume_detail": {
   "files": {
    "_image_index/image_downloads.jsonl": "72cadd6568bc7a52f325bbcca608d9d4ee1b1e7c0b6d704eb2ae8d3c50d6c242",
-   "run0/checkpoint_events.jsonl": "07a9c159c67c8b0d78f0e13f2cad39fd6955c57817cbeda095fe41d9cdcfde38",
+   "run0/checkpoint_events.jsonl": "808a7e48375e6d5c420fdef3344c7c71bc1476b5d66d631259947f13f027e920",
    "run0/checkpoint_state.json": "ae0e5f8f3f2a9079b663b22e12ed834a088103c2bf80315d621079a70c6c2f5d",
-   "run0/media/download_report.json": "f083d6edb41edefd4515dadfd315a8dada7e484d987a7dc1619805ff2cdd43de",
+   "run0/media/download_report.json": "490270aa8ed6397cef55b6c1db940134cc56d9307410e0df77725fa7978d7cc3",
    "run0/media/image_downloads.jsonl": "b54d9abce48830310ed484b9aae821826a5df689c274af665dd59327e18263ec",
-   "run0/media/image_resume.json": "9d28f14dbfe6791aac7ab0248f9c71795e8768a8df749acaae61bfdc1fc97977",
-   "run0/media/image_settings.json": "9abc62d383fdb5a2a69ad48f60d258a41a6adb22298228bfdbd203d5d027e333",
+   "run0/media/image_resume.json": "8a546078ef7959729f37f621469911eca60924dfd5c25d5f7775676bb4fee09a",
+   "run0/media/image_retry.json": "3652d59fc271fd8de764d6b664527683d4f0f3dd0b282820985d4b3e93a27a8b",
+   "run0/media/image_settings.json": "e9061e675ec805898609ede9087ef3223acef43d4dde127ae51e1d17ab66f108",
    "run0/media/products_with_local_images.jsonl": "68cbcf43249309f993efaae88ee867169cf44db1fa2098f31cebee14de4e049d",
-   "run0/media/verification_report.json": "908a884e4b4452af63ca231561f6aeab8c52a8cc5e075363233fd250c283acff",
+   "run0/media/verification_report.json": "9b5afe39927bff8fd3df9d7cf17f1774dacc9e3f2d68f392e891eba7e29ef326",
    "run0/product_raw.jsonl": "f64fa0b83579a3471ea7230319bd2bab180959c20a0d54468e3fbcffd38171d4",
    "run0/product_raw/danawa_11.json": "b2e9bf9272987bfc7414587306a54f78005244c17fa3a30e2a997337db0d1a18",
    "run0/product_raw/danawa_12.json": "63f83cbc0378b63a3f2636fc7bdccd6c4926b704d9d9f2ed6f83f6b5c8ee5090",
@@ -61,21 +63,22 @@
    "run0/products/danawa_12.json": "d6cff1753b5a518fc9d377fd5a2a8bd38a2c36400dc5b73736132d69b72d8a1b",
    "run0/products/danawa_13.json": "c584ddb1f602357e0916b19f0384be3acfe9929ad6848eec31362192ec2dda7a",
    "run0/products/danawa_14.json": "34914c70b4bfbe8d7b9a99a5bb82202f226b641212eebd42535598cfde5a200e",
-   "run0/run_report.json": "9f8488c531a115fd256676c769c03b0f306dc65cb76b5e8631b9c622466f67cc"
+   "run0/run_report.json": "cc0780f0b44ad3919ee6c84006cf4731e84fdd027e0d2e25f3e6c88793e56b6e"
   },
   "gets": null
  },
  "resume_images": {
   "files": {
    "_image_index/image_downloads.jsonl": "5dd01268186eeded98fd686f1a37fb72f0a9aa49136607d1a6479c68163f9528",
-   "run0/checkpoint_events.jsonl": "02fe5f57d5ffd52c0f3241e4478d2a5d8f4686a52101ebb8ebdcc9289ea6b49b",
+   "run0/checkpoint_events.jsonl": "d34ed383bf40f600e370dcf33154d7da3371f91da4eccac36ed412e290b17ccf",
    "run0/checkpoint_state.json": "23a5db07e26a4430ea3e4aed499730c7e9639006e62d662f21e14858a2b7e155",
-   "run0/media/download_report.json": "175fbe85a0849bbaad2cbbe0e95d4f0e795c8af2c0ea4de0c5c8cfc958ad31e4",
+   "run0/media/download_report.json": "6ecc59423d3c9402341f2217b75c60af7b42bb9389cad8ce8eec407c608cdae8",
    "run0/media/image_downloads.jsonl": "b5d296f66298956292125d3bfe55cadc6c32d0d120d8a0ed2a7f05f763f83183",
-   "run0/media/image_resume.json": "cc6c18ce59eb763dc734f71bd5d74f0866971acaed9e5e0db0c89b4e373cc11d",
-   "run0/media/image_settings.json": "9abc62d383fdb5a2a69ad48f60d258a41a6adb22298228bfdbd203d5d027e333",
+   "run0/media/image_resume.json": "bdf520ba787b5acc90f2c92d17cbbdff58e4ad1466bc87d3cfb4b5a1df638a10",
+   "run0/media/image_retry.json": "6e71b8d9c312087d32d16b607c3bdc732357789b9ed184af51c4eb843ce77f80",
+   "run0/media/image_settings.json": "e9061e675ec805898609ede9087ef3223acef43d4dde127ae51e1d17ab66f108",
    "run0/media/products_with_local_images.jsonl": "b03f1162c8f6578926b8153bf050030e3e26a288f56ca52bed08d16e462bf46f",
-   "run0/media/verification_report.json": "908a884e4b4452af63ca231561f6aeab8c52a8cc5e075363233fd250c283acff",
+   "run0/media/verification_report.json": "9b5afe39927bff8fd3df9d7cf17f1774dacc9e3f2d68f392e891eba7e29ef326",
    "run0/product_raw.jsonl": "f64fa0b83579a3471ea7230319bd2bab180959c20a0d54468e3fbcffd38171d4",
    "run0/product_raw/danawa_11.json": "b2e9bf9272987bfc7414587306a54f78005244c17fa3a30e2a997337db0d1a18",
    "run0/product_raw/danawa_12.json": "63f83cbc0378b63a3f2636fc7bdccd6c4926b704d9d9f2ed6f83f6b5c8ee5090",
@@ -86,21 +89,22 @@
    "run0/products/danawa_12.json": "d6cff1753b5a518fc9d377fd5a2a8bd38a2c36400dc5b73736132d69b72d8a1b",
    "run0/products/danawa_13.json": "c584ddb1f602357e0916b19f0384be3acfe9929ad6848eec31362192ec2dda7a",
    "run0/products/danawa_14.json": "34914c70b4bfbe8d7b9a99a5bb82202f226b641212eebd42535598cfde5a200e",
-   "run0/run_report.json": "23ecededbe36ccbb697395e082cec19299bd976a0a421c5624750825e8d11021"
+   "run0/run_report.json": "117fc8d43eed466b1049e021e9116b662ea2a479a55997298c0fc60364fd73f5"
   },
   "gets": null
  },
  "resume_listing": {
   "files": {
    "_image_index/image_downloads.jsonl": "28a0fc421c5472e8461367b3571900e3fc9db65f396f96f095fe9b832fef1307",
-   "run0/checkpoint_events.jsonl": "75a89cac90ae7376f0fe82d0d970ef708bf8d9da5e5e48981930597f14717b15",
+   "run0/checkpoint_events.jsonl": "b285cd28179a92b1fb2cf2f43b9cd8eaa9f67df0d489dfecb2112072ff0589eb",
    "run0/checkpoint_state.json": "6a938e467a040aeef31867f70d7bbd270c72d8c229eeab1cde3a604db6374b58",
-   "run0/media/download_report.json": "f7ad4d5054b0314bd732fb551ce6286369e0337c305356bbf2d6f7f86b236f00",
+   "run0/media/download_report.json": "e68cbe051353b6a914dc6abb2c7c56abd4442ed01d6421c5826fb48f715b6754",
    "run0/media/image_downloads.jsonl": "4c333867dd6cf61f793c136923d548d2339e965d839d897003ae78f02113f854",
-   "run0/media/image_resume.json": "986dd1a22377117ae773a484216a1c1f20297edb2c2888b6138cfdde28d86fac",
-   "run0/media/image_settings.json": "9abc62d383fdb5a2a69ad48f60d258a41a6adb22298228bfdbd203d5d027e333",
+   "run0/media/image_resume.json": "4e5e7678064cef1b11e1ace5b63a7b6a9234e5275de2cae8a3b964620be1a240",
+   "run0/media/image_retry.json": "9e4b074828fa0c3f6142c3432b782307a2fe82089dd510e3b331ef69dfa2bd34",
+   "run0/media/image_settings.json": "e9061e675ec805898609ede9087ef3223acef43d4dde127ae51e1d17ab66f108",
    "run0/media/products_with_local_images.jsonl": "44b8c53a68f7252efe2714a8a0b3573169ddd0ea2668b995c243e25023b4b005",
-   "run0/media/verification_report.json": "908a884e4b4452af63ca231561f6aeab8c52a8cc5e075363233fd250c283acff",
+   "run0/media/verification_report.json": "9b5afe39927bff8fd3df9d7cf17f1774dacc9e3f2d68f392e891eba7e29ef326",
    "run0/product_raw.jsonl": "f64fa0b83579a3471ea7230319bd2bab180959c20a0d54468e3fbcffd38171d4",
    "run0/product_raw/danawa_11.json": "b2e9bf9272987bfc7414587306a54f78005244c17fa3a30e2a997337db0d1a18",
    "run0/product_raw/danawa_12.json": "63f83cbc0378b63a3f2636fc7bdccd6c4926b704d9d9f2ed6f83f6b5c8ee5090",
@@ -111,21 +115,22 @@
    "run0/products/danawa_12.json": "d6cff1753b5a518fc9d377fd5a2a8bd38a2c36400dc5b73736132d69b72d8a1b",
    "run0/products/danawa_13.json": "c584ddb1f602357e0916b19f0384be3acfe9929ad6848eec31362192ec2dda7a",
    "run0/products/danawa_14.json": "34914c70b4bfbe8d7b9a99a5bb82202f226b641212eebd42535598cfde5a200e",
-   "run0/run_report.json": "d34381fd1322a6b6d923aff3c8a6658e98b2b323bbb2598210fd44508e7ccc8e"
+   "run0/run_report.json": "348c571dabac30809e581f71ec260d8649114dc8686ab37c330f08b59c920ec0"
   },
   "gets": null
  },
  "reuse": {
   "files": {
    "_image_index/image_downloads.jsonl": "c03e175b5fbee02947dec67aeb4b85987cf81cffa45aaf6395f390ceb3f6b1f7",
-   "run0/checkpoint_events.jsonl": "32737287ebf6f113b42e727c07f0528d10731c619ad0abbaf92b8d1b575cf27e",
+   "run0/checkpoint_events.jsonl": "b1a6f3b6be161d9d4d6c7bc0b5675cd04db8764e6f6e42419b71aa9dc6fd59f7",
    "run0/checkpoint_state.json": "4cf21cce480e5185d95283c5e12889f1b9b647f89447d25847a572805a7291d7",
-   "run0/media/download_report.json": "6a4a1731d32981f74eadbff90d8b6de116f8fd398ea2d65aa929872855a46104",
+   "run0/media/download_report.json": "01358ebb968de39aba63240ef350a09392b895ce0f2b7cba4aaf0ecac173835e",
    "run0/media/image_downloads.jsonl": "bf2135545da23d142a9b7b1c98af239de5061328e925f5c168a153e0d36f45cb",
-   "run0/media/image_resume.json": "2039ab26a18962bb5726e34948845d6959072ff40c08a3bde49e54462045bd4b",
-   "run0/media/image_settings.json": "9abc62d383fdb5a2a69ad48f60d258a41a6adb22298228bfdbd203d5d027e333",
+   "run0/media/image_resume.json": "7104da285557093abb2db9996d6de6c4e88b3bd3a9d97c847274b45712fa13d3",
+   "run0/media/image_retry.json": "0a73403398dcd92ad4596b54bf63fdd36231883c0f297540333a604298a4dac1",
+   "run0/media/image_settings.json": "e9061e675ec805898609ede9087ef3223acef43d4dde127ae51e1d17ab66f108",
    "run0/media/products_with_local_images.jsonl": "21a86ffa2da11b68ad9bb79e1e97bfdfe85f4a8709b71a0cfbe5fc9bc3fcca33",
-   "run0/media/verification_report.json": "908a884e4b4452af63ca231561f6aeab8c52a8cc5e075363233fd250c283acff",
+   "run0/media/verification_report.json": "9b5afe39927bff8fd3df9d7cf17f1774dacc9e3f2d68f392e891eba7e29ef326",
    "run0/product_raw.jsonl": "f64fa0b83579a3471ea7230319bd2bab180959c20a0d54468e3fbcffd38171d4",
    "run0/product_raw/danawa_11.json": "b2e9bf9272987bfc7414587306a54f78005244c17fa3a30e2a997337db0d1a18",
    "run0/product_raw/danawa_12.json": "63f83cbc0378b63a3f2636fc7bdccd6c4926b704d9d9f2ed6f83f6b5c8ee5090",
@@ -136,16 +141,17 @@
    "run0/products/danawa_12.json": "d6cff1753b5a518fc9d377fd5a2a8bd38a2c36400dc5b73736132d69b72d8a1b",
    "run0/products/danawa_13.json": "c584ddb1f602357e0916b19f0384be3acfe9929ad6848eec31362192ec2dda7a",
    "run0/products/danawa_14.json": "34914c70b4bfbe8d7b9a99a5bb82202f226b641212eebd42535598cfde5a200e",
-   "run0/run_report.json": "4615aa1a01e89126c3f1bfbf2a82cce27014ce4051a903af9c55bc2373026191",
-   "run1/checkpoint_events.jsonl": "903df6427de540c849fedccda328ead24b9d8c73c65c698b0169333a23d45322",
+   "run0/run_report.json": "b3abf6a9104503204cfb00db5c26c0b67f9700e64430510981b85f7e35b3b773",
+   "run1/checkpoint_events.jsonl": "9195d5d7832770b2c4f0cd139e8518a5dac85fa6a445dde4b52da090a2384d53",
    "run1/checkpoint_state.json": "a0527d147ff4d21eb9ba65bbc149499f74cabba7f7d54a5e195dbc90ba01129c",
    "run1/detail_reuse.json": "aa586ac086e11268020b87d66432288f24d634d9928607f670ff625a3bbf5a61",
-   "run1/media/download_report.json": "116f18237936d44352ffb48fa7da7ec44a2fc520aebcc343f96a2e39a6dbeb11",
+   "run1/media/download_report.json": "0cfe5ce20ba5307d26dd4ece1d5dac691ad19fa1c76da38216982906171d67f9",
    "run1/media/image_downloads.jsonl": "d13254f5a13ae16792a9e7c1f1cf348995b6779f7b0ac535f7938e95c1dec586",
-   "run1/media/image_resume.json": "5bb0f5273a01be4adb4f9324c27abfa1e053457b11a41ec9ee29b9508b85e4de",
-   "run1/media/image_settings.json": "a2b3589875536fe0eb0aa4bbd53f3e9e7df41b7b5a70a3741f66a7dd6d383919",
+   "run1/media/image_resume.json": "3b29caf03e44363f199fb8d135c4496060ad2404919ef7f8af8c701e8f8e0120",
+   "run1/media/image_retry.json": "1254ca19c9360d5942876bb57f58748b9f33be8be9e23fa744d89b1d9dc0ac68",
+   "run1/media/image_settings.json": "73b342b8a6405d8b76a6cdc5e5ee62deb6cd1ee04f8320d7c5a0e27d5e1c7eaf",
    "run1/media/products_with_local_images.jsonl": "5c68ad7aa6e895d999eef8cde25ef7ea295d7c2a33e6666e7d8cada7a8c694a4",
-   "run1/media/verification_report.json": "a02cfe05b70c0899c2237d5e7182e14bbd845ae49ba83c7fccf1f10ff8b75cdd",
+   "run1/media/verification_report.json": "6a41b2be46e60ce57d71f6d7d58b9bf8cef73df86508de827060d9ae5c1b92f0",
    "run1/product_raw.jsonl": "917fe0f962f208cee1e2d4e4ee076c916af715715c47060905b64646b27a7278",
    "run1/product_raw/danawa_11.json": "ef1b40df00803bf3abe73eee9a5b04d30d2b0d743901179937874741d28c0b68",
    "run1/product_raw/danawa_12.json": "277ab7b3035ef6a835dcb2636e756135bf4224acffc8f644242b2887940f4b3f",
@@ -158,7 +164,7 @@
    "run1/products/danawa_13.json": "9ee96645da99b9fd1796a56528d61efc51075d2e2f2616d90838f50c4486f307",
    "run1/products/danawa_14.json": "557269a3cbb4f369b2e64c2d92b390bfe37dc747005ce594e3a3a0c99eb03803",
    "run1/products/danawa_15.json": "b404c95f80849bf7fb76dd3babcb2061050ac1bdd175155b40048033a58ff0d0",
-   "run1/run_report.json": "13da25bbb2b63968176e3adb660e153ded98de3b478acb2190b962d2e1f18cb7"
+   "run1/run_report.json": "c4ecb4946ca82eab7e0c9ef8e92c5427559f70919774567bc8983f4037706292"
   },
   "gets": [
    "https://prod.danawa.com/info/?pcode=12",

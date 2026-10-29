@@ -72,7 +72,9 @@ class GalleryAssetsTests(unittest.TestCase):
             path = Path(root) / 'products.jsonl'
             path.write_text(json.dumps({'source': 'danawa', 'product_id': '1', 'listing_image_url': 'https://img.example/thumb.png'}))
             report = localize_images(path, Path(root) / 'media', FakeFetcher({}))
-            self.assertEqual((report['requests'], report['result']), (0, 'partial'))
+            # No gallery: nothing is downloaded, and the quality gate (not the image step) judges how many.
+            self.assertEqual((report['requests'], report['result'], report['products_without_gallery']),
+                             (0, 'completed', 1))
 
     def test_identity_mismatch_is_rejected(self):
         with self.assertRaises(ValueError):

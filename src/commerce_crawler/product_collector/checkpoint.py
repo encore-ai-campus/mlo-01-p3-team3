@@ -318,7 +318,8 @@ class CollectionCheckpoint:
 
 
 @contextmanager
-def open_collection(output, adapter, config, resume_from=None, new_run=False, progress=None, repair_files=False):
+def open_collection(output, adapter, config, resume_from=None, new_run=False, progress=None, repair_files=False,
+                    image_policy_version=None):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     with writer_lock(output / '.collection.lock'):
@@ -337,6 +338,14 @@ def open_collection(output, adapter, config, resume_from=None, new_run=False, pr
                 raise ValueError(f'재개할 체크포인트가 정리되었습니다: {directory}')
             if resuming and images_pruned(directory / 'media'):
                 raise ValueError(f'사진 파일을 정리한(prune) 실행은 재개하지 않습니다: {directory}')
+            images = directory / 'media' / 'image_settings.json'
+            if resuming and image_policy_version is not None and images.is_file():
+                fixed = json.loads(images.read_text(encoding='utf-8')).get('retry_policy_version')
+                if fixed != image_policy_version:
+                    # Older retry rules cannot be resumed by this code: give the run up and start anew.
+                    raise ValueError(f'이미지 재시도 규칙 버전 {fixed}로 시작한 실행은 이 버전({image_policy_version})으로 '
+                                     f'재개하지 않습니다. python -m product_collector.abandon --output <출력 경로> '
+                                     f'--run "{directory}" 로 포기한 뒤 --new-run으로 새 실행을 시작해주세요.')
             saved = directory / 'checkpoint_state.json'
             # Read before the checkpoint opens: opening may rewrite the state (file repair) and drop the mark.
             if resuming and saved.is_file() and json.loads(saved.read_text(encoding='utf-8')).get('status') == ABANDONED:

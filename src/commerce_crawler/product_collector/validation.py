@@ -17,13 +17,17 @@ IMAGE_META = ("sha256", "bytes", "width", "height", "format", "extension")
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 
+class UnsupportedImageFormat(ValueError):
+    """An image, but not one of EXTENSIONS: the same URL answers the same next time."""
+
+
 def verified_image(data: bytes) -> dict:
     with Image.open(io.BytesIO(data)) as image:
         width, height = image.size
         format_name = image.format
         image.verify()
     if format_name not in EXTENSIONS:
-        raise ValueError(f"unsupported downloaded image format: {format_name}")
+        raise UnsupportedImageFormat(f"unsupported downloaded image format: {format_name}")
     return {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data), "width": width,
             "height": height, "format": format_name, "extension": EXTENSIONS[format_name]}
 
@@ -52,7 +56,8 @@ def image_errors(product: dict, root: Path | None = None) -> list[dict]:
     errors, seen = [], set()
     # Read existing snapshots too; new output has only images[].
     images = product.get("images") or product.get("local_images") or []
-    if not images:
+    if not images and product.get("image_download_status") != "gallery_missing":
+        # A manifest row says when the product had no gallery; the quality gate judges how many.
         errors.append({"reason": "gallery_missing"})
     for image in images:
         url = image.get("url")
@@ -66,6 +71,11 @@ def image_errors(product: dict, root: Path | None = None) -> list[dict]:
             if (stored_metadata(image) is None or image.get("local_path") or image.get("category_paths")
                     or image.get("filename")):
                 errors.append({"reason": "stored_image_invalid", "url": url})
+            continue
+        if image.get("status") == "failed":
+            # A download that failed is a manifest entry without a file; the image step judges how many.
+            if image.get("local_path") or image.get("category_paths") or image.get("filename") or not image.get("error"):
+                errors.append({"reason": "failed_image_invalid", "url": url})
             continue
         if root is not None:
             local = image.get("local_path")
@@ -98,7 +108,7 @@ def verify_assets(products_path: Path, media: Path) -> dict:
     After prune removed the bytes of a loaded run the files are gone on purpose: the manifest and
     product links are still checked, the files are not."""
     pruned = images_pruned(media)
-    errors, products, links = [], 0, 0
+    errors, products, links, galleries_missing, failed = [], 0, 0, 0, 0
     with Path(products_path).open(encoding="utf-8-sig") as stream:
         for line in stream:
             if not line.strip():
@@ -106,8 +116,11 @@ def verify_assets(products_path: Path, media: Path) -> dict:
             row = json.loads(line)
             products += 1
             links += len(row.get("images") or row.get("local_images") or [])
+            galleries_missing += row.get("image_download_status") == "gallery_missing"
+            failed += sum(image.get("status") == "failed" for image in row.get("images") or [])
             errors.extend(image_errors(row, None if pruned else media))
     report = {"checked_at": utc_now(), "products": products, "image_links": links,
+              "products_without_gallery": galleries_missing, "failed_images": failed,
               "errors": errors, "result": "completed" if products and not errors else "partial"}
     if pruned:
         report["images_pruned"] = True

@@ -96,7 +96,8 @@ class MediaTests(unittest.TestCase):
             output = Path(root) / 'media'
             report = localize_images(path, output, FakeFetcher({a: b'<html>not an image</html>', b: png()}))
             self.assertEqual((report['failed'], report['downloaded']), (1, 1))
-            self.assertEqual(report['result'], 'partial')
+            # Not an image is the site's answer: left out of the failure rate, the step completes.
+            self.assertEqual((report['result'], report['failures']['by_kind']['external']), ('completed', 1))
             self.assertEqual(len(list(output.glob('images/*'))), 1)
 
     def test_request_limit_preserves_pending_links(self):

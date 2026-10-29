@@ -167,7 +167,7 @@ def main():
         verification = verify_assets(output / "media" / "products_with_local_images.jsonl", output / "media")
         progress({"output": str(output.resolve()), "details": details["result"], "images": images["result"],
                   "verification": verification})
-        return 0 if verification["result"] == "completed" and details["result"] == "completed" else 2
+        return 0 if all(step["result"] == "completed" for step in (verification, details, images)) else 2
     finally:
         lock.unlink()
 
