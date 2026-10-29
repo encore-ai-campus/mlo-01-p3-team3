@@ -18,6 +18,6 @@ class DependencyTests(unittest.TestCase):
              patch('sys.stderr') as stderr:
             with self.assertRaises(SystemExit) as error:
                 main()
-            self.assertEqual(error.exception.code, 2)
+            self.assertEqual(error.exception.code, 3)  # not started: never partial's 2
             opening.assert_not_called()
             self.assertIn('PIL', ''.join(call.args[0] for call in stderr.write.call_args_list))

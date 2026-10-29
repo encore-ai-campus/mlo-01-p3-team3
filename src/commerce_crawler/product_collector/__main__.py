@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 import threading
 from pathlib import Path
 from dataclasses import replace, asdict
@@ -17,6 +18,68 @@ from .pagination import PaginationTemplates
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PRINT_LOCK = threading.Lock()
+
+# Exit codes the server launcher reads (crawler-optimization/operations.md).
+EXIT_COMPLETED = 0
+EXIT_FAILED = 1          # an exception during the run; checkpoint_state is "failed"
+EXIT_PARTIAL = 2         # partial or quality_failed; run_report.result tells which
+EXIT_NOT_STARTED = 3     # command line, settings or resume refused before collecting; no run state changed
+EXIT_INTERRUPTED = 130   # Ctrl+C; checkpoint_state is "interrupted"
+# --check-pagination
+CHECK_OK, CHECK_BLOCKED, CHECK_REQUEST_FAILED, CHECK_PARSE_FAILED = 0, 4, 5, 6
+
+
+class Parser(argparse.ArgumentParser):
+    """Usage and settings errors exit with EXIT_NOT_STARTED, never with partial's 2."""
+
+    def error(self, message):
+        finish_line(result="not_started", exit_code=EXIT_NOT_STARTED, error=message)
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_NOT_STARTED, f"{self.prog}: error: {message}\n")
+
+
+def finish_line(**values):
+    """The last stdout line of every outcome, for the launcher (no secrets, no headers)."""
+    with PRINT_LOCK:
+        print(json.dumps(values, ensure_ascii=False), flush=True)
+
+
+def check_pagination(path: Path, timeout: float) -> int:
+    """One listing POST of the template's first category: does the captured Next-Action still work?
+
+    No run directory is made and nothing is saved."""
+    import requests
+    from .core import Category
+    from .pagination import ListingResponseError
+    try:
+        templates = PaginationTemplates.load(path)
+        category_id = next(iter(templates.categories))
+        client = RequestClient(1, 0.0, timeout)
+    except (OSError, ValueError, StopIteration) as exc:
+        finish_line(check="pagination", status="not_started", error=f"{type(exc).__name__}: {exc}")
+        return EXIT_NOT_STARTED
+    status_code = None
+    try:
+        rows, diagnostics = DanawaAdapter(templates).fetch_listing_page(client, Category(category_id, limit=None), 1)
+        count = diagnostics.get("response_product_count", len(rows))
+        status, code, error = ("ok", CHECK_OK, None) if rows else ("parse_failed", CHECK_PARSE_FAILED, "no products")
+    except requests.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else None
+        count = 0
+        status, code = (("blocked", CHECK_BLOCKED) if status_code in {403, 429}
+                        else ("request_failed", CHECK_REQUEST_FAILED))
+        error = f"{type(exc).__name__}: {exc}"
+    except requests.RequestException as exc:
+        count, status, code, error = 0, "request_failed", CHECK_REQUEST_FAILED, f"{type(exc).__name__}: {exc}"
+    except (ListingResponseError, ValueError) as exc:
+        count, status, code, error = 0, "parse_failed", CHECK_PARSE_FAILED, f"{type(exc).__name__}: {exc}"
+    finally:
+        client.close()
+    if status_code is None and client.attempts:
+        status_code = client.attempts[0].get("status_code")
+    finish_line(check="pagination", status=status, category_id=category_id, http_status=status_code,
+                products=count, error=error)
+    return code
 
 
 def show_progress(event):
@@ -114,7 +177,7 @@ class ImageResources:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="다나와 카테고리·페이지 수집과 상품 갤러리 보강")
+    parser = Parser(description="다나와 카테고리·페이지 수집과 상품 갤러리 보강")
     parser.add_argument("--categories", type=Path, default=PROJECT_ROOT / "config/danawa_categories_71.json")
     parser.add_argument("--output", type=Path, default=PROJECT_ROOT / "data/danawa")
     parser.add_argument("--total-limit", type=parse_limit, default=None, help="전체 상품 상한. 기본값과 0은 무제한")
@@ -146,7 +209,12 @@ def main() -> int:
                         help="changed에서 무변경이어도 다시 요청할 표본 수(구조 변경 감지용). 0은 표본 없음")
     parser.add_argument("--quality-gate", choices=quality.MODES, default="warn",
                         help="종료 품질 관문. warn은 기록만, enforce는 상한 초과 시 quality_failed")
+    parser.add_argument("--check-pagination", action="store_true",
+                        help="--pagination-template의 첫 카테고리 1페이지 POST 1회로 템플릿이 유효한지만 확인. "
+                             "종료 코드 0 정상, 4 차단(403/429), 5 통신 실패, 6 응답 해석 실패, 3 템플릿 없음·형식 오류")
     args = parser.parse_args()
+    if args.check_pagination:
+        return check_pagination(args.pagination_template, args.timeout)
     if args.export_from:
         print(json.dumps({"export": str(export_checkpoint(args.export_from)), "requests": 0}, ensure_ascii=False))
         return 0
@@ -209,9 +277,11 @@ def main() -> int:
         # Fixed for the run: a resume with another mode or sample is a different job. Absent in "all" for older runs.
         config["detail_refresh"] = {"mode": "changed", "sample": args.refresh_sample,
                                     "fingerprint_version": FINGERPRINT_VERSION}
+    opened = False
     try:
         with open_collection(args.output, adapter, config, args.resume_from, args.new_run,
                              progress=show_progress, repair_files=args.repair_files) as checkpoint:
+            opened = True
             destination = checkpoint.directory
             previous = checkpoint.current_report()
             adapter.restore_pagination(previous)
@@ -273,6 +343,9 @@ def main() -> int:
                     report["image_download"] = {"result": media_report["result"], "verification": verified["result"],
                                                 **{k: media_report[k] for k in ("downloaded", "stored", "failed", "gave_up",
                                                                                 "store_checks", "store_errors")}}
+                    if media_report.get("stop_reason"):
+                        # A 403/429 from the image host, so one report tells the launcher about any block.
+                        report["image_download"]["stop_reason"] = media_report["stop_reason"]
                     if media_report["result"] != "completed" or verified["result"] != "completed":
                         report["result"] = "partial"
                 # The per-product values collect kept; the records themselves stay in the journal.
@@ -286,21 +359,33 @@ def main() -> int:
                 images.close()  # the image thread stops before the run's lock is released
                 checkpoint.interrupt(client.attempts)
                 print(f"[중단·저장 완료] {destination.resolve()}", flush=True)
-                return 130
+                finish_line(output=str(destination.resolve()), job_id=checkpoint.job_id, result="interrupted",
+                            exit_code=EXIT_INTERRUPTED)
+                return EXIT_INTERRUPTED
             except Exception as exc:
                 try:
                     images.close()
                 finally:
                     checkpoint.interrupt(client.attempts, 'failed', str(exc))
+                    finish_line(output=str(destination.resolve()), job_id=checkpoint.job_id, result="failed",
+                                exit_code=EXIT_FAILED, error=f"{type(exc).__name__}: {exc}")
                 raise
             finally:
                 images.close()
+    except (ValueError, OSError) as exc:
+        if opened:
+            raise
+        # Busy run, changed settings, a run that is gone or abandoned: nothing was collected or saved.
+        finish_line(output=str(Path(args.output).resolve()), result="not_started", exit_code=EXIT_NOT_STARTED,
+                    error=f"{type(exc).__name__}: {exc}")
+        return EXIT_NOT_STARTED
     finally:
         client.close()
     show_quality(report)
-    print(json.dumps({"output": str(destination.resolve()), "products": len(raw),
-                      "requests": report["request_count"], "result": report["result"]}, ensure_ascii=False))
-    return 0 if report["result"] == "completed" else 2
+    code = EXIT_COMPLETED if report["result"] == "completed" else EXIT_PARTIAL
+    finish_line(output=str(destination.resolve()), products=len(raw), requests=report["request_count"],
+                result=report["result"], job_id=report.get("job_id"), exit_code=code)
+    return code
 
 
 if __name__ == "__main__":

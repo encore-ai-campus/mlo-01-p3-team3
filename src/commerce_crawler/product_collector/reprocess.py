@@ -13,7 +13,7 @@ import weakref
 from pathlib import Path
 from uuid import uuid4
 
-from .core import FieldCoverage, payload_hash, raw_projection, run_result, utc_now
+from .core import FieldCoverage, categories_incomplete, payload_hash, raw_projection, run_result, utc_now
 from .danawa import DanawaAdapter
 from . import quality
 from .storage import load_detail_html, save_detail_html
@@ -168,7 +168,7 @@ def reprocess_run(directory: Path, output_root: Path | None = None,
         staging.cleanup()
         raise
     report.update(finished_at=utc_now(), product_count=len(raw_rows), field_coverage=coverage.result(),
-                  result=run_result(report, raw_rows, any(c["status"] == "not_requested" for c in report["categories"]),
+                  result=run_result(report, raw_rows, categories_incomplete(report["categories"], stop_reasons=()),
                                     include_reused=True))
     # Quality is judged again on the new extraction; the original run's verdict is not carried over.
     quality.apply(report, quality_rows, quality_mode)

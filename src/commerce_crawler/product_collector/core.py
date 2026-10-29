@@ -196,6 +196,16 @@ def run_result(report: dict, raw: list[dict], categories_incomplete: bool, inclu
                          or not report["detail_failures"]["passed"]) else "completed"
 
 
+LISTING_FAILED = {"request_failed", "parse_failed", "no_products"}
+
+
+def categories_incomplete(categories: list[dict], stop_reasons=("request_limit",)) -> bool:
+    """A category not listed to its end. A failed listing still left after a resume counts too:
+    the resume moved its error to previous_errors, so errors alone would call the run completed."""
+    return any(c["status"] == "not_requested" or c["status"] in LISTING_FAILED or c.get("reason") in stop_reasons
+               for c in categories)
+
+
 def limit_reached(current: int, maximum: int | None) -> bool:
     return maximum is not None and current >= maximum
 
@@ -399,7 +409,11 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
     states = []
     for index, category in enumerate(categories):
         outcome = report["categories"][index]
-        if outcome.get("reason") in {"empty_page", "repeated_products", "max_pages", "category_limit", "total_limit"}:
+        if outcome.get("status") == "no_products":
+            # An empty page in an unrecognised format is a failed page, not the end of the listing:
+            # request it again instead of keeping the category as done.
+            outcome["pages"] = [p for p in outcome["pages"] if p["status"] != "empty"]
+        elif outcome.get("reason") in {"empty_page", "repeated_products", "max_pages", "category_limit", "total_limit"}:
             continue
         outcome["pages"] = [p for p in outcome["pages"] if p["status"] in {"ok", "empty"}]
         outcome.pop("reason", None)
@@ -612,8 +626,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
         report["detail_reuse"] = detail_reuse.summary(raw_rows)
     report.update(finished_at=utc_now(), product_count=len(keys), request_count=len(previous_requests) + len(client.attempts),
                   requests=previous_requests + list(client.attempts), field_coverage=coverage.result(),
-                  result=run_result(report, raw_rows, any(c["status"] == "not_requested" or c.get("reason") == "request_limit"
-                                                          for c in report["categories"])))
+                  result=run_result(report, raw_rows, categories_incomplete(report["categories"])))
     persist()
     return raw, normalized, report
 

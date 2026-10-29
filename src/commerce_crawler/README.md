@@ -126,7 +126,7 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 
 ### 상세 HTML 보관 정책
 
-`details/`가 있는 수집 실행 디렉터리는 **완료·적재 확인된 최근 2회 수집분**까지 보관한다. 수집기 자체는 지우지 않으며, 정리는 `product_collector.prune`이 맡는다. 운영에서는 NiFi VM이 수집기를 실행하므로 NiFi VM의 실행 루트가 대상이고, 주간 작업이 적재 확인 뒤 `--apply`로 실행한다.
+`details/`가 있는 수집 실행 디렉터리는 **완료·적재 확인된 최근 2회 수집분**까지 보관한다. 수집기 자체는 지우지 않으며, 정리는 `product_collector.prune`이 맡는다. 운영 자동 실행(NiFi가 서버 실행기를 깨우고 실행기가 수집·인계·정리를 판단)은 **예정**이며, 설계는 상위 저장소 `crawler-optimization/operations.md`에 있다. 지금은 사람이 적재 확인 뒤 `--apply`로 실행한다.
 
 ```bash
 python -m product_collector.prune --output <수집기 --output 경로>            # 삭제 대상만 출력
@@ -136,9 +136,19 @@ python -m product_collector.prune --output <수집기 --output 경로> --apply  
 삭제 대상은 다음 조건을 모두 만족하는 실행 중 최근 2회(`--keep`)를 제외한 것이다. 하나라도 빠지면 지우지 않고 보고서의 `kept`에 사유를 남긴다.
 
 - `run_config.json`과 `checkpoint_state.json`이 있고 상태가 `completed`
-- 적재기가 Mongo·Garage 저장을 확인한 뒤 실행 디렉터리에 남긴 `pipeline_loaded.json`의 `job_id`가 `run_config.json`·`checkpoint_state.json`의 `job_id`와 같음(비어 있으면 미확인). 적재기가 이 파일을 쓰기 전까지는 아무것도 지우지 않는다
+- 적재기가 운영 원본 DB 적재 성공 뒤 실행 디렉터리에 남긴 `pipeline_loaded.json`이 확인됨: `schema_version` 1, 정해진 필드(`job_id`, `snapshot_id`, `ingestion_run_id`, `target`, `loaded_at`, `result`, `products`, `raw_confirmed`, `failed`, `image_relations_unavailable`, `gallery_missing`)가 모두 있고, `job_id`가 `run_config.json`·`checkpoint_state.json`과 같고, `target`이 `production`, `failed`가 0, `raw_confirmed`가 `products`와 같음. 하나라도 아니면 `not_loaded`로 남긴다. 적재기가 이 파일을 쓰기 전까지는 아무것도 지우지 않는다
 - `active_run.json`이 가리키는 진행 중 실행이 아니고, 다른 실행 루트에서 `--resume-from`으로 재개 중이어서 실행의 `writer.lock`이 잡혀 있지도 않음(`in_use`)
 - 남는 실행(내보낸 스냅샷·재추출 결과)의 `run_report.detail_evidence_dirs`가 가리키지 않음. 같은 실행 루트 안의 참조만 확인한다
+
+재개하지 않을 실행은 포기로 표시할 수 있다. 상태가 `abandoned`가 되고 활성 실행에서 빠지므로 다음 수집은 새 실행으로 시작한다. 완료된 실행이나 수집 중인 실행은 거부하고, 포기한 실행은 `--resume-from`으로도 재개하지 않는다.
+
+```bash
+python -m product_collector.abandon --output <수집기 --output 경로> [--run <실행 폴더>] [--reason "템플릿 본문 변경"]
+```
+
+`--prune-abandoned`를 주면 `abandoned`·`partial` 실행 중 가장 최근 완료·적재 실행보다 먼저 갱신된 것도 지운다(활성·잠금·참조 확인은 같다). 기본은 끔이다. 적재 인계 계약(`pipeline_loaded.json`)이 정해지기 전까지 옵션 없이 돌리면 지금처럼 완료·적재 실행만 대상이다.
+
+남기는 최근 적재 실행도 사진 바이트는 지운다. 적재 때 사진이 Object Storage에 올라가 있기 때문이다. 지우는 것은 `media/images/`와 `media/categories/`(같은 바이트의 하드링크)뿐이고, 체크포인트·jsonl·상품별 파일·`details/`·`media/`의 manifest·보고서·이력은 남긴다. 지우기 전에 `media/images_pruned.json`(지운 시각, 폴더, 파일 수, 바이트)을 남기므로 중간에 멈춘 삭제는 다음 `--apply`가 마저 지운다. 이 표시가 있으면 `verify_assets`는 manifest와 상품 연결만 검사하고 파일은 검사하지 않으며(`images_pruned: true`), 그 실행은 `--resume-from`으로 재개하거나 이미지 단계를 다시 돌릴 수 없다(종료 코드 3). 잠금·활성 실행·참조 조건은 실행 삭제와 같고, 보고서의 `images_pruned`(실행, 폴더, 파일 수, 바이트)·`images_prunable`(미리보기)·`images_kept`(사유)에 남는다. 공용 이력(`_image_index`)은 로컬 경로를 갖지 않으므로 다음 실행은 저장소 확인 또는 재다운로드로 처리한다.
 
 수집 중에는 수집기와 같은 `.collection.lock`을 잡지 못해 거부된다. 삭제는 `.deleting-<이름>`으로 이름을 바꾼 뒤 지우고, 중간에 멈춘 삭제는 다음 `--apply`에서 마저 지운다. 정렬 기준은 `checkpoint_state.json`의 `updated_at`(완료 시각)이다. 삭제한 수집분은 재수집 없이 재추출할 수 없다.
 
@@ -146,7 +156,7 @@ python -m product_collector.prune --output <수집기 --output 경로> --apply  
 
 ## 실행 결과와 품질 관문
 
-실행 결과(`run_report.result`)는 하나의 값이다. `checkpoint_state.json`의 상태, 종료 코드(completed만 0), prune이 모두 이 값을 본다. 적재 대상은 `completed`뿐이다.
+실행 결과(`run_report.result`)는 하나의 값이다. `checkpoint_state.json`의 상태, 종료 코드(completed만 0, 아래 표), prune이 모두 이 값을 본다. 적재 대상은 `completed`뿐이다.
 
 | 값 | 뜻 |
 |---|---|
@@ -220,7 +230,25 @@ python run_collector.py --export-from "data/danawa/<job_id>"
 
 재개 준비는 이력 복원 비율·경과 시간을 출력하고 저장 완료한 상품 파일의 전체 재검사를 생략한다. 외부 삭제·손상이 의심되면 `--repair-files`로 전체 검사한다. `checkpoint_state.json`의 running만으로 프로세스 생존을 판단하지 않는다. [저장·잠금·복구 상세](docs/checkpoint.md)
 
-정상 완료는 종료 코드 0, 부분 결과·입력 오류는 2다. 수집 중 Ctrl+C를 처리한 종료는 130이며 준비 중 중단·예상하지 못한 오류는 별도 예외로 끝날 수 있다. completed는 모든 필드 확보나 추천 승인을 뜻하지 않는다.
+종료 코드는 서버 실행기가 다음 동작을 정하는 계약이다.
+
+| 코드 | 뜻 | 상태 |
+|---|---|---|
+| 0 | completed | `checkpoint_state.json` completed |
+| 1 | 수집 중 예외 | failed. 보고서 `result`가 있으면 `failed`로 바뀐다 |
+| 2 | partial 또는 quality_failed(`run_report.result`로 구분) | 같은 값 |
+| 3 | 시작 전 실패: 명령행·설정 오류, 재개 설정 불일치, 다른 프로세스가 수집 중, 포기한 실행 재개 | 실행 상태를 바꾸지 않음 |
+| 130 | Ctrl+C 중단 | interrupted. 보고서 `result`가 있으면 `interrupted`로 바뀐다 |
+
+어느 경우든 마지막 표준 출력 줄은 JSON(`result`, `exit_code`, 있으면 `output`·`job_id`·`error`)이다. 준비 중 Ctrl+C·강제 종료처럼 이 줄이 없으면 실행기는 `checkpoint_state.json`의 상태가 running으로 남은 것으로 판단한다. 사진 단계가 403/429로 멈추면 `run_report.image_download.stop_reason`에 `http_403`·`http_429`가 남는다. 이전 시도의 목록 실패(요청 실패·해석 실패·형식 불일치 빈 응답)가 재개 뒤에도 남은 카테고리는 partial이다. 형식 불일치 빈 응답 카테고리는 재개할 때 그 페이지를 다시 요청한다. completed는 모든 필드 확보나 추천 승인을 뜻하지 않는다.
+
+목록 템플릿(Next-Action)이 아직 동작하는지 요청 1회로 확인할 수 있다. 실행 폴더를 만들지 않는다.
+
+```bash
+python run_collector.py --check-pagination --pagination-template config/danawa_pagination.local.json
+```
+
+종료 코드 0 정상, 4 차단(403/429), 5 통신 실패, 6 응답 해석 실패(템플릿 만료 의심), 3 템플릿 없음·형식 오류이고, 결과 JSON 한 줄(`status`, `category_id`, `http_status`, `products`, `error`)을 출력한다. 헤더 값은 출력하지 않는다.
 
 ## 검증과 현재 한계
 

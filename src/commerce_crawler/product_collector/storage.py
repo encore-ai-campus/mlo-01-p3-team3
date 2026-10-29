@@ -10,6 +10,14 @@ import shutil
 import zlib
 from pathlib import Path
 
+# In a run's media/: prune removed the image bytes (images/, categories/) after the run was loaded.
+IMAGES_PRUNED = "images_pruned.json"
+IMAGE_BYTE_DIRS = ("images", "categories")
+
+
+def images_pruned(media: Path) -> bool:
+    return (Path(media) / IMAGES_PRUNED).is_file()
+
 
 def read_jsonl(path: Path, tolerate_interruption=False) -> list[dict]:
     rows = []

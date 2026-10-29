@@ -68,7 +68,7 @@
  "resume_images": {
   "files": {
    "_image_index/image_downloads.jsonl": "5dd01268186eeded98fd686f1a37fb72f0a9aa49136607d1a6479c68163f9528",
-   "run0/checkpoint_events.jsonl": "d4a9401239a07b10b8d9eb60640fe333daf6eba96ba43a6a0f14df6fdb1fd762",
+   "run0/checkpoint_events.jsonl": "02fe5f57d5ffd52c0f3241e4478d2a5d8f4686a52101ebb8ebdcc9289ea6b49b",
    "run0/checkpoint_state.json": "23a5db07e26a4430ea3e4aed499730c7e9639006e62d662f21e14858a2b7e155",
    "run0/media/download_report.json": "175fbe85a0849bbaad2cbbe0e95d4f0e795c8af2c0ea4de0c5c8cfc958ad31e4",
    "run0/media/image_downloads.jsonl": "b5d296f66298956292125d3bfe55cadc6c32d0d120d8a0ed2a7f05f763f83183",

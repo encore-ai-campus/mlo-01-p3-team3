@@ -18,7 +18,7 @@ from requests.adapters import HTTPAdapter
 from PIL import UnidentifiedImageError
 
 from .core import utc_now, limit_reached, parse_limit
-from .storage import atomic_json, append_record, history, link_file, read_jsonl, write_jsonl
+from .storage import atomic_json, append_record, history, images_pruned, link_file, read_jsonl, write_jsonl
 from .validation import cached_valid, stored_metadata, verified_image
 from .image_store import object_key
 from .media_resume import ValidationMemo, download_history
@@ -283,6 +283,8 @@ class ImageStep:
     def begin(self, urls=(), product_count=0, without_gallery=0, input_hash=None, products_path=None):
         """State of this run's step. Overlap starts empty and publishes a report without finished_at."""
         destination, store = self.destination, self.store
+        if images_pruned(destination) or images_pruned(store):
+            raise ValueError(f"사진 파일을 정리한(prune) 실행에는 이미지 단계를 다시 돌릴 수 없습니다: {destination}")
         destination.mkdir(parents=True, exist_ok=True)
         # One blob store per cache; output only contains named product links.
         (store / "images").mkdir(parents=True, exist_ok=True)

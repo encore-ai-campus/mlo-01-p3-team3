@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 from .core import utc_now
-from .storage import atomic_json, file_matches
+from .storage import atomic_json, file_matches, images_pruned
 
 
 # Same names and spelling as the pipeline's inspect_image; the object key uses the extension.
@@ -93,7 +93,11 @@ def image_errors(product: dict, root: Path | None = None) -> list[dict]:
 
 
 def verify_assets(products_path: Path, media: Path) -> dict:
-    """Checks the manifest one product at a time; only the errors are kept."""
+    """Checks the manifest one product at a time; only the errors are kept.
+
+    After prune removed the bytes of a loaded run the files are gone on purpose: the manifest and
+    product links are still checked, the files are not."""
+    pruned = images_pruned(media)
     errors, products, links = [], 0, 0
     with Path(products_path).open(encoding="utf-8-sig") as stream:
         for line in stream:
@@ -102,8 +106,10 @@ def verify_assets(products_path: Path, media: Path) -> dict:
             row = json.loads(line)
             products += 1
             links += len(row.get("images") or row.get("local_images") or [])
-            errors.extend(image_errors(row, media))
+            errors.extend(image_errors(row, None if pruned else media))
     report = {"checked_at": utc_now(), "products": products, "image_links": links,
               "errors": errors, "result": "completed" if products and not errors else "partial"}
+    if pruned:
+        report["images_pruned"] = True
     atomic_json(media / "verification_report.json", report)
     return report

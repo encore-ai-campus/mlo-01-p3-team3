@@ -13,7 +13,7 @@ import sys
 import time
 from uuid import uuid4
 
-from .storage import atomic_json, write_jsonl
+from .storage import atomic_json, images_pruned, write_jsonl
 
 
 def encoded(value):
@@ -304,7 +304,12 @@ class CollectionCheckpoint:
         return self.export_to(self.directory)
 
     def interrupt(self, attempts, status='interrupted', error=None):
-        self.save([], self.current_report(), attempts)
+        report = self.current_report()
+        if 'result' in report:
+            # A result of this or an earlier attempt (e.g. "completed" before the image step failed)
+            # must not outlive the attempt that ended here.
+            report['result'] = status
+        self.save([], report, attempts)
         self.state(status, error)
         self.export()
 
@@ -330,6 +335,12 @@ def open_collection(output, adapter, config, resume_from=None, new_run=False, pr
             # prune may move the run between the check above and this lock; never start it empty.
             if resuming and not (directory / 'run_config.json').is_file():
                 raise ValueError(f'재개할 체크포인트가 정리되었습니다: {directory}')
+            if resuming and images_pruned(directory / 'media'):
+                raise ValueError(f'사진 파일을 정리한(prune) 실행은 재개하지 않습니다: {directory}')
+            saved = directory / 'checkpoint_state.json'
+            # Read before the checkpoint opens: opening may rewrite the state (file repair) and drop the mark.
+            if resuming and saved.is_file() and json.loads(saved.read_text(encoding='utf-8')).get('status') == ABANDONED:
+                raise ValueError(f'포기한 실행은 재개하지 않습니다. 새 실행은 --new-run으로 시작해주세요: {directory}')
             store = CollectionCheckpoint(directory, adapter, config, progress=progress, repair_files=repair_files)
             atomic_json(active, {'directory': str(directory.resolve())})
             try:
@@ -338,6 +349,44 @@ def open_collection(output, adapter, config, resume_from=None, new_run=False, pr
                 if store.status == 'completed':
                     active.unlink(missing_ok=True)
                 store.close()
+
+
+ABANDONED = 'abandoned'
+
+
+def abandon_run(output, directory=None, reason=None):
+    """Mark a run that will not be resumed as abandoned and stop it being the active run.
+
+    Taken under the root's .collection.lock and the run's writer.lock, so a collecting run is refused.
+    A completed run is never abandoned. The journal and records stay; prune --prune-abandoned may delete them."""
+    from .core import utc_now
+    output = Path(output)
+    with writer_lock(output / '.collection.lock'):
+        active = output / 'active_run.json'
+        active_dir = None
+        if active.exists():
+            active_dir = Path(json.loads(active.read_text(encoding='utf-8'))['directory']).resolve()
+        target = Path(directory).resolve() if directory else active_dir
+        if target is None:
+            raise ValueError('포기할 실행이 없습니다. 활성 실행이 없으면 실행 경로를 지정해주세요.')
+        if not (target / 'run_config.json').is_file():
+            raise ValueError(f'파일 체크포인트가 없습니다: {target}')
+        with writer_lock(target / 'writer.lock'):
+            path = target / 'checkpoint_state.json'
+            if not (target / 'run_config.json').is_file() or not path.is_file():
+                raise ValueError(f'파일 체크포인트가 없습니다: {target}')
+            state = json.loads(path.read_text(encoding='utf-8'))
+            if state.get('status') == 'completed':
+                raise ValueError(f'완료된 실행은 포기할 수 없습니다: {target}')
+            previous = state.get('status')
+            if previous != ABANDONED:
+                state.update(status=ABANDONED, updated_at=utc_now(), abandoned_from=previous,
+                             abandon_reason=reason)
+                atomic_json(path, state)
+            if active_dir == target:
+                active.unlink()
+    return {'directory': str(target), 'job_id': state.get('job_id'), 'status': ABANDONED,
+            'previous_status': state.get('abandoned_from'), 'was_active': active_dir == target}
 
 
 def export_checkpoint(directory):

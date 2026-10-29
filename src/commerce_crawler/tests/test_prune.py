@@ -9,6 +9,16 @@ from product_collector.checkpoint import writer_lock
 from product_collector.prune import prune_runs
 
 
+def marker(job, **changes):
+    """pipeline_loaded.json as the loader writes it after a complete load into the operating DB."""
+    value = {'schema_version': 1, 'job_id': job, 'snapshot_id': 's-1', 'ingestion_run_id': 'i-1',
+             'target': 'production', 'environment_id': 'audit-only', 'loaded_at': '2026-10-29T00:00:00+00:00',
+             'result': 'completed', 'products': 3, 'raw_confirmed': 3, 'failed': 0,
+             'image_relations_unavailable': 0, 'gallery_missing': 0}
+    value.update(changes)
+    return value
+
+
 def run(root, name, finished, status='completed', loaded=True, evidence=None):
     directory = Path(root) / name
     (directory / 'details' / '11').mkdir(parents=True)
@@ -18,7 +28,7 @@ def run(root, name, finished, status='completed', loaded=True, evidence=None):
         json.dumps({'job_id': name, 'status': status, 'updated_at': finished}), encoding='utf-8')
     if loaded:
         job = name if loaded is True else loaded
-        (directory / 'pipeline_loaded.json').write_text(json.dumps({'job_id': job}), encoding='utf-8')
+        (directory / 'pipeline_loaded.json').write_text(json.dumps(marker(job)), encoding='utf-8')
     if evidence:
         (directory / 'run_report.json').write_text(
             json.dumps({'detail_evidence_dirs': [str((Path(root) / e).resolve()) for e in evidence]}), encoding='utf-8')
@@ -101,7 +111,7 @@ class PruneTests(unittest.TestCase):
             run(root, 'w1', '2026-10-01T00:00:00+00:00')
             run(root, 'w2', '2026-10-02T00:00:00+00:00', evidence=['w1'])
             run(root, 'w3', '2026-10-03T00:00:00+00:00')
-            with patch.object(prune, '_delete', lambda d, a: 'in_use' if d.name == 'w2' else original(d, a)):
+            with patch.object(prune, '_delete', lambda d, a, *rest: 'in_use' if d.name == 'w2' else original(d, a, *rest)):
                 report = prune_runs(root, keep=1, apply=True)
             self.assertEqual((report['deleted'], report['kept']['w2'], report['kept']['w1']),
                              ([], 'in_use', 'referenced_evidence'))
@@ -144,6 +154,31 @@ class PruneTests(unittest.TestCase):
             prune_runs(root, apply=True)
             self.assertFalse((Path(root) / '.deleting-w0').exists())
             self.assertTrue((Path(root) / 'w1').is_dir())
+
+
+
+class LoadedMarkerTests(unittest.TestCase):
+    def test_only_a_complete_load_into_the_operating_database_confirms_a_run(self):
+        variants = {'staging': {'target': 'validation'}, 'failed': {'failed': 1}, 'short': {'raw_confirmed': 2},
+                    'schema': {'schema_version': 2}, 'text-schema': {'schema_version': '1'}}
+        with tempfile.TemporaryDirectory() as root:
+            for index, (name, changes) in enumerate(variants.items(), 1):
+                directory = run(root, name, f'2026-10-0{index}T00:00:00+00:00')
+                (directory / 'pipeline_loaded.json').write_text(json.dumps(marker(name, **changes)), encoding='utf-8')
+            missing = run(root, 'missing', '2026-10-07T00:00:00+00:00')
+            value = marker('missing')
+            value.pop('gallery_missing')
+            (missing / 'pipeline_loaded.json').write_text(json.dumps(value), encoding='utf-8')
+            no_audit = run(root, 'no-audit', '2026-10-08T00:00:00+00:00')
+            value = marker('no-audit')
+            value.pop('environment_id')  # audit only, not required
+            (no_audit / 'pipeline_loaded.json').write_text(json.dumps(value), encoding='utf-8')
+            run(root, 'newest', '2026-10-09T00:00:00+00:00')
+            report = prune_runs(root, keep=1, apply=True)
+            self.assertEqual(report['deleted'], ['no-audit'])
+            for name in (*variants, 'missing'):
+                self.assertEqual(report['kept'][name], 'not_loaded', name)
+
 
 
 if __name__ == '__main__':

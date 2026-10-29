@@ -43,6 +43,8 @@ def without_run_ids(path):
     for row in rows:
         for image in row['images']:
             image.pop('run_id', None)
+            for key in [k for k in image if k.endswith('_at')]:  # wall-clock times differ when a second ticks over
+                image.pop(key)
     return rows
 
 
