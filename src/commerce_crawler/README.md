@@ -93,12 +93,25 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 | `product_raw.jsonl`, `products.jsonl`, `run_report.json` | 종료·Ctrl+C·내보내기 시점의 통합 결과 |
 | `media/products_with_local_images.jsonl` | **상품·이미지 연결 manifest**. 별도 `manifest.jsonl` 파일은 만들지 않음 |
 | `media/image_downloads.jsonl`, `media/download_report.json` | URL별 다운로드 이력·결과 집계 |
-| `media/images/<sha256>.<ext>` | 해시 기준 이미지 캐시 |
+| `media/images/<sha256>.<ext>` | 이번 실행에서 받은 사진(해시 이름). 저장소에 이미 있는 사진(`stored`)은 받지 않음 |
+| `media/image_settings.json` | 이미지 단계 고정 설정(재개 시 확인) |
+| `../_image_index/image_downloads.jsonl` | 출력 루트 공용 URL별 다운로드 이력. 사진 파일 없음, prune 대상 아님 |
 | `media/categories/<category_id>/danawa/<product_id>/…` | 상품별 이름을 가진 카테고리 경로 |
 
 원본과 정규화 결과는 `source + product_id`, `job_id`, `payload_hash/raw_payload_hash`로 연결한다. POST 상품 객체는 원본의 `payload.listings[].api_product`에 보존한다. API 원본 필드와 수집기가 만든 메타데이터·가공 필드는 구분한다. [필드 명세](docs/data_fields.md)
 
 사진 파일은 하드링크 생성이 가능하면 캐시와 공유하고, 실패하면 복사한다. 일반 NAS 전송이 관계를 보존한다고 가정하지 않는다. 경로는 manifest가 있는 `media/`를 기준으로 한다.
+
+### 사진 재다운로드 방지
+
+메인 수집기는 출력 루트의 `_image_index/image_downloads.jsonl`에 URL별 마지막 다운로드 기록(sha256·bytes·width·height·format·extension)과 실패 기록을 남긴다. 사진 파일은 이 폴더에 두지 않는다. 처음 만들 때는 출력 루트의 이전 실행(partial 포함) `media/image_downloads.jsonl` 성공 기록을 가져온다.
+
+- **`--image-store-config <파일>`:** 이미지 버킷 읽기 전용 접속 설정이다. 파이프라인 v1 snapshot·적재가 `stored` 항목을 받도록 배포된 뒤에만 쓴다. 그 전 파이프라인은 stored 사진을 확보 불가(UNAVAILABLE)로 처리한다. 이력에 성공 기록이 있는 URL은 파이프라인 객체 키 `images/sha256/<앞 2자>/<sha256>.<extension>`에 HEAD를 보낸다. 크기와 `sha256` 메타데이터가 같으면 다운로드하지 않고 이미지 항목을 `status: "stored"`로 기록한다. stored 항목에는 메타데이터만 있고 `local_path`·`filename`·`category_paths`는 비어 있다. 최종 무결성은 파이프라인 적재가 객체 전체 sha256으로 확인한다.
+- 객체가 없거나 값이 다르거나 HEAD가 실패하면 지금처럼 받는다. HEAD 오류가 연속 20회면 그 실행에서는 저장소 확인을 멈춘다. 설정이 없으면 모두 받는다.
+- 설정 파일은 Git 밖에 두고(권한 600) `key=value`로 쓴다. 필수 `endpoint`(https), `bucket`, `accessKey`, `secretKey`, 선택 `caBundle`, `region`(기본 us-east-1). boto3가 필요하다.
+- **실패 재시도:** 타임아웃·연결 오류·5xx는 다음 실행마다 다시 시도한다. 404 등 클라이언트 오류와 이미지가 아닌 응답이 연속 3회면 `gave_up`으로 두고 `--retry-failed`를 줄 때만 다시 시도한다. 실패해도 이전 성공 기록(`last_success`)은 유지한다. 같은 실행을 재개할 때는 그 실행에서 실패한 URL을 다시 요청하지 않는다.
+- 이력 경로, 저장소(endpoint·bucket, 키 제외), 재시도 규칙 버전은 `media/image_settings.json`에 고정된다. 다른 설정으로는 재개하지 않는다. 결과 건수는 `media/download_report.json`(`stored`, `store_checks`, `store_missing`, `store_mismatch`, `store_errors`)과 `run_report.image_download`에 남는다.
+- 같은 URL은 같은 사진으로 본다. 다나와가 같은 주소의 사진을 바꾸는 경우는 아직 감지하지 않는다.
 
 ### 상세 HTML 보관 정책
 
@@ -179,7 +192,7 @@ python run_collector.py --detail-refresh changed --refresh-sample 1000
 - **한계:**
   - 목록에 드러나지 않는 상세 변경은 표본에 걸릴 때까지 반영되지 않는다.
   - 파이프라인은 상품행 관측 시각을 이름 후보 시각으로 정한다. 그래서 재사용한 상세 값이 이번 실행에 관측한 것처럼 기록될 수 있다.
-  - 사진은 지금처럼 실행마다 다시 받는다.
+  - 재사용한 상세의 갤러리 URL도 과거 값이다. 사진은 [사진 재다운로드 방지](#사진-재다운로드-방지) 규칙을 따른다.
 
 ## 중단·재개·내보내기
 

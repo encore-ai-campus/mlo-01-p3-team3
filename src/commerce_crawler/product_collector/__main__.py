@@ -61,6 +61,32 @@ def show_quality(report):
         print(f"[품질 경보] {item['signal']} 카테고리 {item.get('category_id')}", flush=True)
 
 
+def image_index(output: Path, destination: Path, policy_version: int, store_config: dict | None):
+    """Shared download history of the output root (no image bytes) and the runs to seed it from.
+
+    The settings are fixed in the run's media/ so a resumed image step uses the same history,
+    the same object storage (endpoint and bucket, never the keys) and the same retry rules."""
+    from .image_store import describe
+    from .storage import atomic_json
+    index = (Path(output) / "_image_index").resolve()
+    settings = {"index_dir": str(index), "object_store": describe(store_config) if store_config else None,
+                "retry_policy_version": policy_version}
+    path = destination / "media" / "image_settings.json"
+    if path.is_file():
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        if saved != settings:
+            raise ValueError(f"이미지 단계 설정이 이전 실행과 다릅니다: {saved} != {settings}")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json(path, settings)
+    runs = [p / "media" for p in Path(output).iterdir()
+            if p.is_dir() and p.resolve() != destination.resolve() and (p / "run_config.json").is_file()
+            and (p / "media" / "image_downloads.jsonl").is_file()]
+    # Newest first: a URL found in several runs is imported from the most recent download.
+    runs.sort(key=lambda m: (m / "image_downloads.jsonl").stat().st_mtime_ns, reverse=True)
+    return index, runs
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="다나와 카테고리·페이지 수집과 상품 갤러리 보강")
     parser.add_argument("--categories", type=Path, default=PROJECT_ROOT / "config/danawa_categories_71.json")
@@ -78,6 +104,10 @@ def main() -> int:
     parser.add_argument("--listing-only", action="store_true", help="상세 요청 없이 목록만 수집")
     parser.add_argument("--download-images", action="store_true", help="상세 갤러리 다운로드와 상품·파일 연결 검증까지 실행")
     parser.add_argument("--max-image-requests", type=parse_limit, default=None)
+    parser.add_argument("--retry-failed", action="store_true",
+                        help="이미지: 연속 실패로 포기한 사진 주소도 다시 시도")
+    parser.add_argument("--image-store-config", type=Path,
+                        help="이미지 버킷 읽기 전용 접속 설정(Git 밖 파일). 있으면 이미 저장된 사진은 다시 받지 않음")
     parser.add_argument("--resume-from", type=Path, help="지정한 작업의 저장 지점에서 재개")
     parser.add_argument("--new-run", action="store_true", help="미완료 작업 재개 대신 새 작업 시작")
     parser.add_argument("--repair-files", action="store_true", help="개별 상품 JSON 전체 검사·복구. 외부 삭제·손상 시 사용하며 재개 준비가 오래 걸릴 수 있음")
@@ -100,12 +130,23 @@ def main() -> int:
         parser.error("--detail-refresh changed requires live detail collection")
     if args.download_images and (args.listing_only or args.reprocess_from):
         parser.error("--download-images requires live detail collection; use gallery_assets for saved runs")
+    if args.image_store_config and not args.download_images:
+        parser.error("--image-store-config requires --download-images")
+    store_config = None
     if args.download_images:
         try:
-            from .media import ImageFetcher, localize_images
+            from .media import ImageFetcher, RETRY_POLICY_VERSION, localize_images
             from .validation import verify_assets
+            from .image_store import S3ImageStore, read_store_config
+            if args.image_store_config:
+                import boto3  # noqa: F401  checked before collection begins
         except ModuleNotFoundError as exc:
             parser.error(f"이미지 다운로드 의존성이 없습니다: {exc.name}. 실행에 사용하는 Python으로 python -m pip install -r requirements-collector.txt 를 먼저 실행해주세요.")
+        if args.image_store_config:
+            try:
+                store_config = read_store_config(args.image_store_config)
+            except (ValueError, OSError) as exc:
+                parser.error(f"이미지 저장소 설정을 읽을 수 없습니다: {exc}")
     if args.reprocess_from:
         try:
             raw, normalized, report = reprocess_run(args.reprocess_from, args.output, args.quality_gate)
@@ -162,14 +203,22 @@ def main() -> int:
                 checkpoint.save([], report, client.attempts)
                 checkpoint.export()  # products.jsonl for the image step; the status stays running until delivery is decided
                 if args.download_images:
+                    index, sources = image_index(args.output, destination, RETRY_POLICY_VERSION, store_config)
                     fetcher = ImageFetcher(args.interval, args.timeout)
+                    object_store = S3ImageStore(store_config) if store_config else None
                     try:
                         media_report = localize_images(destination / "products.jsonl", destination / "media", fetcher,
-                                                       args.max_image_requests)
+                                                       args.max_image_requests, retry_failed=args.retry_failed,
+                                                       retry_transient=True, index_dir=index,
+                                                       object_store=object_store, import_from=sources)
                     finally:
                         fetcher.close()
+                        if object_store:
+                            object_store.close()
                     verified = verify_assets(destination / "media/products_with_local_images.jsonl", destination / "media")
-                    report["image_download"] = {"result": media_report["result"], "verification": verified["result"]}
+                    report["image_download"] = {"result": media_report["result"], "verification": verified["result"],
+                                                **{k: media_report[k] for k in ("downloaded", "stored", "failed", "gave_up",
+                                                                                "store_checks", "store_errors")}}
                     if media_report["result"] != "completed" or verified["result"] != "completed":
                         report["result"] = "partial"
                 quality.apply(report, normalized, args.quality_gate,

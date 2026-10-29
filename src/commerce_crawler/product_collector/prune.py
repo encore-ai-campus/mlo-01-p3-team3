@@ -2,10 +2,11 @@
 
 A run is deletable only when its checkpoint is completed, the loader confirmed it with
 pipeline_loaded.json naming the same job_id as run_config and checkpoint, it is not the
-active run, no collector holds its writer.lock, and no remaining run points to it through
+active run, no collector or image step holds its locks, and no remaining run points to it through
 run_report.detail_evidence_dirs. Everything else is kept.
 """
 import argparse
+from contextlib import ExitStack, contextmanager
 import json
 import os
 from pathlib import Path
@@ -49,9 +50,20 @@ def _ineligible(directory, original, active_dir):
     return None, str(state.get('updated_at') or '')
 
 
+@contextmanager
+def _run_locks(directory):
+    """The collector's writer.lock and, when the run has images, the image step's lock:
+    an image command working on a finished run must not see it disappear."""
+    with ExitStack() as stack:
+        stack.enter_context(writer_lock(directory / 'writer.lock'))
+        if (directory / 'media').is_dir():
+            stack.enter_context(writer_lock(directory / 'media' / '.image-download.lock'))
+        yield
+
+
 def _unlocked(directory):
     try:
-        with writer_lock(directory / 'writer.lock'):
+        with _run_locks(directory):
             return True
     except (ValueError, OSError):
         return False
@@ -64,7 +76,7 @@ def _delete(directory, active_dir):
     root's .collection.lock, so the lock is taken before the directory moves."""
     target = directory.with_name(DELETING + directory.name)
     try:
-        with writer_lock(directory / 'writer.lock'):
+        with _run_locks(directory):
             reason, _ = _ineligible(directory, directory, active_dir)
             if not reason and os.name == 'posix':
                 directory.rename(target)  # a collector opening this path now finds no checkpoint

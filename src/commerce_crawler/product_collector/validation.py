@@ -1,6 +1,7 @@
 """Image integrity and product linkage checks, independent of downloading."""
 import hashlib
 import io
+import re
 from pathlib import Path
 
 from PIL import Image
@@ -9,16 +10,33 @@ from .core import utc_now
 from .storage import atomic_json, file_matches, read_jsonl
 
 
+# Same names and spelling as the pipeline's inspect_image; the object key uses the extension.
+EXTENSIONS = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp", "BMP": "bmp", "TIFF": "tiff"}
+IMAGE_META = ("sha256", "bytes", "width", "height", "format", "extension")
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
+
 def verified_image(data: bytes) -> dict:
     with Image.open(io.BytesIO(data)) as image:
         width, height = image.size
         format_name = image.format
         image.verify()
-    extensions = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp", "BMP": "bmp", "TIFF": "tiff"}
-    if format_name not in extensions:
+    if format_name not in EXTENSIONS:
         raise ValueError(f"unsupported downloaded image format: {format_name}")
     return {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data), "width": width,
-            "height": height, "format": format_name, "extension": extensions[format_name]}
+            "height": height, "format": format_name, "extension": EXTENSIONS[format_name]}
+
+
+def stored_metadata(entry: dict | None) -> dict | None:
+    """Metadata of a verified download that can stand for an object already in storage."""
+    if not isinstance(entry, dict):
+        return None
+    meta = {key: entry.get(key) for key in IMAGE_META}
+    if (not isinstance(meta["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", meta["sha256"])
+            or any(type(meta[key]) is not int or meta[key] <= 0 for key in ("bytes", "width", "height"))
+            or meta["bytes"] > MAX_IMAGE_BYTES or EXTENSIONS.get(meta["format"]) != meta["extension"]):
+        return None
+    return meta
 
 
 def cached_valid(entry: dict, root: Path) -> bool:
@@ -41,6 +59,12 @@ def image_errors(product: dict, root: Path | None = None) -> list[dict]:
         seen.add(url)
         if any(image.get(key, product[key]) != product[key] for key in ("source", "product_id")):
             errors.append({"reason": "product_link_mismatch", "url": url})
+        if image.get("status") == "stored":
+            # Already in object storage: nothing local; ingestion verifies the object itself.
+            if (stored_metadata(image) is None or image.get("local_path") or image.get("category_paths")
+                    or image.get("filename")):
+                errors.append({"reason": "stored_image_invalid", "url": url})
+            continue
         if root is not None:
             local = image.get("local_path")
             if 'category_paths' in image or (local and local.startswith('categories/')):

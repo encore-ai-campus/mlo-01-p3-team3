@@ -19,6 +19,8 @@
 
 수집 후 선택적으로 `product_collector.media`를 실행하면 media/products_with_local_images.jsonl에 기존 상품의 images[]에 다운로드 정보를 병합한다. 로컬 파일 경로·실제 해시·해상도·다운로드 상태는 이 추가 파일에서 확인한다. 기본 products.jsonl은 URL 수집 결과이며 자동 다운로드를 수행하는 것은 아니다. [이미지 내재화 문서](image_localization.md)를 따른다.
 
+`media/products_with_local_images.jsonl`의 이미지 `status`는 다음과 같다. `downloaded`는 이번 실행에서 받은 파일이 `local_path`·`category_paths`에 있다는 뜻이다. `stored`는 파이프라인 Object Storage에 같은 sha256 객체가 있어 받지 않았다는 뜻이다. stored 항목은 sha256·bytes·width·height·format·extension만 있고 로컬 경로는 비어 있다. 객체 키는 파이프라인이 `images/sha256/<앞 2자>/<sha256>.<extension>`으로 만든다. extension 표기는 jpg·png·gif·webp·bmp·tiff다. 그 밖에 failed(실패, `gave_up`이면 연속 실패로 포기), budget_exhausted, stopped_after_block, pending이 있다. downloaded와 stored만 상품의 `image_download_status: completed`에 포함된다.
+
 ## API 원본과 수집기 출력 구분
 
 API 원본 필드는 `product_raw.payload.listings[].api_product` 안의 제공처 상품 객체를 기준으로 한다. 바깥의 payload/listings/api_product라는 wrapper와 source/job_id/collected_at/hash는 수집기가 만든 구조다. GET HTML 대체 경로는 API 객체 대신 카드 HTML을 보존한다.
