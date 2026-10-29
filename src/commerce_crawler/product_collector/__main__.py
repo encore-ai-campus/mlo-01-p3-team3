@@ -9,8 +9,9 @@ from dataclasses import replace, asdict
 from .checkpoint import open_collection, export_checkpoint
 
 from .core import RequestClient, collect, load_categories, save_run, parse_limit
-from .danawa import DanawaAdapter
+from .danawa import FINGERPRINT_VERSION, DanawaAdapter
 from . import quality
+from .detail_reuse import MODES as REFRESH_MODES, DetailReuse
 from .reprocess import reprocess_run
 from .pagination import PaginationTemplates
 
@@ -38,7 +39,8 @@ def show_progress(event):
     elif stage == 'details_start':
         text = f"[상세 보강] 목록 순회 완료, 상품 {event['total']}개 처리 시작"
     elif stage == 'detail':
-        text = f"[상세 {event['index']}/{event['total']}] 상품 {event['product_id']} / {event['status']}"
+        text = f"[상세 {event['index']}/{event['total']}] 상품 {event['product_id']} / {event['status']}" + (
+            " (이전 실행 재사용)" if event.get('reused') else "")
     else:
         text = f"[오류] {event.get('category_id', '')}: {event.get('reason', '')}"
     with PRINT_LOCK:
@@ -80,6 +82,10 @@ def main() -> int:
     parser.add_argument("--new-run", action="store_true", help="미완료 작업 재개 대신 새 작업 시작")
     parser.add_argument("--repair-files", action="store_true", help="개별 상품 JSON 전체 검사·복구. 외부 삭제·손상 시 사용하며 재개 준비가 오래 걸릴 수 있음")
     parser.add_argument("--export-from", type=Path, help="진행 중/중단된 체크포인트를 JSONL로 내보내기. 수집 요청 없음")
+    parser.add_argument("--detail-refresh", choices=REFRESH_MODES, default="all",
+                        help="all은 상세 전부 요청, changed는 직전 완료 실행과 목록 지문이 같은 상품의 상세 재사용")
+    parser.add_argument("--refresh-sample", type=int, default=1000,
+                        help="changed에서 무변경이어도 다시 요청할 표본 수(구조 변경 감지용). 0은 표본 없음")
     parser.add_argument("--quality-gate", choices=quality.MODES, default="warn",
                         help="종료 품질 관문. warn은 기록만, enforce는 상한 초과 시 quality_failed")
     args = parser.parse_args()
@@ -88,6 +94,10 @@ def main() -> int:
         return 0
     if args.resume_from and args.new_run:
         parser.error("--resume-from and --new-run cannot be combined")
+    if args.refresh_sample < 0:
+        parser.error("--refresh-sample must be zero or positive")
+    if args.detail_refresh == "changed" and (args.listing_only or args.reprocess_from):
+        parser.error("--detail-refresh changed requires live detail collection")
     if args.download_images and (args.listing_only or args.reprocess_from):
         parser.error("--download-images requires live detail collection; use gallery_assets for saved runs")
     if args.download_images:
@@ -126,6 +136,10 @@ def main() -> int:
     config = {"source": adapter.source, "categories": [asdict(c) for c in categories],
               "total_limit": args.total_limit, "collect_details": not args.listing_only,
               "pagination_payloads": {key: value["payload"] for key, value in templates.categories.items()} if templates else {}}
+    if args.detail_refresh == "changed":
+        # Fixed for the run: a resume with another mode or sample is a different job. Absent in "all" for older runs.
+        config["detail_refresh"] = {"mode": "changed", "sample": args.refresh_sample,
+                                    "fingerprint_version": FINGERPRINT_VERSION}
     try:
         with open_collection(args.output, adapter, config, args.resume_from, args.new_run,
                              progress=show_progress, repair_files=args.repair_files) as checkpoint:
@@ -135,10 +149,16 @@ def main() -> int:
             print(f"[시작] 카테고리 {len(categories)}개 / 목록 작업자 {args.workers}개 / 상품 한도 {args.total_limit or '없음'} / 요청 한도 {args.max_requests or '없음'} / 목록 간격 {args.listing_interval}초 / 상세·다운로드 간격 {args.interval}초", flush=True)
             print(f"[실시간 저장] {destination.resolve()}", flush=True)
             print(f"[재개] python run_collector.py --resume-from \"{destination.resolve()}\"", flush=True)
+            reuse = None
+            if args.detail_refresh == "changed":
+                reuse = DetailReuse.open(destination, args.output, adapter.source, checkpoint.job_id, args.refresh_sample)
+                print(f"[상세 재사용] 기준 실행 {reuse.base_job_id} / 상품 {len(reuse.index)}개 / 표본 {args.refresh_sample}개"
+                      if reuse.base else f"[상세 재사용] 기준 실행이 정리되어 남은 상세를 모두 요청합니다: {reuse.base_missing}"
+                      if reuse.base_missing else "[상세 재사용] 완료된 이전 실행이 없어 모든 상세를 요청합니다", flush=True)
             try:
                 raw, normalized, report = collect(adapter, client, categories, args.total_limit,
                     collect_details=not args.listing_only, progress=show_progress, checkpoint=checkpoint,
-                    listing_interval=args.listing_interval, workers=args.workers)
+                    listing_interval=args.listing_interval, workers=args.workers, detail_reuse=reuse)
                 checkpoint.save([], report, client.attempts)
                 checkpoint.export()  # products.jsonl for the image step; the status stays running until delivery is decided
                 if args.download_images:
@@ -152,7 +172,8 @@ def main() -> int:
                     report["image_download"] = {"result": media_report["result"], "verification": verified["result"]}
                     if media_report["result"] != "completed" or verified["result"] != "completed":
                         report["result"] = "partial"
-                quality.apply(report, normalized, args.quality_gate)
+                quality.apply(report, normalized, args.quality_gate,
+                              {str(r["product_id"]) for r in raw if r.get("detail_reused_from")})
                 # One delivery status for the journal, checkpoint_state, run_report, prune and the exit code.
                 checkpoint.save([], report, client.attempts)
                 checkpoint.state(report['result'])

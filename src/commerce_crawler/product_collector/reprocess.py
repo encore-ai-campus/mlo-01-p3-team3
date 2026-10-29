@@ -87,7 +87,8 @@ def reprocess_run(directory: Path, output_root: Path | None = None,
         record["extractor_version"] = "0.4"
     normalized = [adapter.normalize(record) for record in raw]
     report.update(finished_at=utc_now(), product_count=len(raw), field_coverage=field_coverage(normalized),
-                  result=run_result(report, raw, any(c["status"] == "not_requested" for c in report["categories"])))
+                  result=run_result(report, raw, any(c["status"] == "not_requested" for c in report["categories"]),
+                                    include_reused=True))
     # Quality is judged again on the new extraction; the original run's verdict is not carried over.
     quality.apply(report, normalized, quality_mode)
     return raw, normalized, report

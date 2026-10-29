@@ -100,6 +100,8 @@ API 원본 필드는 `product_raw.payload.listings[].api_product` 안의 제공�
 
 최상위는 source, product_id, collected_at, job_id, schema_version, extractor_version, categories, payload_hash, detail_status, detail_error, payload로 구성된다. 재추출 결과에는 reprocessed_at이 추가된다.
 
+상세를 요청할 차례가 된 상품에는 listing_fingerprint가 붙는다. 목록 응답 안정 필드의 해시이며 `v<버전>:<sha256>` 형식이다. HTML 목록 상품은 null이다. `--detail-refresh changed`에서 직전 실행의 상세를 재사용한 상품에는 detail_reused_from(`job_id`, `collected_at`)이 붙는다. 이때 payload.detail은 기준 실행의 값 그대로라 수집 시각도 원래 시점이다. 두 필드는 payload 밖에 있으므로 payload_hash에 영향을 주지 않는다. 파이프라인은 이 필드를 collector_metadata로 받는다. [README의 상세 재수집](../README.md#상세-재수집---detail-refresh)
+
 | 원본 경로 | 보존 내용 |
 |---|---|
 | payload.listings[] | 발견 카테고리, 목록 URL·page, 해당 시각, 상품 ID·이름·이미지·가격·규격·등록월 원문. GET은 카드 html/variant_prices, POST는 format=action_product와 api_product 전체 객체 |

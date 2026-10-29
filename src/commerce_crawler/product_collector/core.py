@@ -72,11 +72,12 @@ def field_coverage(rows: list[dict]) -> dict:
             for field in fields}
 
 
-def run_result(report: dict, raw: list[dict], categories_incomplete: bool) -> str:
+def run_result(report: dict, raw: list[dict], categories_incomplete: bool, include_reused: bool = False) -> str:
     """Completeness: listing errors, budget stops or missing categories make a partial run.
 
-    Failed details only do so above their rates; below them the loader leaves out those products."""
-    report["detail_failures"] = quality.detail_failures(raw)
+    Failed details only do so above their rates; below them the loader leaves out those products.
+    Reused details were not requested in this run, so their rate excludes them unless re-extracted."""
+    report["detail_failures"] = quality.detail_failures(raw, include_reused)
     return "partial" if (categories_incomplete or any(e.get("stage") != "detail" for e in report["errors"])
                          or any(r["detail_status"] == "budget_exhausted" for r in raw)
                          or not report["detail_failures"]["passed"]) else "completed"
@@ -202,13 +203,15 @@ class Adapter(Protocol):
     def needs_detail(self, listing: dict) -> bool: ...
     def parse_detail(self, html: str, listing: dict) -> dict: ...
     def normalize(self, raw: dict) -> dict: ...
+    def listing_fingerprint(self, listings: list[dict]) -> str | None: ...
     def validate_categories(self, categories: list[Category]) -> None: ...
     def fetch_listing_page(self, client: RequestClient, category: Category, page: int) -> tuple[list[dict], dict]: ...
 
 
 def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             total_limit: int | None = 10, collect_details: bool = True, progress=None, checkpoint=None,
-            listing_interval: float | None = None, workers: int = 1) -> tuple[list[dict], list[dict], dict]:
+            listing_interval: float | None = None, workers: int = 1,
+            detail_reuse=None) -> tuple[list[dict], list[dict], dict]:
     if total_limit is not None and (type(total_limit) is not int or total_limit < 1):
         raise ValueError("total_limit must be a positive integer")
     if listing_interval is not None and (not math.isfinite(listing_interval) or listing_interval < 0):
@@ -390,6 +393,19 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             record["detail_status"] = "not_needed"
             persist([record])
             continue
+        # Recorded in every mode so the next run can tell whether this product changed.
+        fingerprint = record["listing_fingerprint"] = adapter.listing_fingerprint(record["payload"]["listings"])
+        record.pop("detail_reused_from", None)
+        reused = detail_reuse.reuse(record, fingerprint, checkpoint.directory if checkpoint else None) if detail_reuse else None
+        if reused is not None:
+            record["payload"]["detail"] = reused
+            record["detail_status"], record["detail_error"] = "ok", None
+            record["detail_reused_from"] = {"job_id": detail_reuse.base_job_id, "collected_at": reused["collected_at"]}
+            persist([record])
+            if progress:
+                progress({"stage": "detail", "index": detail_index, "total": len(records),
+                          "product_id": record["product_id"], "status": "ok", "reused": True})
+            continue
         try:
             html = client.get(listing["product_url"])
             collected_at = utc_now()
@@ -428,6 +444,8 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
     for record in raw:
         record["payload_hash"] = payload_hash(record["payload"])
         normalized.append(adapter.normalize(record))
+    if detail_reuse is not None:
+        report["detail_reuse"] = detail_reuse.summary(raw)
     report.update(finished_at=utc_now(), product_count=len(raw), request_count=len(previous_requests) + len(client.attempts),
                   requests=previous_requests + list(client.attempts), field_coverage=field_coverage(normalized),
                   result=run_result(report, raw, any(c["status"] == "not_requested" or c.get("reason") == "request_limit"

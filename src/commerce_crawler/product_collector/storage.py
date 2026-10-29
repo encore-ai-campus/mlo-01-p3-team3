@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shutil
+import zlib
 from pathlib import Path
 
 
@@ -92,7 +93,7 @@ def load_detail_html(directories, product_id: str, url: str, collected_at: str |
             try:
                 text = gzip.decompress(path.read_bytes()).decode("utf-8") if path.suffix == ".gz" else path.read_text(encoding="utf-8")
                 saved = json.loads(text)
-            except (OSError, EOFError, UnicodeDecodeError) as exc:  # gzip.BadGzipFile is an OSError
+            except (OSError, EOFError, UnicodeDecodeError, zlib.error) as exc:  # gzip.BadGzipFile is an OSError
                 raise ValueError(f"saved detail evidence is unreadable: {product_id}: {type(exc).__name__}") from exc
             if saved.get("product_id") != str(product_id) or saved.get("url") != url:
                 raise ValueError(f"saved detail evidence identity mismatch: {product_id}")

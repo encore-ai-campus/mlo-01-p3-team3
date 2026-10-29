@@ -18,9 +18,12 @@ MIN_CATEGORY_SAMPLE = 20  # per-category alerts keep one broken category from hi
 RECEIVED = {"ok", "unrecognized", "identity_mismatch"}
 
 
-def detail_failures(raw: list[dict]) -> dict:
-    """Failed details among requested ones. Budget stops are not here: they leave the run incomplete."""
-    requested = [r for r in raw if r["detail_status"] in RECEIVED | {"request_failed"}]
+def detail_failures(raw: list[dict], include_reused: bool = False) -> dict:
+    """Failed details among requested ones. Budget stops are not here: they leave the run incomplete.
+
+    A detail reused from the previous run was not requested; a reprocess re-extracts it and counts it."""
+    requested = [r for r in raw if r["detail_status"] in RECEIVED | {"request_failed"}
+                 and (include_reused or not r.get("detail_reused_from"))]
     total = len(requested)
     counts = {status: sum(r["detail_status"] == status for r in requested) for status in FAILURE_LIMITS}
     if total < MIN_SAMPLE:
@@ -48,10 +51,11 @@ def _rates(rows: list[dict], names=("no_images", "no_specifications", "no_priced
             for name in names}
 
 
-def evaluate(normalized: list[dict], report: dict, mode: str = "warn") -> dict:
+def evaluate(normalized: list[dict], report: dict, mode: str = "warn", reused=frozenset()) -> dict:
+    """reused: product IDs whose detail came from the previous run, parsed before this run's site state."""
     if mode not in MODES:
         raise ValueError(f"quality mode must be one of {MODES}")
-    received = [row for row in normalized if row["detail_status"] in RECEIVED]
+    received = [row for row in normalized if row["detail_status"] in RECEIVED and str(row.get("product_id")) not in reused]
     metrics = _rates(received)
     responded = rejected = 0
     alerts = []
@@ -89,19 +93,20 @@ def evaluate(normalized: list[dict], report: dict, mode: str = "warn") -> dict:
     violations = [{"signal": name, **metric} for name, metric in metrics.items()
                   if metric["rate"] is not None and metric["rate"] > metric["limit"]
                   and (judged or name == "listing_rejected" and responded >= MIN_SAMPLE)]
-    return {"version": VERSION, "mode": mode, "received_details": len(received), "judged": judged,
+    return {"version": VERSION, "mode": mode, "received_details": len(received), "reused_details": len(reused),
+            "judged": judged,
             "gallery_count_median": gallery_median, "metrics": metrics, "violations": violations,
             "alerts": alerts, "passed": not violations}
 
 
-def apply(report: dict, normalized: list[dict], mode: str = "warn") -> dict:
+def apply(report: dict, normalized: list[dict], mode: str = "warn", reused=frozenset()) -> dict:
     """Record report["quality"]; in enforce mode a failed gate replaces a completed result.
 
     An incomplete (partial) run stays partial: an accepted quality never promotes missing data."""
     if mode == "off":
         report.pop("quality", None)
         return report
-    report["quality"] = evaluate(normalized, report, mode)
+    report["quality"] = evaluate(normalized, report, mode, reused)
     if mode == "enforce" and not report["quality"]["passed"] and report.get("result") == "completed":
         report["result"] = "quality_failed"
     return report

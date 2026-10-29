@@ -5,6 +5,7 @@ attributes, URL joining and per-listing deduplication. No seller sites fetched.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from decimal import Decimal, InvalidOperation
@@ -103,6 +104,37 @@ def validate_identity(html: str, code: str) -> None:
     codes.discard("")
     if codes and codes != {code}:
         raise ValueError(f"detail Product identity mismatch: {code}")
+
+
+FINGERPRINT_VERSION = 1
+
+
+def listing_fingerprint(listings: list[dict]) -> str | None:
+    """Hash of the listing fields a detail page repeats; prices, ranks and seller counts are left out.
+
+    Every listing of the product counts, so a change seen in any category asks for the detail again.
+    None when a listing has no API product (HTML listing): such a product always gets its detail."""
+    values = set()
+    for listing in listings:
+        product = listing.get("api_product")
+        if not isinstance(product, dict):
+            return None
+        def part(key):
+            value = product.get(key)
+            return value if isinstance(value, dict) else {}
+        name, description, image, category = part("name"), part("description"), part("image"), part("category")
+        values.add(json.dumps({
+            "productCode": product.get("productCode"), "makerCode": product.get("makerCode"),
+            "name": {key: name.get(key) for key in ("full", "maker", "brand", "model", "product")},
+            "description": {key: (description.get(key) or {}).get("raw") if isinstance(description.get(key), dict) else None
+                            for key in ("pc", "mobile")},
+            "image": image.get("url"), "category": category.get("codes"),
+            "dates": product.get("dates"), "productStatus": product.get("productStatus")},
+            ensure_ascii=False, sort_keys=True))
+    if not values:
+        return None
+    digest = hashlib.sha256(json.dumps(sorted(values), ensure_ascii=False).encode("utf-8")).hexdigest()
+    return f"v{FINGERPRINT_VERSION}:{digest}"
 
 
 def api_product_identity(product: dict) -> tuple[str, str | None, dict]:
@@ -361,6 +393,9 @@ class DanawaAdapter:
         name = re.fullmatch(r"(.+?)\s*:\s*다나와 가격비교", diagnostics["page_title"] or "")
         diagnostics["observed_category_name"] = name.group(1).strip() if name else None
         return listing_products(soup, limit), diagnostics
+
+    def listing_fingerprint(self, listings: list[dict]) -> str | None:
+        return listing_fingerprint(listings)
 
     def identity_error(self, html: str, listing: dict) -> str | None:
         try:
