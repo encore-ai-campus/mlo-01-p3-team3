@@ -161,6 +161,12 @@ class GalleryAssetsTests(unittest.TestCase):
             entry['product_id'] = '12'
             cached.write_text(json.dumps(entry), encoding='utf-8')
             self.assertEqual(audit_saved_assets(run, output)['saved_evidence_result'], 'failed')
+            # Right file identity, but the page itself is another product's.
+            entry.update(product_id='11', html=gallery('12')[0])
+            cached.write_text(json.dumps(entry), encoding='utf-8')
+            audit = audit_saved_assets(run, output)
+            self.assertEqual(audit['saved_evidence_result'], 'failed')
+            self.assertIn('identity mismatch', audit['errors'][0]['reason'])
 
     def test_audit_limit_writes_report_only(self):
         from product_collector.audit_assets import audit_saved_assets

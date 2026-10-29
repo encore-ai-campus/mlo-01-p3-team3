@@ -79,21 +79,48 @@ def extract_gallery(soup: BeautifulSoup, product: dict | None, product_url: str)
 
 def validate_identity(html: str, code: str) -> None:
     soup = BeautifulSoup(html, "html.parser")
+    page_codes = set()
     for node in soup.select('link[rel="canonical"][href], meta[property="og:url"][content]'):
         url = node.get("href") or node.get("content")
         observed = product_id_from_url(url)
         if observed and observed != code:
             raise ValueError(f"detail identity mismatch: requested {code}, observed {observed}")
-    # Explicit foreign Product identities must not supply another product's gallery.
+        page_codes.add(observed)
+    # The page's own URL confirming the product settles it: other Products are recommendations, and the
+    # gallery (#baseImage) belongs to the page. Without it nothing tells the primary Product apart, so an
+    # explicit foreign Product identity rejects the page. A seller sku is no ID.
+    if code in page_codes:
+        return
+    codes = set()
     for script in soup.select('script[type="application/ld+json"]'):
         try:
             products = [p for p in walk_objects(json.loads(script.get_text())) if has_type(p, "Product")]
         except (ValueError, TypeError):
             continue
-        codes = {product_id_from_url(p.get("url", "")) or str(p.get("productID") or p.get("sku") or "") for p in products}
-        codes.discard("")
-        if codes and code not in codes:
-            raise ValueError(f"detail Product identity mismatch: {code}")
+        for product in products:
+            urls = [product.get(key) for key in ("url", "@id") if isinstance(product.get(key), str)]
+            codes.add(next((c for c in map(product_id_from_url, urls) if c), "") or str(product.get("productID") or ""))
+    codes.discard("")
+    if codes and codes != {code}:
+        raise ValueError(f"detail Product identity mismatch: {code}")
+
+
+def api_product_identity(product: dict) -> tuple[str, str | None, dict]:
+    code = str(product.get("productCode", ""))
+    name = product.get("name") if isinstance(product.get("name"), dict) else {}
+    return code, text_value(name.get("full")) or text_value(name.get("product")), name
+
+
+def rejected_api_products(products: list[dict]) -> dict:
+    """Counted before filtering: a renamed field drops products before any saved record could show it."""
+    counts = {"invalid_code": 0, "missing_name": 0}
+    for product in products:
+        code, full_name, _ = api_product_identity(product)
+        if not re.fullmatch(r"[0-9]+", code):
+            counts["invalid_code"] += 1
+        elif not full_name:
+            counts["missing_name"] += 1
+    return counts
 
 
 def product_id_from_url(url: str) -> str:
@@ -284,7 +311,8 @@ class DanawaAdapter:
             products, _ = decode_products(response)
             rows = self.parse_api_products(products, category.limit)
             return rows, {"format": "action_products", "response_product_count": len(products),
-                          "parsed_product_count": len(rows), "observed_category_name":
+                          "parsed_product_count": len(rows), "rejected_products": rejected_api_products(products),
+                          "observed_category_name":
                           self.pagination_templates.categories[category.category_id].get('metadata', {}).get('category_name'),
                           "public_category_id": category.category_id,
                           "payload_category_code": payload[0]["categoryCode"], "page": page}
@@ -295,9 +323,7 @@ class DanawaAdapter:
     def parse_api_products(self, products: list[dict], limit: int | None) -> list[dict]:
         rows, seen = [], set()
         for product in products:
-            code = str(product.get("productCode", ""))
-            name = product.get("name") if isinstance(product.get("name"), dict) else {}
-            full_name = text_value(name.get("full")) or text_value(name.get("product"))
+            code, full_name, name = api_product_identity(product)
             if not re.fullmatch(r"[0-9]+", code) or not full_name or code in seen:
                 continue
             seen.add(code)
@@ -335,6 +361,13 @@ class DanawaAdapter:
         name = re.fullmatch(r"(.+?)\s*:\s*다나와 가격비교", diagnostics["page_title"] or "")
         diagnostics["observed_category_name"] = name.group(1).strip() if name else None
         return listing_products(soup, limit), diagnostics
+
+    def identity_error(self, html: str, listing: dict) -> str | None:
+        try:
+            validate_identity(html, str(listing["product_id"]))
+        except ValueError as exc:
+            return str(exc)
+        return None
 
     def needs_detail(self, listing: dict) -> bool:
         # Gallery URLs require a detail response even when POST supplies basic fields.
@@ -547,6 +580,8 @@ class DanawaAdapter:
                 field_status[field] = "detail_" + raw["detail_status"]
             elif raw["detail_status"] == "unrecognized":
                 field_status[field] = "parser_unrecognized"
+            elif raw["detail_status"] == "identity_mismatch":
+                field_status[field] = "detail_identity_mismatch"
             else:
                 field_status[field] = "not_found_in_extracted_content"
         return {"source": self.source, "product_id": raw["product_id"], "job_id": raw["job_id"],

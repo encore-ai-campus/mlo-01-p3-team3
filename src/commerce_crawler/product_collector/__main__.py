@@ -10,6 +10,7 @@ from .checkpoint import open_collection, export_checkpoint
 
 from .core import RequestClient, collect, load_categories, save_run, parse_limit
 from .danawa import DanawaAdapter
+from . import quality
 from .reprocess import reprocess_run
 from .pagination import PaginationTemplates
 
@@ -44,6 +45,20 @@ def show_progress(event):
         print(text, flush=True)
 
 
+def show_quality(report):
+    summary = report.get("quality")
+    if not summary:
+        return
+    head = "통과" if summary["passed"] else "상한 초과"
+    if not summary["judged"]:
+        head += f" (상세 {summary['received_details']}건, 표본 {quality.MIN_SAMPLE}건 미만은 상세 비율 판정 생략)"
+    print(f"[품질 관문:{summary['mode']}] {head}", flush=True)
+    for item in summary["violations"]:
+        print(f"[품질 초과] {item['signal']} {item['count']}/{item['total']} = {item['rate']} > {item['limit']}", flush=True)
+    for item in summary["alerts"]:
+        print(f"[품질 경보] {item['signal']} 카테고리 {item.get('category_id')}", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="다나와 카테고리·페이지 수집과 상품 갤러리 보강")
     parser.add_argument("--categories", type=Path, default=PROJECT_ROOT / "config/danawa_categories_71.json")
@@ -65,6 +80,8 @@ def main() -> int:
     parser.add_argument("--new-run", action="store_true", help="미완료 작업 재개 대신 새 작업 시작")
     parser.add_argument("--repair-files", action="store_true", help="개별 상품 JSON 전체 검사·복구. 외부 삭제·손상 시 사용하며 재개 준비가 오래 걸릴 수 있음")
     parser.add_argument("--export-from", type=Path, help="진행 중/중단된 체크포인트를 JSONL로 내보내기. 수집 요청 없음")
+    parser.add_argument("--quality-gate", choices=quality.MODES, default="warn",
+                        help="종료 품질 관문. warn은 기록만, enforce는 상한 초과 시 quality_failed")
     args = parser.parse_args()
     if args.export_from:
         print(json.dumps({"export": str(export_checkpoint(args.export_from)), "requests": 0}, ensure_ascii=False))
@@ -81,10 +98,11 @@ def main() -> int:
             parser.error(f"이미지 다운로드 의존성이 없습니다: {exc.name}. 실행에 사용하는 Python으로 python -m pip install -r requirements-collector.txt 를 먼저 실행해주세요.")
     if args.reprocess_from:
         try:
-            raw, normalized, report = reprocess_run(args.reprocess_from, args.output)
+            raw, normalized, report = reprocess_run(args.reprocess_from, args.output, args.quality_gate)
             destination = save_run(args.output, raw, normalized, report)
         except (ValueError, TypeError, OSError) as exc:
             parser.error(str(exc))
+        show_quality(report)
         print(json.dumps({"output": str(destination.resolve()), "products": len(raw), "requests": 0,
                           "result": report["result"], "execution_mode": report["execution_mode"]}, ensure_ascii=False))
         return 0 if report["result"] == "completed" else 2
@@ -122,6 +140,21 @@ def main() -> int:
                     collect_details=not args.listing_only, progress=show_progress, checkpoint=checkpoint,
                     listing_interval=args.listing_interval, workers=args.workers)
                 checkpoint.save([], report, client.attempts)
+                checkpoint.export()  # products.jsonl for the image step; the status stays running until delivery is decided
+                if args.download_images:
+                    fetcher = ImageFetcher(args.interval, args.timeout)
+                    try:
+                        media_report = localize_images(destination / "products.jsonl", destination / "media", fetcher,
+                                                       args.max_image_requests)
+                    finally:
+                        fetcher.close()
+                    verified = verify_assets(destination / "media/products_with_local_images.jsonl", destination / "media")
+                    report["image_download"] = {"result": media_report["result"], "verification": verified["result"]}
+                    if media_report["result"] != "completed" or verified["result"] != "completed":
+                        report["result"] = "partial"
+                quality.apply(report, normalized, args.quality_gate)
+                # One delivery status for the journal, checkpoint_state, run_report, prune and the exit code.
+                checkpoint.save([], report, client.attempts)
                 checkpoint.state(report['result'])
                 checkpoint.export()
             except KeyboardInterrupt:
@@ -133,19 +166,7 @@ def main() -> int:
                 raise
     finally:
         client.close()
-    if args.download_images:
-        fetcher = ImageFetcher(args.interval, args.timeout)
-        try:
-            media_report = localize_images(destination / "products.jsonl", destination / "media", fetcher,
-                                           args.max_image_requests)
-        finally:
-            fetcher.close()
-        verified = verify_assets(destination / "media/products_with_local_images.jsonl", destination / "media")
-        from .storage import atomic_json
-        report["image_download"] = {"result": media_report["result"], "verification": verified["result"]}
-        if media_report["result"] != "completed" or verified["result"] != "completed":
-            report["result"] = "partial"
-        atomic_json(destination / "run_report.json", report)
+    show_quality(report)
     print(json.dumps({"output": str(destination.resolve()), "products": len(raw),
                       "requests": report["request_count"], "result": report["result"]}, ensure_ascii=False))
     return 0 if report["result"] == "completed" else 2

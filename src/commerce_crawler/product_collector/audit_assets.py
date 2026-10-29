@@ -43,6 +43,8 @@ def audit_saved_assets(run: Path, output: Path, limit=None, report_path=None) ->
             if record["payload"]["listings"][0]["product_url"] != expected:
                 raise ValueError("saved detail/product ID/URL mismatch")
             apply_detail(record, adapter, saved["html"], saved["collected_at"])
+            if record["detail_status"] == "identity_mismatch":
+                raise ValueError(record["detail_error"])
             row = adapter.normalize(record)
             images = row.get("images") or []
             report["errors"].extend(image_errors(row))

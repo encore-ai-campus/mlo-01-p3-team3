@@ -111,7 +111,7 @@ extractor_version 0.4부터 상세 응답 HTML 전체는 payload가 아니라 �
 
 ## 상태와 보고서 읽기
 
-상세 상태는 not_requested, not_needed, ok, unrecognized, budget_exhausted, request_failed, disabled다. disabled는 --listing-only로 상세를 생략했다는 뜻이다. ok는 인식 가능한 상세 영역을 추출했다는 뜻이며 모든 필드를 확보했다는 뜻이 아니다.
+상세 상태는 not_requested, not_needed, ok, unrecognized, identity_mismatch, budget_exhausted, request_failed, disabled다. disabled는 --listing-only로 상세를 생략했다는 뜻이다. identity_mismatch는 받은 페이지의 canonical·og:url·JSON-LD Product가 요청한 상품이 아니라는 뜻이다. 이때 payload.detail에는 url·collected_at·status만 남기고 추출 필드는 비운다. 저장된 페이지는 그 참조로 `--reprocess-from` 때 다시 판정한다. 재개하면 해당 상품은 다시 요청한다. ok는 인식 가능한 상세 영역을 추출했다는 뜻이며 모든 필드를 확보했다는 뜻이 아니다.
 
 정규화 값의 field_status는 다음과 같다.
 
@@ -123,6 +123,7 @@ extractor_version 0.4부터 상세 응답 HTML 전체는 payload가 아니라 �
 | detail_request_failed | 상세 요청 실패 상태에서 필드 미확보 |
 | detail_disabled | 목록만 수집하는 설정으로 상세를 생략해 필드 미확보 |
 | parser_unrecognized | 상세 응답을 받았으나 추출 영역을 인식하지 못함 |
+| detail_identity_mismatch | 다른 상품의 페이지가 와서 추출하지 않음 |
 | not_found_in_extracted_content | 추출한 영역에서 해당 필드를 찾지 못함. 페이지 전체 부재를 보장하지 않음 |
 
 `run_report.field_coverage`는 최상위 정규화 필드가 null이 아닌 상품 수다. 예를 들어 listing_prices 배열은 있지만 내부 amount가 null이어도 해당 배열은 observed에 포함된다. 유효 금액·배송비 등 하위 값 확보율은 각 원소를 추가로 검사해야 한다. 이 집계를 전 필드 완전성이나 BRD 보존 확인율로 해석하지 않는다.

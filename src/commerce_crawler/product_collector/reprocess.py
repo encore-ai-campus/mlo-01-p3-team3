@@ -7,21 +7,30 @@ import re
 from pathlib import Path
 from uuid import uuid4
 
-from .core import field_coverage, payload_hash, utc_now
-from .danawa import DanawaAdapter, validate_identity
+from .core import field_coverage, payload_hash, run_result, utc_now
+from .danawa import DanawaAdapter
+from . import quality
 from .storage import load_detail_html, read_jsonl, save_detail_html
 
 
 def apply_detail(record, adapter, html, collected_at=None):
-    """Shared detail identity check and extraction for saved runs."""
-    validate_identity(html, str(record["product_id"]))
+    """Shared detail identity check and extraction for saved runs.
+
+    Another product's page keeps only its reference, as in a live collection."""
     listing = record["payload"]["listings"][0]
+    detail = {"url": listing["product_url"], "collected_at": collected_at or utc_now()}
+    error = adapter.identity_error(html, listing)
+    if error:
+        record["payload"]["detail"] = {**detail, "status": "identity_mismatch"}
+        record["detail_status"], record["detail_error"] = "identity_mismatch", error
+        return
     parsed = adapter.parse_detail(html, listing)
-    record["payload"]["detail"] = {"url": listing["product_url"], "collected_at": collected_at or utc_now(), **parsed}
+    record["payload"]["detail"] = {**detail, **parsed}
     record["detail_status"], record["detail_error"] = parsed["status"], None
 
 
-def reprocess_run(directory: Path, output_root: Path | None = None) -> tuple[list[dict], list[dict], dict]:
+def reprocess_run(directory: Path, output_root: Path | None = None,
+                  quality_mode: str = "warn") -> tuple[list[dict], list[dict], dict]:
     """output_root: where save_run will write this result. Pages embedded in a pre-0.4 payload are
     then kept in its details/, since the reprocessed payload no longer carries them."""
     original = json.loads((directory / "run_report.json").read_text(encoding="utf-8"))
@@ -78,7 +87,7 @@ def reprocess_run(directory: Path, output_root: Path | None = None) -> tuple[lis
         record["extractor_version"] = "0.4"
     normalized = [adapter.normalize(record) for record in raw]
     report.update(finished_at=utc_now(), product_count=len(raw), field_coverage=field_coverage(normalized),
-                  result="partial" if report["errors"] or any(r["detail_status"] in {
-                      "budget_exhausted", "request_failed", "unrecognized"} for r in raw)
-                  or any(c["status"] == "not_requested" for c in report["categories"]) else "completed")
+                  result=run_result(report, raw, any(c["status"] == "not_requested" for c in report["categories"])))
+    # Quality is judged again on the new extraction; the original run's verdict is not carried over.
+    quality.apply(report, normalized, quality_mode)
     return raw, normalized, report

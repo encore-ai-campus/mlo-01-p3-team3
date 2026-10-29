@@ -120,6 +120,41 @@ python -m product_collector.prune --output <수집기 --output 경로> --apply  
 
 이미 MongoDB에 적재된 원천 문서(0.3 이하 수집분, payload에 HTML 포함)의 정리는 별도 결정 사항이다.
 
+## 실행 결과와 품질 관문
+
+실행 결과(`run_report.result`)는 하나의 값이다. `checkpoint_state.json`의 상태, 종료 코드(completed만 0), prune이 모두 이 값을 본다. 적재 대상은 `completed`뿐이다.
+
+| 값 | 뜻 |
+|---|---|
+| `completed` | 목록·상세·(요청 시) 이미지가 모두 끝났고, 상세 실패가 상한 안이며, enforce 모드에서 품질 관문도 통과 |
+| `partial` | 목록 오류, 요청 한도, 미요청 카테고리가 있거나, 상세 실패가 상한을 넘거나, 이미지 다운로드·검증이 완료되지 않음 |
+| `quality_failed` | 완결은 됐지만 enforce 모드에서 품질 상한을 넘음 |
+
+`--download-images`를 쓰면 이미지 단계까지 끝난 뒤 결과를 확정한다. 그 전까지 상태는 `running`이다.
+
+상세 실패(request_failed·unrecognized·identity_mismatch)는 상품 하나로 실행 전체를 막지 않고 비율로 판정한다. 분모는 상세를 요청한 상품이다. 상한은 `quality.FAILURE_LIMITS`(요청 실패 1%, 인식 실패 1%, 다른 상품 페이지 0.5%)이고 warn 모드에서도 적용된다. 상세를 요청한 상품이 50건 미만이면 하나만 실패해도 partial이다. 결과는 `run_report.detail_failures`(건수, 상한, `failed_product_ids`)에 남는다.
+
+**적재 계약:** completed 실행에도 상세가 실패한 상품이 상한 안에서 들어 있다. 그런 상품은 `detail_status`가 ok가 아니고 상세 필드가 비어 있다. 적재·게시 쪽은 `detail_status`가 `ok`(또는 `not_needed`)가 아닌 상품을 빼거나 상세 미확보로 표시해야 한다. 현재 파이프라인 Silver는 `detail_status == "ok"`일 때만 상세를 성공으로 본다. 다만 이런 상품을 게시에서 제외하는 규칙은 아직 없다.
+
+품질 관문(`product_collector/quality.py`)은 사이트 구조 변경을 실행 종료 시점에 잡는다. 추가 요청 없이 이미 추출한 값으로 `run_report.quality`를 남긴다.
+
+- 구조 신호 비율의 분모는 페이지를 받은 상세(ok·unrecognized·identity_mismatch)다.
+- 상세 구조 신호: 정규화 이미지 없음, 이름·값이 있는 규격 없음, 가격 있는 판매 제안 없음. 갤러리 장수 중앙값도 기록한다.
+- 목록 신호: POST 응답 상품 중 상품 코드나 이름이 없어 버린 비율(필터링 전 응답 기준)
+- 페이지를 받은 상세가 50건 미만이면 구조 신호 비율은 기록만 하고 판정하지 않는다. 카테고리별로 20건 이상이면 구조·상세 실패 상한으로 경보를 남긴다. 반복 페이지로 끝난 카테고리와 첫 페이지가 빈 카테고리도 경보다.
+- 상한은 `quality.LIMITS`에 있다. 정상 실행으로 보정하기 전의 값이다.
+
+`--quality-gate warn`(기본)은 기록과 출력만 한다. `enforce`는 상한을 넘은 completed 실행을 `quality_failed`로 바꾼다. `off`는 기록하지 않는다. partial은 품질과 무관하게 partial로 남는다.
+
+구조 변경으로 실패했을 때의 복구 순서는 다음과 같다.
+
+1. 원래 실행을 재개해 수집을 마친다.
+2. 파서를 고친다.
+3. `--reprocess-from <실행>`으로 저장된 `details/`에서 전체를 다시 추출한다. 새 결과에 같은 관문을 다시 적용한다.
+4. 그 결과만 넘긴다.
+
+다른 상품의 페이지를 받은 상품이나 버려진 목록 상품은 재추출로 복구할 수 없으므로 재수집한다.
+
 ## 중단·재개·내보내기
 
 `Ctrl+C` 후 저장 완료와 프로세스 종료를 기다린다. 동일 설정으로 다시 실행하면 미완료 작업을 자동 선택하며, 특정 작업은 다음처럼 지정한다.

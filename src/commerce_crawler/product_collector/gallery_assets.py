@@ -94,6 +94,13 @@ def enrich_saved_run(run: Path, output: Path, client, progress=None, cache_dir: 
                 html = client.get(url)
             collected_at = (saved or detail).get("collected_at") or utc_now()
             apply_detail(record, adapter, html, collected_at)
+            if record["detail_status"] == "identity_mismatch":
+                # Never cache another product's page, and drop one cached earlier: a later run requests it again.
+                report["errors"].append({"product_id": code, "error": record["detail_error"]})
+                path.unlink(missing_ok=True)
+                if cache_dir is not None:
+                    (cache_dir / "details" / f"{code}.json").unlink(missing_ok=True)
+                continue
             evidence = {"product_id": code, "url": url, "html": html, "collected_at": collected_at}
             atomic_json(path, evidence)
             if cache_dir is not None:

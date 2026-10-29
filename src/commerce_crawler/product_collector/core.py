@@ -15,6 +15,7 @@ from typing import Any, Protocol
 from urllib.parse import urlparse
 from uuid import uuid4
 
+from . import quality
 from .storage import atomic_json, detail_html_path, save_detail_html, write_jsonl
 
 import requests
@@ -69,6 +70,16 @@ def field_coverage(rows: list[dict]) -> dict:
     fields = sorted({field for row in rows for field in row.get("field_status", {})})
     return {field: {"observed": sum(row.get(field) is not None for row in rows), "total": len(rows)}
             for field in fields}
+
+
+def run_result(report: dict, raw: list[dict], categories_incomplete: bool) -> str:
+    """Completeness: listing errors, budget stops or missing categories make a partial run.
+
+    Failed details only do so above their rates; below them the loader leaves out those products."""
+    report["detail_failures"] = quality.detail_failures(raw)
+    return "partial" if (categories_incomplete or any(e.get("stage") != "detail" for e in report["errors"])
+                         or any(r["detail_status"] == "budget_exhausted" for r in raw)
+                         or not report["detail_failures"]["passed"]) else "completed"
 
 
 def limit_reached(current: int, maximum: int | None) -> bool:
@@ -389,10 +400,17 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             if checkpoint:
                 # Saved before the record so a resumed run that skips this detail still has its HTML.
                 save_detail_html(checkpoint.directory, record["product_id"], listing["product_url"], html, collected_at)
-            record["payload"]["detail"] = {"url": listing["product_url"], "collected_at": collected_at,
+            identity_error = adapter.identity_error(html, listing)
+            if identity_error:
+                # Another product's page: keep only the reference to the saved page so a reprocess can re-check it.
+                record["payload"]["detail"] = {"url": listing["product_url"], "collected_at": collected_at,
+                                               "status": "identity_mismatch"}
+                record["detail_status"], record["detail_error"] = "identity_mismatch", identity_error
+            else:
+                record["payload"]["detail"] = {"url": listing["product_url"], "collected_at": collected_at,
                                                **adapter.parse_detail(html, listing)}
-            record["detail_status"] = record["payload"]["detail"]["status"]
-            record["detail_error"] = None
+                record["detail_status"] = record["payload"]["detail"]["status"]
+                record["detail_error"] = None
         except BudgetExhausted as exc:
             record["detail_status"] = "budget_exhausted"
             report["stop_reason"] = str(exc)
@@ -412,10 +430,8 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
         normalized.append(adapter.normalize(record))
     report.update(finished_at=utc_now(), product_count=len(raw), request_count=len(previous_requests) + len(client.attempts),
                   requests=previous_requests + list(client.attempts), field_coverage=field_coverage(normalized),
-                  result="partial" if report["errors"] or any(
-                      r["detail_status"] in {"budget_exhausted", "request_failed", "unrecognized"} for r in raw
-                  ) or any(c["status"] == "not_requested" or c.get("reason") == "request_limit"
-                           for c in report["categories"]) else "completed")
+                  result=run_result(report, raw, any(c["status"] == "not_requested" or c.get("reason") == "request_limit"
+                                                     for c in report["categories"])))
     persist()
     return raw, normalized, report
 
