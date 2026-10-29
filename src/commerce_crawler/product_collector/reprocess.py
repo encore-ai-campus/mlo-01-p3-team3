@@ -1,16 +1,78 @@
-"""Repair extraction from saved HTML without issuing any HTTP request."""
+"""Repair extraction from saved HTML without issuing any HTTP request.
+
+Records are re-extracted one at a time into staged files, so a whole run never sits in memory."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 import copy
 import json
 import re
+import shutil
+import tempfile
+import weakref
 from pathlib import Path
 from uuid import uuid4
 
-from .core import field_coverage, payload_hash, run_result, utc_now
+from .core import FieldCoverage, payload_hash, raw_projection, run_result, utc_now
 from .danawa import DanawaAdapter
 from . import quality
-from .storage import load_detail_html, read_jsonl, save_detail_html
+from .storage import load_detail_html, save_detail_html
+
+
+class StagedRecords(Sequence):
+    """Rows of a staged jsonl file, read back one at a time. save_run streams them to the run.
+
+    projection: the small per-product values the report was computed from.
+    The staging directory is removed when the last sequence that uses it is gone."""
+
+    def __init__(self, path: Path, projection: list, owner):
+        self.path, self.projection, self._owner = path, projection, owner
+        self._offsets = None
+
+    def _positions(self):
+        if self._offsets is None:
+            self._offsets, offset = [], 0
+            with self.path.open("rb") as stream:
+                for line in stream:
+                    if line.strip():
+                        self._offsets.append(offset)
+                    offset += len(line)
+        return self._offsets
+
+    def __len__(self):
+        return len(self.projection)
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[i] for i in range(*index.indices(len(self)))]
+        offset = self._positions()[index]
+        with self.path.open("rb") as stream:
+            stream.seek(offset)
+            return json.loads(stream.readline().decode("utf-8"))
+
+    def __iter__(self):
+        with self.path.open(encoding="utf-8") as stream:
+            for line in stream:
+                if line.strip():
+                    yield json.loads(line)
+
+
+class _Staging:
+    def __init__(self, parent: Path | None, name: str):
+        if parent is not None:
+            self.directory = Path(parent) / f".staging-{name}"
+            self.directory.mkdir(parents=True)
+        else:
+            self.directory = Path(tempfile.mkdtemp(prefix="reprocess-"))
+        self.cleanup = weakref.finalize(self, shutil.rmtree, str(self.directory), True)
+
+
+def saved_records(path: Path):
+    """Rows of a saved jsonl file, one at a time."""
+    with Path(path).open(encoding="utf-8-sig") as stream:
+        for line in stream:
+            if line.strip():
+                yield json.loads(line)
 
 
 def apply_detail(record, adapter, html, collected_at=None):
@@ -30,11 +92,12 @@ def apply_detail(record, adapter, html, collected_at=None):
 
 
 def reprocess_run(directory: Path, output_root: Path | None = None,
-                  quality_mode: str = "warn") -> tuple[list[dict], list[dict], dict]:
+                  quality_mode: str = "warn") -> tuple[StagedRecords, StagedRecords, dict]:
     """output_root: where save_run will write this result. Pages embedded in a pre-0.4 payload are
-    then kept in its details/, since the reprocessed payload no longer carries them."""
+    then kept in its details/, since the reprocessed payload no longer carries them.
+
+    The results are staged files (beside output_root, else in the temp directory) read back on demand."""
     original = json.loads((directory / "run_report.json").read_text(encoding="utf-8"))
-    raw = read_jsonl(directory / "product_raw.jsonl")
     adapter = DanawaAdapter()
     report = copy.deepcopy(original)
     report.update(job_id=str(uuid4()), original_run_id=original["job_id"], started_at=utc_now(),
@@ -50,7 +113,7 @@ def reprocess_run(directory: Path, output_root: Path | None = None,
         name = re.fullmatch(r"(.+?)\s*:\s*다나와 가격비교", title or "")
         category["observed_category_name"] = name.group(1).strip() if name else None
         category_names[category["category_id"]] = category["observed_category_name"]
-    for record in raw:
+    def reprocessed(record):
         if record["source"] != adapter.source:
             raise ValueError("only Danawa saved runs can be reprocessed")
         record["job_id"] = report["job_id"]
@@ -85,10 +148,28 @@ def reprocess_run(directory: Path, output_root: Path | None = None,
         record["payload_hash"] = payload_hash(record["payload"])
         record["schema_version"] = "1.2"
         record["extractor_version"] = "0.4"
-    normalized = [adapter.normalize(record) for record in raw]
-    report.update(finished_at=utc_now(), product_count=len(raw), field_coverage=field_coverage(normalized),
-                  result=run_result(report, raw, any(c["status"] == "not_requested" for c in report["categories"]),
+        return record
+
+    staging = _Staging(output_root, report["job_id"])
+    raw_path, normalized_path = staging.directory / "product_raw.jsonl", staging.directory / "products.jsonl"
+    coverage, raw_rows, quality_rows = FieldCoverage(), [], []
+    try:
+        with raw_path.open("w", encoding="utf-8", newline="\n") as raw_out, \
+                normalized_path.open("w", encoding="utf-8", newline="\n") as normalized_out:
+            for record in saved_records(directory / "product_raw.jsonl"):
+                record = reprocessed(record)
+                normalized = adapter.normalize(record)
+                raw_out.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n")
+                normalized_out.write(json.dumps(normalized, ensure_ascii=False, allow_nan=False) + "\n")
+                coverage.add(normalized)
+                raw_rows.append(raw_projection(record))
+                quality_rows.append(quality.project(normalized))
+    except BaseException:
+        staging.cleanup()
+        raise
+    report.update(finished_at=utc_now(), product_count=len(raw_rows), field_coverage=coverage.result(),
+                  result=run_result(report, raw_rows, any(c["status"] == "not_requested" for c in report["categories"]),
                                     include_reused=True))
     # Quality is judged again on the new extraction; the original run's verdict is not carried over.
-    quality.apply(report, normalized, quality_mode)
-    return raw, normalized, report
+    quality.apply(report, quality_rows, quality_mode)
+    return StagedRecords(raw_path, raw_rows, staging), StagedRecords(normalized_path, quality_rows, staging), report

@@ -221,8 +221,9 @@ def main() -> int:
                                                                                 "store_checks", "store_errors")}}
                     if media_report["result"] != "completed" or verified["result"] != "completed":
                         report["result"] = "partial"
-                quality.apply(report, normalized, args.quality_gate,
-                              {str(r["product_id"]) for r in raw if r.get("detail_reused_from")})
+                # The per-product values collect kept; the records themselves stay in the journal.
+                quality.apply(report, getattr(normalized, "projection", normalized), args.quality_gate,
+                              {str(r["product_id"]) for r in getattr(raw, "projection", raw) if r.get("detail_reused_from")})
                 # One delivery status for the journal, checkpoint_state, run_report, prune and the exit code.
                 checkpoint.save([], report, client.attempts)
                 checkpoint.state(report['result'])

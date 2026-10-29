@@ -1,6 +1,7 @@
 """Download observed product galleries; preserve identity, bytes and resume history."""
 import argparse
 import hashlib
+import json
 import math
 import re
 import time
@@ -17,7 +18,7 @@ from .core import utc_now, limit_reached, parse_limit
 from .storage import atomic_json, append_record, history, link_file, read_jsonl, write_jsonl
 from .validation import cached_valid, stored_metadata, verified_image
 from .image_store import object_key
-from .media_resume import ValidationMemo, download_history, read_products
+from .media_resume import ValidationMemo, download_history
 from .checkpoint import writer_lock
 
 
@@ -179,18 +180,40 @@ def seed_index(journal: Path, sources, destination: Path, stack) -> list[str]:
 STORE_ERROR_LIMIT = 20  # consecutive HEAD errors before the run stops asking object storage
 
 
+def scan_products(path: Path):
+    """(rows, digest): products of a jsonl file one at a time, and the sha256 of the bytes read so far."""
+    digest = hashlib.sha256()
+
+    def rows():
+        with Path(path).open('rb') as stream:
+            for line in stream:
+                digest.update(line)
+                if line.strip():
+                    yield json.loads(line.decode('utf-8-sig'))
+    return rows(), digest
+
+
+def check_product(product: dict) -> None:
+    if not all(re.fullmatch(r"[A-Za-z0-9_-]+", str(product.get(k, ""))) for k in ("source", "product_id")):
+        raise ValueError("unsafe source/product_id")
+    for category in product.get('categories') or []:
+        if not isinstance(category, dict) or not isinstance(category.get('category_id'), str) or not re.fullmatch(r'[0-9]+', category['category_id']):
+            raise ValueError('category_id must be a numeric string')
+
+
 def _localize_images(products_path, destination, store, fetcher, max_requests,
                      progress, retry_failed, progress_every, memo, export_interval,
                      retry_transient=False, index=None, object_store=None):
-    products, input_hash = read_products(products_path)
-    for product in products:
-        if not all(re.fullmatch(r"[A-Za-z0-9_-]+", str(product.get(k, ""))) for k in ("source", "product_id")):
-            raise ValueError("unsafe source/product_id")
-        for category in product.get('categories') or []:
-            if not isinstance(category, dict) or not isinstance(category.get('category_id'), str) or not re.fullmatch(r'[0-9]+', category['category_id']):
-                raise ValueError('category_id must be a numeric string')
-    plans = [product_images(p) for p in products]
-    urls = list(dict.fromkeys(e["url"] for plan in plans for e in plan))
+    # One pass for the URL list and the input hash; products are read again when the manifest is written.
+    rows, digest = scan_products(products_path)
+    urls, product_count, without_gallery = {}, 0, 0
+    for product in rows:
+        check_product(product)
+        plan = product_images(product)
+        product_count += 1
+        without_gallery += not plan
+        urls.update(dict.fromkeys(e["url"] for e in plan))
+    urls, input_hash = list(urls), digest.hexdigest()
     destination.mkdir(parents=True, exist_ok=True)
     # One blob store per cache; output only contains named product links.
     (store / "images").mkdir(parents=True, exist_ok=True)
@@ -201,7 +224,7 @@ def _localize_images(products_path, destination, store, fetcher, max_requests,
     shared_journal = index / "image_downloads.jsonl" if index is not None else None
     shared = download_history(shared_journal) if index is not None else {}
     current = {url: {"url": url, "status": "pending", "local_path": None} for url in urls}
-    report = {"started_at": utc_now(), "product_count": len(products), "unique_urls": len(urls),
+    report = {"started_at": utc_now(), "product_count": product_count, "unique_urls": len(urls),
               "requests": 0, "cached": 0, "downloaded": 0, "failed": 0, "budget_exhausted": 0}
     stopped = False
     run_id = str(uuid4())
@@ -210,6 +233,9 @@ def _localize_images(products_path, destination, store, fetcher, max_requests,
                   index=str(index) if index is not None else None, object_store=object_store is not None,
                   stored=0, store_checks=0, store_missing=0, store_mismatch=0, store_errors=0)
     store_errors_in_row = 0
+    # Without storage settings no image may be "stored": before the pipeline loads it,
+    # a stored image would arrive as an image without bytes.
+    store_configured = object_store is not None
 
     def in_storage(meta):
         nonlocal object_store, store_errors_in_row
@@ -259,53 +285,74 @@ def _localize_images(products_path, destination, store, fetcher, max_requests,
             progress(dict(report, processed=processed, total=len(urls)))
 
     def checkpoint():
-        rows = []
-        for product, plan in zip(products, plans):
-            images = []
-            for ordinal, observed in enumerate(plan, 1):
-                entry = current[observed["url"]]
-                image = {**observed, **entry, "source": product["source"], "product_id": product["product_id"],
-                         "filename": None, "local_path": None, "category_paths": {}}
-                image.pop("storage_path", None)  # compatibility input must not duplicate output paths
-                if entry["status"] == "downloaded":
-                    key = hashlib.sha256(entry["url"].encode()).hexdigest()[:12]
-                    name = f"{product['source']}_{product['product_id']}_{ordinal:03d}_{key}.{entry['extension']}"
-                    codes = list(dict.fromkeys(c['category_id'] for c in product.get('categories') or [])) or ['_uncategorized']
-                    for code in codes:
-                        relative = Path('categories') / code / product['source'] / str(product['product_id']) / name
-                        source, target = store / entry['local_path'], destination / relative
-                        # Existing hard links already point to the verified bytes.
-                        if not (target.is_file() and source.samefile(target)):
-                            link_file(source, target, entry['sha256'])
-                        image['category_paths'][code] = relative.as_posix()
-                    image.update(filename=name, local_path=next(iter(image['category_paths'].values())))
-                images.append(image)
-            row = {k: v for k, v in product.items() if k not in {"images", "image_urls", "local_images", "storage_path"}}
-            for key in ("provenance", "field_status"):
-                if isinstance(row.get(key), dict):
-                    row[key] = {k: v for k, v in row[key].items() if k not in {"image_urls", "local_images"}}
-            rows.append({**row, "schema_version": "1.2", "images": images,
-                         "image_download_status": "completed" if images and all(e["status"] in DELIVERED for e in images)
-                                                  else "partial" if images else "gallery_missing"})
-        # Creating a hard link changes NTFS ChangeTime on the source blob.
-        # Refresh the proof only after links are complete, before publishing.
-        checked = set()
-        for entry in current.values():
-            if entry['status'] != 'downloaded' or entry['local_path'] in checked:
-                continue
-            if not memo.valid(entry):
-                raise ValueError('image changed during category linkage')
-            checked.add(entry['local_path'])
-        write_jsonl(destination / "products_with_local_images.jsonl", rows)
+        # The manifest is written while products.jsonl is read again, one product at a time. The
+        # bytes read must be the ones the URL list came from, or the manifest is not published.
+        target = destination / "products_with_local_images.jsonl"
+        counts = dict(products_with_local_images=0, products_complete=0, products_with_stored_images=0)
+
+        def manifest():
+            products, reread = scan_products(products_path)
+            for product in products:
+                row = manifest_row(product)
+                counts["products_with_local_images"] += any(e["status"] == "downloaded" for e in row["images"])
+                counts["products_complete"] += row["image_download_status"] == "completed"
+                counts["products_with_stored_images"] += any(e["status"] == "stored" for e in row["images"])
+                yield row
+            # Raised here, before write_jsonl replaces the published file.
+            if reread.hexdigest() != input_hash:
+                raise ValueError("products.jsonl changed during the image step")
+            # Creating a hard link changes NTFS ChangeTime on the source blob.
+            # Refresh the proof only after links are complete, before publishing.
+            checked = set()
+            for entry in current.values():
+                if entry['status'] != 'downloaded' or entry['local_path'] in checked:
+                    continue
+                if not memo.valid(entry):
+                    raise ValueError('image changed during category linkage')
+                checked.add(entry['local_path'])
+
+        try:
+            write_jsonl(target, manifest())
+        except BaseException:
+            target.with_suffix(target.suffix + ".tmp").unlink(missing_ok=True)
+            raise
         report["full_exports"] += 1
-        report.update(products_with_local_images=sum(any(e["status"] == "downloaded" for e in r["images"]) for r in rows),
-                      products_complete=sum(r["image_download_status"] == "completed" for r in rows),
-                      products_with_stored_images=sum(any(e["status"] == "stored" for e in r["images"]) for r in rows),
-                      products_without_gallery=sum(not plan for plan in plans),
+        report.update(**counts, products_without_gallery=without_gallery,
                       unique_files=len({e["sha256"] for e in current.values() if e.get("status") == "downloaded"}),
                       updated_at=utc_now())
-        report["result"] = "completed" if products and report["products_complete"] == len(products) else "partial"
+        report["result"] = "completed" if product_count and report["products_complete"] == product_count else "partial"
         atomic_json(destination / "download_report.json", report)
+
+    def manifest_row(product):
+        check_product(product)
+        images = []
+        for ordinal, observed in enumerate(product_images(product), 1):
+            if observed["url"] not in current:
+                raise ValueError("products.jsonl changed during the image step")
+            entry = current[observed["url"]]
+            image = {**observed, **entry, "source": product["source"], "product_id": product["product_id"],
+                     "filename": None, "local_path": None, "category_paths": {}}
+            image.pop("storage_path", None)  # compatibility input must not duplicate output paths
+            if entry["status"] == "downloaded":
+                key = hashlib.sha256(entry["url"].encode()).hexdigest()[:12]
+                name = f"{product['source']}_{product['product_id']}_{ordinal:03d}_{key}.{entry['extension']}"
+                codes = list(dict.fromkeys(c['category_id'] for c in product.get('categories') or [])) or ['_uncategorized']
+                for code in codes:
+                    relative = Path('categories') / code / product['source'] / str(product['product_id']) / name
+                    source, target = store / entry['local_path'], destination / relative
+                    # Existing hard links already point to the verified bytes.
+                    if not (target.is_file() and source.samefile(target)):
+                        link_file(source, target, entry['sha256'])
+                    image['category_paths'][code] = relative.as_posix()
+                image.update(filename=name, local_path=next(iter(image['category_paths'].values())))
+            images.append(image)
+        row = {k: v for k, v in product.items() if k not in {"images", "image_urls", "local_images", "storage_path"}}
+        for key in ("provenance", "field_status"):
+            if isinstance(row.get(key), dict):
+                row[key] = {k: v for k, v in row[key].items() if k not in {"image_urls", "local_images"}}
+        return {**row, "schema_version": "1.2", "images": images,
+                "image_download_status": "completed" if images and all(e["status"] in DELIVERED for e in images)
+                                         else "partial" if images else "gallery_missing"}
 
     queue = []
     prepared = False
@@ -336,7 +383,7 @@ def _localize_images(products_path, destination, store, fetcher, max_requests,
                     # A run started before the index existed: its downloads become known to later runs.
                     shared[url] = {k: v for k, v in entry.items() if k not in {'local_path', 'last_success'}}
                     append_record(shared_journal, shared[url])
-            elif entry.get('status') == 'stored' and stored_metadata(entry):
+            elif store_configured and entry.get('status') == 'stored' and stored_metadata(entry):
                 current[url] = entry.copy()  # this run already found it in storage (resume)
                 report['stored'] += 1
             elif entry.get('status') == 'failed' and not retry_failed and (

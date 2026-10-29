@@ -8,6 +8,7 @@ import math
 import re
 import time
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -66,10 +67,122 @@ def payload_hash(payload: dict) -> str:
     return hashlib.sha256(json.dumps(content, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def field_coverage(rows: list[dict]) -> dict:
-    fields = sorted({field for row in rows for field in row.get("field_status", {})})
-    return {field: {"observed": sum(row.get(field) is not None for row in rows), "total": len(rows)}
-            for field in fields}
+class FieldCoverage:
+    """field_coverage accumulated one row at a time."""
+
+    def __init__(self):
+        self.fields, self.observed, self.total = set(), {}, 0
+
+    def add(self, row: dict) -> None:
+        self.total += 1
+        self.fields.update(row.get("field_status", {}))
+        for field, value in row.items():
+            if value is not None:
+                self.observed[field] = self.observed.get(field, 0) + 1
+
+    def result(self) -> dict:
+        return {field: {"observed": self.observed.get(field, 0), "total": self.total}
+                for field in sorted(self.fields)}
+
+
+def field_coverage(rows) -> dict:
+    coverage = FieldCoverage()
+    for row in rows:
+        coverage.add(row)
+    return coverage.result()
+
+
+def raw_projection(raw: dict) -> dict:
+    """What run_result, detail_failures and the reuse summary read of a raw record."""
+    return {"product_id": raw["product_id"], "detail_status": raw["detail_status"],
+            "detail_reused_from": raw.get("detail_reused_from")}
+
+
+class StoredRecords(Sequence):
+    """Records of a checkpointed run, read back one at a time instead of held in memory.
+
+    projection: the small per-product values the run's aggregates were computed from."""
+
+    def __init__(self, checkpoint, keys: list, part: str, projection: list):
+        self.checkpoint, self.keys, self.projection = checkpoint, keys, projection
+        self._load = checkpoint.load if part == "raw" else checkpoint.load_normalized
+
+    def __len__(self):
+        return len(self.keys)
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self._load(key) for key in self.keys[index]]
+        return self._load(self.keys[index])
+
+    def __iter__(self):
+        return (self._load(key) for key in self.keys)
+
+
+class MemoryRecords:
+    """A run without a checkpoint (tests, saved-run tools): records stay plain objects."""
+
+    def __init__(self):
+        self.records = {}
+
+    def __len__(self):
+        return len(self.records)
+
+    def __contains__(self, key):
+        return key in self.records
+
+    def keys(self):
+        return list(self.records)
+
+    def detail_status(self, key):
+        return self.records[key]["detail_status"]
+
+    def category_ids(self, key):
+        return tuple(c["category_id"] for c in self.records[key]["categories"])
+
+    def load(self, key):
+        return self.records[key]
+
+    def add(self, key, record):
+        self.records[key] = record
+
+    def save(self, changed, report, attempts):
+        pass
+
+
+class CheckpointRecords:
+    """The checkpoint's index plus the products created on the page being merged.
+
+    A product is read when it is about to change and saved before the next one is read,
+    so memory holds one page of records, not the whole collection."""
+
+    def __init__(self, checkpoint):
+        self.checkpoint, self.pending = checkpoint, {}
+
+    def __len__(self):
+        return len(self.checkpoint) + len(self.pending)
+
+    def __contains__(self, key):
+        return key in self.pending or key in self.checkpoint
+
+    def keys(self):
+        return self.checkpoint.keys() + list(self.pending)
+
+    def detail_status(self, key):
+        return self.checkpoint.detail_status(key)
+
+    def category_ids(self, key):
+        return self.checkpoint.category_ids(key)
+
+    def load(self, key):
+        return self.pending[key] if key in self.pending else self.checkpoint.load(key)
+
+    def add(self, key, record):
+        self.pending[key] = record
+
+    def save(self, changed, report, attempts):
+        self.checkpoint.save(changed, report, attempts)
+        self.pending.clear()
 
 
 def run_result(report: dict, raw: list[dict], categories_incomplete: bool, include_reused: bool = False) -> str:
@@ -99,6 +212,22 @@ class BudgetExhausted(Exception):
     pass
 
 
+class AttemptLog(list):
+    """Request attempts, plus which of them are finished (all fields final).
+
+    The marks are kept beside the entries so the saved request log has no extra field."""
+
+    def __init__(self):
+        super().__init__()
+        self._finished = set()
+
+    def mark_finished(self, index: int) -> None:
+        self._finished.add(index)
+
+    def finished(self, index: int) -> bool:
+        return index in self._finished
+
+
 class RequestClient:
     """One get attempt = one budget unit, including failures. No redirects/retries."""
 
@@ -118,7 +247,7 @@ class RequestClient:
         })
         self.clock, self.sleep = clock, sleep
         self.last_started: float | None = None
-        self.attempts: list[dict] = []
+        self.attempts: AttemptLog = AttemptLog()
         self.halt_reason: str | None = None
         self.progress = progress
         self._request_lock = threading.Lock()
@@ -150,10 +279,19 @@ class RequestClient:
             self.last_started = self.clock()
             attempt = {"method": method, "url": url, "requested_at": utc_now(), "status_code": None, "error": None}
             if payload is not None:
-                attempt["payload"] = payload
+                attempt["payload"] = copy.deepcopy(payload)  # the log keeps what was sent
             self.attempts.append(attempt)
+            index = len(self.attempts) - 1
             if self.progress:
                 self.progress({"stage": "request", "number": len(self.attempts), "method": method, "url": url})
+        try:
+            return self._send(attempt, method, url, payload, headers)
+        finally:
+            # After every field of the attempt is final; a checkpoint then stops re-encoding it.
+            with self._request_lock:
+                self.attempts.mark_finished(index)
+
+    def _send(self, attempt: dict, method: str, url: str, payload, headers) -> str:
         session = self._thread_session()
         try:
             if method == "POST":
@@ -220,7 +358,9 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
         raise ValueError("workers must be a positive integer")
     detail_interval = client.interval
     adapter.validate_categories(categories)
-    records, previous = checkpoint.restore(copy_records=False) if checkpoint else ({}, {})
+    # Products are read when they change and saved right away; only the checkpoint's index stays.
+    records = CheckpointRecords(checkpoint) if checkpoint else MemoryRecords()
+    previous = checkpoint.current_report() if checkpoint else {}
     previous_requests = previous.get("requests", [])
     previous_categories = {c["category_id"]: c for c in previous.get("categories", [])}
     job_id = checkpoint.job_id if checkpoint else str(uuid4())
@@ -231,7 +371,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
                          "listing_workers": workers,
                          "collect_details": collect_details},
               "categories": [], "errors": [], "stop_reason": None}
-    if previous.get('categories') or records:
+    if previous.get('categories') or len(records):
         report["resumed_at"] = utc_now()
         report["started_at"] = previous.get("started_at", report["started_at"])
         report["previous_errors"] = previous.get("previous_errors", []) + previous.get("errors", [])
@@ -239,7 +379,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
     def persist(changed=()):
         if checkpoint:
             report["product_count"] = len(records)
-            checkpoint.save(changed, report, client.attempts)
+            records.save(changed, report, client.attempts)
 
     for category in categories:
         outcome = copy.deepcopy(previous_categories.get(category.category_id))
@@ -261,7 +401,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             continue
         outcome["pages"] = [p for p in outcome["pages"] if p["status"] in {"ok", "empty"}]
         outcome.pop("reason", None)
-        seen = {r["product_id"] for r in records.values() if any(c["category_id"] == category.category_id for c in r["categories"])}
+        seen = {key[1] for key in records.keys() if category.category_id in records.category_ids(key)}
         next_page = max((p["page"] for p in outcome["pages"]), default=category.start_page - 1) + 1
         state = {"category": category, "index": index, "outcome": outcome, "seen": seen,
                  "page": next_page, "done": False}
@@ -329,14 +469,14 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
                             if key not in records:
                                 if limit_reached(len(records), total_limit):
                                     continue
-                                records[key] = {'source': adapter.source, 'product_id': row['product_id'],
+                                record = {'source': adapter.source, 'product_id': row['product_id'],
                                     'collected_at': utc_now(), 'job_id': job_id, 'schema_version': '1.2', 'extractor_version': '0.4',
                                     'categories': [], 'payload': {'listings': [], 'detail': None},
                                     'detail_status': 'not_requested' if collect_details else 'disabled', 'detail_error': None}
+                                records.add(key, record)
                                 outcome['new_products'] += 1
-                            elif checkpoint:
-                                records[key] = copy.deepcopy(records[key])
-                            record = records[key]
+                            else:
+                                record = records.load(key)
                             membership = {**category.as_dict(), 'observed_category_name': diagnostics.get('observed_category_name')}
                             if not any(c['category_id'] == category.category_id for c in record['categories']):
                                 record['categories'].append(membership)
@@ -372,23 +512,22 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
     client.interval = detail_interval
     if progress and collect_details:
         progress({"stage": "details_start", "total": len(records)})
-    for detail_index, record in enumerate(records.values(), 1):
-        listing = record["payload"]["listings"][0]
-        if checkpoint and record["detail_status"] in {"ok", "not_needed"}:
+    keys = records.keys()
+    for detail_index, key in enumerate(keys, 1):
+        status = records.detail_status(key)
+        if checkpoint and status in {"ok", "not_needed"}:
             if progress:
-                progress({"stage": "detail", "index": detail_index, "total": len(records),
-                          "product_id": record["product_id"], "status": record["detail_status"], "cached": True})
+                progress({"stage": "detail", "index": detail_index, "total": len(keys),
+                          "product_id": key[1], "status": status, "cached": True})
             continue
         if not collect_details:
-            if record['detail_status'] != 'disabled':
-                record = copy.deepcopy(record)
-                records[(record['source'], record['product_id'])] = record
+            if status != 'disabled':
+                record = records.load(key)
                 record['detail_status'] = 'disabled'
                 persist([record])
             continue
-        if checkpoint:
-            record = copy.deepcopy(record)
-            records[(record['source'], record['product_id'])] = record
+        record = records.load(key)
+        listing = record["payload"]["listings"][0]
         if not adapter.needs_detail(listing):
             record["detail_status"] = "not_needed"
             persist([record])
@@ -403,7 +542,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             record["detail_reused_from"] = {"job_id": detail_reuse.base_job_id, "collected_at": reused["collected_at"]}
             persist([record])
             if progress:
-                progress({"stage": "detail", "index": detail_index, "total": len(records),
+                progress({"stage": "detail", "index": detail_index, "total": len(keys),
                           "product_id": record["product_id"], "status": "ok", "reused": True})
             continue
         try:
@@ -436,20 +575,33 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             report["errors"].append({"stage": "detail", "url": listing["product_url"], "reason": str(exc)})
         persist([record])
         if progress:
-            progress({"stage": "detail", "index": detail_index, "total": len(records),
+            progress({"stage": "detail", "index": detail_index, "total": len(keys),
                       "product_id": record["product_id"], "status": record["detail_status"]})
 
-    raw = list(records.values())
-    normalized = []
-    for record in raw:
-        record["payload_hash"] = payload_hash(record["payload"])
-        normalized.append(adapter.normalize(record))
+    # One pass for the run's aggregates. A checkpointed run reads each product back with the
+    # normalization saved beside it; nothing else of the record is kept.
+    coverage, raw_rows, quality_rows = FieldCoverage(), [], []
+    if checkpoint:
+        for key in keys:
+            row = checkpoint.row(key)
+            coverage.add(row["normalized"])
+            raw_rows.append(raw_projection(row["raw"]))
+            quality_rows.append(quality.project(row["normalized"]))
+        raw = StoredRecords(checkpoint, keys, "raw", raw_rows)
+        normalized = StoredRecords(checkpoint, keys, "normalized", quality_rows)
+    else:
+        raw, normalized = [records.load(key) for key in keys], []
+        for record in raw:
+            record["payload_hash"] = payload_hash(record["payload"])
+            normalized.append(adapter.normalize(record))
+            coverage.add(normalized[-1])
+            raw_rows.append(raw_projection(record))
     if detail_reuse is not None:
-        report["detail_reuse"] = detail_reuse.summary(raw)
-    report.update(finished_at=utc_now(), product_count=len(raw), request_count=len(previous_requests) + len(client.attempts),
-                  requests=previous_requests + list(client.attempts), field_coverage=field_coverage(normalized),
-                  result=run_result(report, raw, any(c["status"] == "not_requested" or c.get("reason") == "request_limit"
-                                                     for c in report["categories"])))
+        report["detail_reuse"] = detail_reuse.summary(raw_rows)
+    report.update(finished_at=utc_now(), product_count=len(keys), request_count=len(previous_requests) + len(client.attempts),
+                  requests=previous_requests + list(client.attempts), field_coverage=coverage.result(),
+                  result=run_result(report, raw_rows, any(c["status"] == "not_requested" or c.get("reason") == "request_limit"
+                                                          for c in report["categories"])))
     persist()
     return raw, normalized, report
 

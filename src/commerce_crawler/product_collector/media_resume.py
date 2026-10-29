@@ -29,16 +29,6 @@ def download_history(path):
     return {row['url']: row for row in records(path) if row.get('url')}
 
 
-def read_products(path):
-    rows, digest = [], hashlib.sha256()
-    with path.open('rb') as stream:
-        for line in stream:
-            digest.update(line)
-            if line.strip():
-                rows.append(json.loads(line.decode('utf-8-sig')))
-    return rows, digest.hexdigest()
-
-
 def signature(path):
     value = path.stat()
     result = [value.st_dev, value.st_ino, value.st_size,

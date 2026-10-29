@@ -103,10 +103,24 @@ class IndexTests(unittest.TestCase):
         self.assertEqual((fetcher.calls, report['store_errors']), ([URL], 1))
 
     def test_without_storage_settings_everything_downloads_but_history_is_kept(self):
+        # Until the server loads through v2 ingest-*, a stored image would be loaded as no image.
         self.collect({URL: png()})
-        _, fetcher, report = self.collect({URL: png()})
-        self.assertEqual((fetcher.calls, report['store_checks'], report['object_store']), ([URL], 0, False))
+        second, fetcher, report = self.collect({URL: png()})
+        self.assertEqual((fetcher.calls, report['store_checks'], report['object_store'], report['stored']),
+                         ([URL], 0, False, 0))
+        self.assertFalse([i for r in self.rows(second) for i in r['images'] if i['status'] == 'stored'])
         self.assertEqual(download_history(self.index / 'image_downloads.jsonl')[URL]['status'], 'downloaded')
+        # Resuming a run whose journal already says "stored" (made with settings) downloads without them.
+        store = FakeStore()
+        first, _, _ = self.collect({URL: png()}, store)
+        store.upload(self.rows(first)[0]['images'][0])
+        third, _, report = self.collect({}, store)
+        self.assertEqual(report['stored'], 1)
+        fetcher = FakeFetcher({URL: png()})
+        report = localize_images(third / 'products.jsonl', third / 'media', fetcher, index_dir=self.index,
+                                 retry_transient=True)
+        self.assertEqual((fetcher.calls, report['stored'], report['downloaded']), ([URL], 0, 1))
+        self.assertFalse([i for r in self.rows(third) for i in r['images'] if i['status'] == 'stored'])
 
     def test_repeated_storage_errors_stop_asking(self):
         urls = [f'https://img.example/{i}.png' for i in range(25)]

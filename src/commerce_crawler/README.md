@@ -106,7 +106,7 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 
 메인 수집기는 출력 루트의 `_image_index/image_downloads.jsonl`에 URL별 마지막 다운로드 기록(sha256·bytes·width·height·format·extension)과 실패 기록을 남긴다. 사진 파일은 이 폴더에 두지 않는다. 처음 만들 때는 출력 루트의 이전 실행(partial 포함) `media/image_downloads.jsonl` 성공 기록을 가져온다.
 
-- **`--image-store-config <파일>`:** 이미지 버킷 읽기 전용 접속 설정이다. 파이프라인 v1 snapshot·적재가 `stored` 항목을 받도록 배포된 뒤에만 쓴다. 그 전 파이프라인은 stored 사진을 확보 불가(UNAVAILABLE)로 처리한다. 이력에 성공 기록이 있는 URL은 파이프라인 객체 키 `images/sha256/<앞 2자>/<sha256>.<extension>`에 HEAD를 보낸다. 크기와 `sha256` 메타데이터가 같으면 다운로드하지 않고 이미지 항목을 `status: "stored"`로 기록한다. stored 항목에는 메타데이터만 있고 `local_path`·`filename`·`category_paths`는 비어 있다. 최종 무결성은 파이프라인 적재가 객체 전체 sha256으로 확인한다.
+- **`--image-store-config <파일>`:** 이미지 버킷 읽기 전용 접속 설정이다. 서버 적재가 v2 `ingest-*`로 전환된 뒤에만 켠다(v1 적재는 stored를 이미지 없음으로 처리). 설정이 없으면 재개한 실행에서도 stored를 만들지 않고 다시 받는다. 이력에 성공 기록이 있는 URL은 파이프라인 객체 키 `images/sha256/<앞 2자>/<sha256>.<extension>`에 HEAD를 보낸다. 크기와 `sha256` 메타데이터가 같으면 다운로드하지 않고 이미지 항목을 `status: "stored"`로 기록한다. stored 항목에는 메타데이터만 있고 `local_path`·`filename`·`category_paths`는 비어 있다. 최종 무결성은 파이프라인 적재가 객체 전체 sha256으로 확인한다.
 - 객체가 없거나 값이 다르거나 HEAD가 실패하면 지금처럼 받는다. HEAD 오류가 연속 20회면 그 실행에서는 저장소 확인을 멈춘다. 설정이 없으면 모두 받는다.
 - 설정 파일은 Git 밖에 두고(권한 600) `key=value`로 쓴다. 필수 `endpoint`(https), `bucket`, `accessKey`, `secretKey`, 선택 `caBundle`, `region`(기본 us-east-1). boto3가 필요하다.
 - **실패 재시도:** 타임아웃·연결 오류·5xx는 다음 실행마다 다시 시도한다. 404 등 클라이언트 오류와 이미지가 아닌 응답이 연속 3회면 `gave_up`으로 두고 `--retry-failed`를 줄 때만 다시 시도한다. 실패해도 이전 성공 기록(`last_success`)은 유지한다. 같은 실행을 재개할 때는 그 실행에서 실패한 URL을 다시 요청하지 않는다.

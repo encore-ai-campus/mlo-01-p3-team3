@@ -1,5 +1,4 @@
 """Legacy JSONL compatibility and bounded startup I/O; no HTTP requests."""
-import copy
 import hashlib
 import json
 from pathlib import Path
@@ -71,7 +70,7 @@ class ResumeStartupTests(unittest.TestCase):
             directory=Path(root)/'legacy'
             adapter=legacy_checkpoint(directory)
             store=CollectionCheckpoint(directory,adapter,{})
-            row=copy.deepcopy(store.records[('danawa','12')])
+            row=store.load(('danawa','12'))
             row.update(detail_status='request_failed',detail_error='synthetic failure')
             with patch('product_collector.checkpoint.atomic_json',side_effect=OSError('interrupted before product write')):
                 with self.assertRaises(OSError):
@@ -106,7 +105,7 @@ class ResumeStartupTests(unittest.TestCase):
             directory=Path(root)/'legacy'
             adapter=legacy_checkpoint(directory)
             store=CollectionCheckpoint(directory,adapter,{})
-            row=copy.deepcopy(store.records[('danawa','12')])
+            row=store.load(('danawa','12'))
             row.update(detail_status='request_failed',detail_error='pending write')
             with patch('product_collector.checkpoint.atomic_json',side_effect=OSError('interrupted file write')):
                 with self.assertRaises(OSError):
@@ -121,7 +120,7 @@ class ResumeStartupTests(unittest.TestCase):
             directory=Path(root)/'legacy'
             adapter=legacy_checkpoint(directory)
             store=CollectionCheckpoint(directory,adapter,{})
-            before=store.restore()[0]
+            before={key:store.load(key) for key in store.keys()}
             original=adapter.normalize
             def normalize(raw):
                 if raw['product_id']=='12': raise KeyboardInterrupt()
@@ -131,17 +130,24 @@ class ResumeStartupTests(unittest.TestCase):
                     collect(adapter,RequestClient(None,interval=0,session=FakeSession({adapter.category_url('2'):listing('11','12')})),
                             [Category('1',limit=None),Category('2',limit=None)],total_limit=None,
                             collect_details=False,checkpoint=store)
-            self.assertEqual(store.restore()[0],before)
+            self.assertEqual({key:store.load(key) for key in store.keys()},before)
 
-    def test_collector_restore_shares_unchanged_products_but_default_snapshot_is_isolated(self):
+    def test_loaded_records_are_private_copies_of_the_journal(self):
         with tempfile.TemporaryDirectory() as root:
             directory=Path(root)/'legacy'
             adapter=legacy_checkpoint(directory)
             store=CollectionCheckpoint(directory,adapter,{})
-            shallow,_=store.restore(copy_records=False)
-            isolated,_=store.restore()
-            self.assertIs(shallow[('danawa','11')],store.records[('danawa','11')])
-            self.assertIsNot(isolated[('danawa','11')],store.records[('danawa','11')])
+            key=('danawa','11')
+            first=store.load(key)
+            first['detail_status']='changed in memory only'
+            self.assertEqual(store.load(key)['detail_status'],'ok')
+            self.assertEqual(store.detail_status(key),'ok')
+            self.assertEqual(store.category_ids(key),('1',))
+            # A save moves the product's position to the new event; the old line stays as it was.
+            first['detail_status']='request_failed'
+            store.save([first],store.current_report(),[])
+            self.assertEqual((store.load(key)['detail_status'],store.detail_status(key)),('request_failed','request_failed'))
+            self.assertEqual(CollectionCheckpoint(directory,adapter,{}).load(key)['detail_status'],'request_failed')
 
     def test_tampered_journal_still_fails_checksum_validation(self):
         with tempfile.TemporaryDirectory() as root:

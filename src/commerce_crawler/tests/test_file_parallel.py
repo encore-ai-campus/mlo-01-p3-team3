@@ -73,10 +73,10 @@ class FileParallelTests(unittest.TestCase):
             with (directory / 'checkpoint_events.jsonl').open('ab') as stream:
                 stream.write(b'{"event":')
             restored = CollectionCheckpoint(directory, adapter, {}, repair_files=True)
-            self.assertEqual(len(restored.restore()[0]), 1)
+            self.assertEqual(len(restored), 1)
             self.assertTrue((directory / 'products/danawa_11.json').is_file())
             restored.save([], restored.current_report(), [])
-            self.assertEqual(len(CollectionCheckpoint(directory, readonly=True).restore()[0]), 1)
+            self.assertEqual(len(CollectionCheckpoint(directory, readonly=True)), 1)
 
     def test_category_image_links_share_one_download_and_resume_without_requests(self):
         url = 'https://img.example/a.png'

@@ -1,4 +1,7 @@
-"""File-only live records and resumable, checksummed JSONL commit history."""
+"""File-only live records and resumable, checksummed JSONL commit history.
+
+Only a position index of the products is kept in memory; a record is read back from its
+journal line when it is needed, so memory does not grow with the size of the records."""
 from contextlib import contextmanager
 import copy
 import hashlib
@@ -6,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import time
 from uuid import uuid4
 
@@ -62,8 +66,11 @@ class CollectionCheckpoint:
             self.directory.mkdir(parents=True, exist_ok=True)
             self.job_id = self.directory.name
             atomic_json(self.manifest, {'job_id': self.job_id, 'storage': 'jsonl-v1', 'config': config})
-        self.records, self.normalized, self.categories, self.requests = {}, {}, {}, {}
+        # (source, product_id) -> (line offset, position in the event's records, seq, detail_status, category ids),
+        # in first-appearance order like the record dictionaries it replaces.
+        self.index, self.categories, self.requests = {}, {}, {}
         self.report, self.sequence = {}, 0
+        self._cached = (None, None)  # the last event read back: (line offset, event)
         self.status = 'running'
         files_commit = 0
         state = self.directory / 'checkpoint_state.json'
@@ -82,6 +89,7 @@ class CollectionCheckpoint:
             self._notify('checkpoint_read', completed=0, total=total_bytes, elapsed=0)
             with self.journal.open('rb') as stream:
                 for line in stream:
+                    offset = read_bytes
                     read_bytes += len(line)
                     if not line.strip():
                         continue
@@ -92,7 +100,7 @@ class CollectionCheckpoint:
                     event = envelope['event']
                     if event['seq'] != self.sequence + 1 or hashlib.sha256(encoded(event).encode()).hexdigest() != envelope['sha256']:
                         raise ValueError('체크포인트 이력의 순서 또는 해시가 맞지 않습니다.')
-                    self._apply(event)
+                    self._apply(event, offset)
                     if not readonly and event['seq'] > files_commit:
                         pending_files.update(self.key(row['raw']) for row in event['records'])
                     now = time.monotonic()
@@ -105,13 +113,15 @@ class CollectionCheckpoint:
         if files_commit > self.sequence:
             raise ValueError('저장 완료 지점보다 체크포인트 이력이 짧습니다. 기존 파일을 확인해주세요.')
         self.request_base = max(self.requests, default=0)
-        self.attempt_versions = {}
+        # Encoded attempts of this process. The leading run that was finished when it was saved
+        # never changes again and is not encoded on later saves (_changed_requests).
+        self.attempt_versions, self._stable_attempts = {}, 0
         self.category_versions = {key: encoded(value) for key, value in self.categories.items()}
         self._pending_files = pending_files
         if not readonly:
             # The journal is authoritative. Completed mirrors need no startup reads.
             # --repair-files also checks externally removed/corrupted old mirrors.
-            self._materialize(self.records if repair_files else pending_files,
+            self._materialize(list(self.index) if repair_files else pending_files,
                               check_existing=True, show_progress=True)
             if pending_files or repair_files:
                 self.state(self.status)
@@ -120,7 +130,7 @@ class CollectionCheckpoint:
 
     def _notify(self, stage, **values):
         if self.progress:
-            self.progress({'stage': stage, 'products': len(self.records), 'commit': self.sequence, **values})
+            self.progress({'stage': stage, 'products': len(self.index), 'commit': self.sequence, **values})
 
     @staticmethod
     def key(raw):
@@ -129,10 +139,12 @@ class CollectionCheckpoint:
             raise ValueError('unsafe product path')
         return source, code
 
-    def _apply(self, event):
-        for row in event['records']:
-            key = self.key(row['raw'])
-            self.records[key], self.normalized[key] = row['raw'], row['normalized']
+    def _apply(self, event, offset):
+        for position, row in enumerate(event['records']):
+            raw = row['raw']
+            key = self.key(raw)
+            self.index[key] = (offset, position, event['seq'], sys.intern(raw['detail_status']),
+                               tuple(sys.intern(c['category_id']) for c in raw['categories']))
         for category in event['categories']:
             self.categories[category['category_id']] = category
         for request in event['requests']:
@@ -149,7 +161,8 @@ class CollectionCheckpoint:
                 return
         for index, key in enumerate(keys, 1):
             name = f'{key[0]}_{key[1]}.json'
-            for folder, value in (('product_raw', self.records[key]), ('products', self.normalized[key])):
+            row = self.row(key)
+            for folder, value in (('product_raw', row['raw']), ('products', row['normalized'])):
                 path = self.directory / folder / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 if check_existing:
@@ -166,17 +179,71 @@ class CollectionCheckpoint:
         if show_progress:
             self._notify('checkpoint_files', completed=total, total=total, elapsed=time.monotonic() - started)
 
+    def row(self, key):
+        """The latest saved {'raw', 'normalized'} of a product. Shared with the read cache: do not mutate."""
+        offset, position, seq = self.index[key][:3]
+        if self._cached[0] != offset:
+            with self.journal.open('rb') as stream:
+                stream.seek(offset)
+                event = json.loads(stream.readline().decode('utf-8'))['event']
+            self._cached = (offset, event)
+        event = self._cached[1]
+        records = event['records']
+        if event['seq'] != seq or position >= len(records) or self.key(records[position]['raw']) != key:
+            raise ValueError('체크포인트 색인이 이력과 맞지 않습니다.')
+        return records[position]
+
+    def __len__(self):
+        return len(self.index)
+
+    def __bool__(self):
+        return True  # an empty checkpoint is still a checkpoint (callers test "if checkpoint")
+
+    def __contains__(self, key):
+        return key in self.index
+
+    def keys(self):
+        return list(self.index)
+
+    def detail_status(self, key):
+        return self.index[key][3]
+
+    def category_ids(self, key):
+        return self.index[key][4]
+
+    def load(self, key):
+        """A private copy of the product's latest raw record."""
+        return copy.deepcopy(self.row(key)['raw'])
+
+    def load_normalized(self, key):
+        return copy.deepcopy(self.row(key)['normalized'])
+
     def current_report(self):
         report = copy.deepcopy(self.report)
+        # Request entries are frozen journal values that nobody mutates; they are not copied.
         report.update(job_id=self.job_id, categories=list(copy.deepcopy(self.categories).values()),
-                      requests=[copy.deepcopy(self.requests[k]) for k in sorted(self.requests)],
-                      request_count=len(self.requests), product_count=len(self.records), checkpoint_status=self.status)
+                      requests=[self.requests[k] for k in sorted(self.requests)],
+                      request_count=len(self.requests), product_count=len(self.index), checkpoint_status=self.status)
         return report
 
-    def restore(self, copy_records=True):
-        # The collector copies only products it is about to mutate. Other callers
-        # retain the original isolated snapshot behavior by default.
-        return (copy.deepcopy(self.records) if copy_records else dict(self.records)), self.current_report()
+    def _changed_requests(self, attempts):
+        """Attempts whose encoding differs from the last save, in order.
+
+        The leading run of attempts that were already finished when they were saved is skipped,
+        since a finished attempt never changes. RequestClient fills an attempt and only then marks
+        it finished; the mark is read before encoding, so a skipped attempt was saved in its final
+        state. A plain list has no marks and is compared in full."""
+        count = len(attempts)
+        if count < self._stable_attempts:  # another attempt list: compare it from the start
+            self._stable_attempts, self.attempt_versions = 0, {}
+        finished = getattr(attempts, 'finished', None)
+        versions, done = {}, {}
+        for index in range(self._stable_attempts, count):
+            done[index] = finished is not None and finished(index)
+            versions[index] = encoded(attempts[index])
+        changed = [{'id': self.request_base + index + 1, 'data': json.loads(data)} for index, data in versions.items()
+                   if self.attempt_versions.get(index) != data]
+        return changed, versions, done
 
     def save(self, changed, report, attempts):
         from .core import payload_hash
@@ -185,23 +252,27 @@ class CollectionCheckpoint:
             self.key(raw)
             raw['payload_hash'] = payload_hash(raw['payload'])
             rows.append({'raw': raw, 'normalized': self.adapter.normalize(raw)})
-        versions = {index: encoded(attempt) for index, attempt in enumerate(list(attempts))}
+        requests, versions, done = self._changed_requests(attempts)
         category_versions = {c['category_id']: encoded(c) for c in report.get('categories', [])}
         event = {'seq': self.sequence + 1, 'records': rows,
                  'categories': [c for c in report.get('categories', []) if self.category_versions.get(c['category_id']) != category_versions[c['category_id']]],
-                 'requests': [{'id': self.request_base + index + 1, 'data': json.loads(data)} for index, data in versions.items()
-                              if self.attempt_versions.get(index) != data],
+                 'requests': requests,
                  'report': {k: v for k, v in report.items() if k not in {'requests', 'categories', 'updated_at'}}}
         # Freeze mutable worker request entries and caller-owned product dictionaries.
         body = encoded(event)
         frozen = json.loads(body)
         envelope = encoded({'event': frozen, 'sha256': hashlib.sha256(body.encode()).hexdigest()})
         with self.journal.open('ab') as stream:
+            offset = os.fstat(stream.fileno()).st_size + 1  # after the separating newline
             stream.write(('\n' + envelope + '\n').encode('utf-8'))
             stream.flush()
             os.fsync(stream.fileno())
-        self._apply(frozen)
+        self._apply(frozen, offset)
+        self._cached = (offset, frozen)  # what reading the new line back would give
         self.attempt_versions, self.category_versions = versions, category_versions
+        while done.get(self._stable_attempts):
+            self.attempt_versions.pop(self._stable_attempts)
+            self._stable_attempts += 1
         self._pending_files.update(self.key(row['raw']) for row in frozen['records'])
         self._materialize(self._pending_files)
         self._pending_files.clear()
@@ -211,7 +282,7 @@ class CollectionCheckpoint:
         from .core import utc_now
         self.status = status
         state = {'job_id': self.job_id, 'status': status, 'updated_at': utc_now(), 'commit': self.sequence,
-                 'product_count': len(self.records), 'request_count': len(self.requests), 'error': error,
+                 'product_count': len(self.index), 'request_count': len(self.requests), 'error': error,
                  'categories': [{'category_id': c['category_id'], 'name': c.get('category_name'),
                      'last_completed_page': max((p['page'] for p in c.get('pages', []) if p['status'] in {'ok', 'empty'}), default=None),
                      'reason': c.get('reason')} for c in self.categories.values()]}
@@ -220,8 +291,10 @@ class CollectionCheckpoint:
     def export_to(self, target):
         target = Path(target)
         target.mkdir(parents=True, exist_ok=True)
-        write_jsonl(target / 'product_raw.jsonl', self.records.values())
-        write_jsonl(target / 'products.jsonl', self.normalized.values())
+        # One record at a time, read back from the journal exactly as the old dictionaries held them.
+        keys = list(self.index)
+        write_jsonl(target / 'product_raw.jsonl', (self.row(key)['raw'] for key in keys))
+        write_jsonl(target / 'products.jsonl', (self.row(key)['normalized'] for key in keys))
         # Detail pages stay in the run's details/, also for a snapshot exported elsewhere.
         atomic_json(target / 'run_report.json', {**self.current_report(),
                                                  'detail_evidence_dirs': [str(self.directory.resolve())]})

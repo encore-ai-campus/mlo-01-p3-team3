@@ -1,5 +1,6 @@
 """Image integrity and product linkage checks, independent of downloading."""
 import hashlib
+import json
 import io
 import re
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 from .core import utc_now
-from .storage import atomic_json, file_matches, read_jsonl
+from .storage import atomic_json, file_matches
 
 
 # Same names and spelling as the pipeline's inspect_image; the object key uses the extension.
@@ -92,10 +93,17 @@ def image_errors(product: dict, root: Path | None = None) -> list[dict]:
 
 
 def verify_assets(products_path: Path, media: Path) -> dict:
-    rows = read_jsonl(products_path)
-    errors = [error for row in rows for error in image_errors(row, media)]
-    report = {"checked_at": utc_now(), "products": len(rows),
-              "image_links": sum(len(row.get("images") or row.get("local_images") or []) for row in rows),
-              "errors": errors, "result": "completed" if rows and not errors else "partial"}
+    """Checks the manifest one product at a time; only the errors are kept."""
+    errors, products, links = [], 0, 0
+    with Path(products_path).open(encoding="utf-8-sig") as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            products += 1
+            links += len(row.get("images") or row.get("local_images") or [])
+            errors.extend(image_errors(row, media))
+    report = {"checked_at": utc_now(), "products": products, "image_links": links,
+              "errors": errors, "result": "completed" if products and not errors else "partial"}
     atomic_json(media / "verification_report.json", report)
     return report

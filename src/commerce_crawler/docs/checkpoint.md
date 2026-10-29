@@ -61,7 +61,16 @@ config/my_categories.json은 실제로 준비한 파일 경로로 바꾼다. 정
 
 준비 중 [이력 복원]에 읽은 MB·비율·상품 수·경과 시간을 약 1초 간격으로 출력한다. 기존 작성자도 상품 파일 갱신 후 state.commit을 저장했으므로 그 지점까지의 개별 파일은 재개 때 다시 열지 않는다. 이력만 기록되고 파일 갱신이 덜 끝난 상품만 검사·복구한다. 완료 지점이 없으면 전체 복구, 완료 지점이 이력보다 앞서면 오류로 처리한다.
 
-수집기는 원천 전체를 두 번 깊게 복사하지 않고, 바꿀 상품만 복사하여 저장 완료 데이터와 분리한다. 단, 이력 전체 읽기와 해시 검증은 여전히 필요하며 파일이 커지면 준비 시간·메모리가 늘어난다.
+## 메모리 사용
+
+체크포인트는 상품 레코드를 메모리에 들고 있지 않는다. 상품마다 최신 이력 줄의 위치(바이트 오프셋·이벤트 안 순번·seq)와 detail_status·카테고리 ID만 색인으로 둔다. 레코드는 바꿀 때 그 줄에서 다시 읽고(직전 이벤트 하나만 캐시), 저장한 뒤 버린다. 위치로 읽은 레코드의 상품 키나 seq가 색인과 다르면 오류로 멈춘다.
+
+- 목록 단계는 한 페이지의 상품만, 상세 단계는 처리 중인 상품 하나만 메모리에 있다. 이미 ok·not_needed인 상품은 색인만 보고 건너뛴다.
+- 종료 집계(field_coverage, 상세 실패율, 상세 재사용 요약, 품질 관문)는 저장된 원본·정규화 레코드를 한 번 훑으며 계산한다. 품질 관문은 상품마다 필요한 값만 남긴 작은 투영으로 판정한다(계산식은 그대로).
+- JSONL 내보내기, 이미지 단계의 products_with_local_images.jsonl 작성, verify_assets, --reprocess-from은 한 줄씩 처리한다. 이미지 단계는 products.jsonl을 다시 읽으며 manifest를 쓰고, 다시 읽은 바이트의 해시가 처음과 다르면 manifest를 교체하지 않고 멈춘다. 재추출 결과는 출력 루트의 `.staging-<job_id>/`에 쓴 뒤 실행 폴더로 옮겨 쓰고, 끝나면 지운다.
+- 요청 기록은 끝난 요청의 연속 앞부분을 다음 저장부터 다시 인코딩하지 않는다. 요청이 모든 필드를 채운 뒤 완료 표시를 남기므로 건너뛴 요청은 최종 상태로 저장된 것이다.
+- 남는 메모리는 색인(상품당 수백 B), 요청 기록, 이미지 URL별 상태다. 재개 시 이력 전체를 읽고 해시를 검증하는 시간은 그대로다.
+- 산출물(checkpoint_events.jsonl, product_raw.jsonl, products.jsonl, 상품별 JSON, checkpoint_state.json, products_with_local_images.jsonl)의 바이트는 이전 구현과 같다(`tests/test_memory_equivalence.py`).
 
 외부에서 오래된 상품 파일을 삭제·수정한 경우 기본 재개는 이미 완료된 파일을 전수 검사하지 않는다. 이때만 같은 명령에 --repair-files를 추가한다. 전체 상품 파일을 읽으므로 준비가 오래 걸릴 수 있다.
 
@@ -71,4 +80,4 @@ config/my_categories.json은 실제로 준비한 파일 경로로 바꾼다. 정
 
 SQLite 형식의 기존 작업은 자동 변환·재개하지 않는다. run_config.json이 없는 작업은 오류로 알리고 원본 자료를 보존한다. 파일 체크포인트의 run_config.json과 checkpoint_events.jsonl이 있는지 확인하며 checkpoint_state.json만으로 원본을 복구할 수는 없다.
 
-개별 상품 JSON은 수집 중 갱신되므로 불변 MongoDB 원천과 같지 않다. DB·Kafka 적재의 체크포인트는 향후 별도로 관리한다. 자동 프로세스 재시작이나 예약 실행은 현재 구현하지 않았다. 테스트는 test_checkpoint.py, test_file_parallel.py, test_resume_startup.py에 있으며 [실행 방법](../README.md)을 따른다.
+개별 상품 JSON은 수집 중 갱신되므로 불변 MongoDB 원천과 같지 않다. DB·Kafka 적재의 체크포인트는 향후 별도로 관리한다. 자동 프로세스 재시작이나 예약 실행은 현재 구현하지 않았다. 테스트는 test_checkpoint.py, test_checkpoint_index.py, test_file_parallel.py, test_resume_startup.py, test_memory_equivalence.py에 있으며 [실행 방법](../README.md)을 따른다.

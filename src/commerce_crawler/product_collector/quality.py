@@ -5,6 +5,7 @@ Failed details are judged by rate in detail_failures, which the collector uses f
 from __future__ import annotations
 
 from statistics import median
+from typing import NamedTuple
 
 VERSION = 1
 MODES = ("warn", "enforce", "off")
@@ -18,7 +19,7 @@ MIN_CATEGORY_SAMPLE = 20  # per-category alerts keep one broken category from hi
 RECEIVED = {"ok", "unrecognized", "identity_mismatch"}
 
 
-def detail_failures(raw: list[dict], include_reused: bool = False) -> dict:
+def detail_failures(raw, include_reused: bool = False) -> dict:
     """Failed details among requested ones. Budget stops are not here: they leave the run incomplete.
 
     A detail reused from the previous run was not requested; a reprocess re-extracts it and counts it."""
@@ -34,16 +35,35 @@ def detail_failures(raw: list[dict], include_reused: bool = False) -> dict:
             "failed_product_ids": sorted(str(r["product_id"]) for r in requested if r["detail_status"] in FAILURE_LIMITS)}
 
 
-def _signals(row: dict) -> dict:
-    status = row["detail_status"]
+class Projection(NamedTuple):
+    """What the gate reads of one normalized product: a few hundred bytes instead of the record."""
+    detail_status: str
+    product_id: str
+    category_ids: tuple
+    images: int
+    has_specifications: bool
+    has_priced_offer: bool
+
+
+def project(row) -> Projection:
+    if isinstance(row, Projection):
+        return row
     specs = [s for s in row.get("specifications") or [] if s.get("name") and s.get("value") not in (None, "")]
     priced = [o for o in row.get("offers") or []
               if o.get("price") is not None or o.get("low_price") is not None]
+    return Projection(row["detail_status"], str(row.get("product_id")),
+                      tuple(m["category_id"] for m in row.get("categories") or []),
+                      len(row.get("images") or []), bool(specs), bool(priced))
+
+
+def _signals(row: Projection) -> dict:
+    status = row.detail_status
     return {"identity_mismatch": status == "identity_mismatch", "unrecognized": status == "unrecognized",
-            "no_images": not row.get("images"), "no_specifications": not specs, "no_priced_offer": not priced}
+            "no_images": not row.images, "no_specifications": not row.has_specifications,
+            "no_priced_offer": not row.has_priced_offer}
 
 
-def _rates(rows: list[dict], names=("no_images", "no_specifications", "no_priced_offer")) -> dict:
+def _rates(rows: list[Projection], names=("no_images", "no_specifications", "no_priced_offer")) -> dict:
     flags = [_signals(row) for row in rows]
     total = len(flags)
     return {name: {"count": sum(f[name] for f in flags), "total": total,
@@ -51,11 +71,13 @@ def _rates(rows: list[dict], names=("no_images", "no_specifications", "no_priced
             for name in names}
 
 
-def evaluate(normalized: list[dict], report: dict, mode: str = "warn", reused=frozenset()) -> dict:
-    """reused: product IDs whose detail came from the previous run, parsed before this run's site state."""
+def evaluate(normalized, report: dict, mode: str = "warn", reused=frozenset()) -> dict:
+    """normalized: rows or their projections, read once.
+    reused: product IDs whose detail came from the previous run, parsed before this run's site state."""
     if mode not in MODES:
         raise ValueError(f"quality mode must be one of {MODES}")
-    received = [row for row in normalized if row["detail_status"] in RECEIVED and str(row.get("product_id")) not in reused]
+    received = [row for row in map(project, normalized)
+                if row.detail_status in RECEIVED and row.product_id not in reused]
     metrics = _rates(received)
     responded = rejected = 0
     alerts = []
@@ -73,13 +95,13 @@ def evaluate(normalized: list[dict], report: dict, mode: str = "warn", reused=fr
                                    "rate": round(rejected / responded, 4) if responded else None}
     for name, metric in metrics.items():
         metric["limit"] = LIMITS[name]
-    counts = [len(row.get("images") or []) for row in received if row["detail_status"] == "ok"]
+    counts = [row.images for row in received if row.detail_status == "ok"]
     gallery_median = median(counts) if counts else None
 
     by_category = {}
     for row in received:
-        for membership in row.get("categories") or []:
-            by_category.setdefault(membership["category_id"], []).append(row)
+        for category_id in row.category_ids:
+            by_category.setdefault(category_id, []).append(row)
     for category_id, rows in by_category.items():
         if len(rows) < MIN_CATEGORY_SAMPLE:
             continue
@@ -99,7 +121,7 @@ def evaluate(normalized: list[dict], report: dict, mode: str = "warn", reused=fr
             "alerts": alerts, "passed": not violations}
 
 
-def apply(report: dict, normalized: list[dict], mode: str = "warn", reused=frozenset()) -> dict:
+def apply(report: dict, normalized, mode: str = "warn", reused=frozenset()) -> dict:
     """Record report["quality"]; in enforce mode a failed gate replaces a completed result.
 
     An incomplete (partial) run stays partial: an accepted quality never promotes missing data."""

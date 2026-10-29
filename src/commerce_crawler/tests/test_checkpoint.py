@@ -148,9 +148,8 @@ class CheckpointTests(unittest.TestCase):
                 with self.assertRaises(KeyboardInterrupt):
                     collect(adapter, RequestClient(None, interval=0, session=PagingSession({(url, 1): response('11', '12')})),
                             [category], total_limit=None, collect_details=False, checkpoint=store)
-                records, report = store.restore()
-                self.assertEqual(records, {})
-                self.assertEqual(report['categories'][0]['pages'], [])
+                self.assertEqual(store.keys(), [])
+                self.assertEqual(store.current_report()['categories'][0]['pages'], [])
             with open_collection(Path(root), DanawaAdapter(templates()), {}) as store:
                 session = PagingSession({(url, 1): response('11', '12'), (url, 2): response()})
                 raw, _, _ = collect(DanawaAdapter(templates()), RequestClient(None, interval=0, session=session),
@@ -185,7 +184,7 @@ with open_collection(Path(sys.argv[1]), adapter, {}) as store:
             url = adapter.category_url('1523647')
             with open_collection(Path(root), adapter, {}) as store:
                 self.assertTrue((store.directory / 'checkpoint_events.jsonl').is_file())
-                self.assertEqual(len(store.restore()[0]), 1)
+                self.assertEqual(len(store), 1)
                 session = PagingSession({(url, 2): response()})
                 raw, _, _ = collect(adapter, RequestClient(None, interval=0, session=session),
                     [Category('1523647', limit=None, max_pages=None)], total_limit=None, collect_details=False, checkpoint=store)
