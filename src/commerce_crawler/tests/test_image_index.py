@@ -207,6 +207,12 @@ class IndexTests(unittest.TestCase):
         report = verify_assets(media / 'rows.jsonl', media)
         self.assertEqual([e['reason'] for e in report['errors']], ['stored_image_invalid'])
 
+    def test_stored_metadata_requires_a_known_format(self):
+        good = {'sha256': 'a' * 64, 'bytes': 10, 'width': 1, 'height': 1, 'format': 'JPEG', 'extension': 'jpg'}
+        self.assertIsNotNone(stored_metadata(good))
+        for fmt, ext in ((None, None), ('jpeg', 'jpg'), (['JPEG'], 'jpg'), ('ICO', 'ico')):
+            self.assertIsNone(stored_metadata({**good, 'format': fmt, 'extension': ext}), fmt)
+
 
 class SettingsTests(unittest.TestCase):
     def test_a_resumed_run_keeps_its_image_settings(self):

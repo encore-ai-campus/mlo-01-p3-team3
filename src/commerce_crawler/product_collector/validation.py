@@ -34,7 +34,8 @@ def stored_metadata(entry: dict | None) -> dict | None:
     meta = {key: entry.get(key) for key in IMAGE_META}
     if (not isinstance(meta["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", meta["sha256"])
             or any(type(meta[key]) is not int or meta[key] <= 0 for key in ("bytes", "width", "height"))
-            or meta["bytes"] > MAX_IMAGE_BYTES or EXTENSIONS.get(meta["format"]) != meta["extension"]):
+            or meta["bytes"] > MAX_IMAGE_BYTES or not isinstance(meta["format"], str) or meta["format"] not in EXTENSIONS
+            or EXTENSIONS[meta["format"]] != meta["extension"]):
         return None
     return meta
 
