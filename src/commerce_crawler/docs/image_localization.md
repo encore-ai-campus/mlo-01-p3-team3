@@ -20,6 +20,8 @@ python -m pip install -r requirements-collector.txt
 python run_collector.py --workers 3 --listing-interval 0 --interval 1 --download-images
 ```
 
+메인 CLI는 기본적으로 상세가 끝난 상품부터 사진을 받는다(`--image-overlap on`, 사진 전용 작업 스레드 하나). 이 경우 manifest는 모든 상품을 넘긴 뒤 한 번 쓰고, 상세 단계 중 중단되면 쓰지 않는다(`download_report.json`에 `finished_at` 없음, `phase: overlap_interrupted`). `--image-overlap off`는 상세 전체 뒤 사진 전체 순서이고 아래 진행 저장 규칙이 그대로 적용된다. 자세한 차이는 README의 "상세와 사진 겹쳐 돌리기"를 따른다.
+
 확보한 갤러리 URL의 파일 다운로드만 실행(목록·상세 요청 없음):
 
 ```powershell

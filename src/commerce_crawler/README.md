@@ -23,9 +23,9 @@ flowchart LR
 3. `source + product_id`가 같으면 상품 하나로 합치고 발견 카테고리와 각 목록 관측값은 보존한다.
 4. 목록 전체 순회 후 고유 상품의 상세 페이지를 순차 요청한다. 식별한 JSON-LD Product와 HTML 규격·판매 제안을 추출한다.
 5. `#basicThumbSlideArea img`, `#baseImage`에서 상품 갤러리를 관측한다. 상세설명 이미지와 목록 썸네일은 다운로드 대상에서 제외한다. **사진은 1~4장으로 제한하지 않는다.**
-6. `--download-images`가 있으면 사진 파일을 내려받아 해시·이미지 형식을 검증하고 상품·카테고리별 파일 경로를 기록한다.
+6. `--download-images`가 있으면 사진 파일을 내려받아 해시·이미지 형식을 검증하고 상품·카테고리별 파일 경로를 기록한다. 기본(`--image-overlap on`)은 상세가 끝난 상품부터 사진을 받아 상세 수집과 겹쳐 돈다.
 
-목록만 `--workers`로 병렬 처리한다. 같은 카테고리의 페이지는 순서대로 진행하며 상세와 사진 다운로드는 순차 처리한다. 상세·다운로드 성공은 이용 조건 검수나 추천 승인을 뜻하지 않는다.
+목록만 `--workers`로 병렬 처리한다. 같은 카테고리의 페이지는 순서대로 진행한다. 상세는 순차 요청하고, 사진도 순차 요청하되 상세와 동시에 진행할 수 있다(아래 "상세와 사진 겹쳐 돌리기"). 상세·다운로드 성공은 이용 조건 검수나 추천 승인을 뜻하지 않는다.
 
 ## 설치와 실행
 
@@ -112,6 +112,17 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 - **실패 재시도:** 타임아웃·연결 오류·5xx는 다음 실행마다 다시 시도한다. 404 등 클라이언트 오류와 이미지가 아닌 응답이 연속 3회면 `gave_up`으로 두고 `--retry-failed`를 줄 때만 다시 시도한다. 실패해도 이전 성공 기록(`last_success`)은 유지한다. 같은 실행을 재개할 때는 그 실행에서 실패한 URL을 다시 요청하지 않는다.
 - 이력 경로, 저장소(endpoint·bucket, 키 제외), 재시도 규칙 버전은 `media/image_settings.json`에 고정된다. 다른 설정으로는 재개하지 않는다. 결과 건수는 `media/download_report.json`(`stored`, `store_checks`, `store_missing`, `store_mismatch`, `store_errors`)과 `run_report.image_download`에 남는다.
 - 같은 URL은 같은 사진으로 본다. 다나와가 같은 주소의 사진을 바꾸는 경우는 아직 감지하지 않는다.
+
+### 상세와 사진 겹쳐 돌리기
+
+`--image-overlap on`(기본)은 사진 전용 작업 스레드 하나가 상세가 끝난 상품의 갤러리를 받는다. 상세(`prod.danawa.com`)와 사진은 각자 `--interval` 간격을 지키므로 두 요청이 동시에 나갈 수 있다. `off`는 상세 전체를 끝낸 뒤 사진 전체를 받는 이전 순서이며 결과와 요청 순서가 이전과 바이트까지 같다.
+
+- 상품은 `products.jsonl` 순서로 넘어가고(재개 때 건너뛴 상품 포함, 상품마다 한 번), 사진 요청 순서도 그 순서다. 대기열은 상품 1만 개까지이고 사진이 밀리면 상세가 기다린다.
+- 차단(403/429)과 요청 상한은 상세·사진이 따로다. 사진이 막혀도 상세는 계속하고, 그 뒤의 사진은 판정만 하고 다운로드 대상만 `stopped_after_block`·`budget_exhausted`로 둔다.
+- manifest(`products_with_local_images.jsonl`)는 모든 상품을 넘긴 뒤 한 번 쓴다. 넘긴 상품을 직렬화한 해시가 내보낸 `products.jsonl`과 같을 때만 게시한다.
+- 상세 단계 중에 중단(Ctrl+C·오류)되면 진행 중 요청 하나만 끝내고 멈춘다. 이때 manifest를 쓰지 않고 `download_report.json`에 `finished_at`이 없다(`phase: overlap_interrupted`). 재개하면 받은 사진은 이력으로 재사용한다.
+- 차이: 상세 단계 중 일시 오류로 실패한 사진은 같은 실행을 재개해도 다시 요청하지 않는다(그 실행은 partial, 다음 실행에서 받는다). 이미지 이력 파일의 줄 순서는 `off`와 다르다(URL별 마지막 기록은 같다).
+- 차단이 늘면 `--image-overlap off`로 되돌린다.
 
 ### 상세 HTML 보관 정책
 

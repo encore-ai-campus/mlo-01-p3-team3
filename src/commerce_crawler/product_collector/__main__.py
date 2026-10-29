@@ -87,6 +87,32 @@ def image_index(output: Path, destination: Path, policy_version: int, store_conf
     return index, runs
 
 
+class ImageResources:
+    """The image step's thread, locks and clients; closed before the run's writer.lock is released."""
+
+    def __init__(self):
+        self.fetcher = self.object_store = self.step = self.worker = self.options = None
+
+    def close(self, completed=False):
+        """Idempotent. Without completed, an overlap step that had not finished stays unfinished."""
+        try:
+            if self.worker is not None:
+                self.worker.stop()
+                self.worker = None
+            if self.step is not None:
+                step, self.step = self.step, None
+                try:
+                    if not completed and not step.prepared:
+                        step.abort()
+                finally:
+                    step.close(completed)
+        finally:
+            for client in ("fetcher", "object_store"):
+                if getattr(self, client) is not None:
+                    getattr(self, client).close()
+                    setattr(self, client, None)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="다나와 카테고리·페이지 수집과 상품 갤러리 보강")
     parser.add_argument("--categories", type=Path, default=PROJECT_ROOT / "config/danawa_categories_71.json")
@@ -106,6 +132,8 @@ def main() -> int:
     parser.add_argument("--max-image-requests", type=parse_limit, default=None)
     parser.add_argument("--retry-failed", action="store_true",
                         help="이미지: 연속 실패로 포기한 사진 주소도 다시 시도")
+    parser.add_argument("--image-overlap", choices=("on", "off"), default="on",
+                        help="on은 상세가 끝난 상품의 사진을 상세 수집과 함께 받음, off는 상세 전체 뒤에 사진 전체")
     parser.add_argument("--image-store-config", type=Path,
                         help="이미지 버킷 읽기 전용 접속 설정(Git 밖 파일). 있으면 이미 저장된 사진은 다시 받지 않음")
     parser.add_argument("--resume-from", type=Path, help="지정한 작업의 저장 지점에서 재개")
@@ -135,7 +163,7 @@ def main() -> int:
     store_config = None
     if args.download_images:
         try:
-            from .media import ImageFetcher, RETRY_POLICY_VERSION, localize_images
+            from .media import ImageFetcher, ImageStep, ImageWorker, RETRY_POLICY_VERSION, localize_images
             from .validation import verify_assets
             from .image_store import S3ImageStore, read_store_config
             if args.image_store_config:
@@ -196,25 +224,51 @@ def main() -> int:
                 print(f"[상세 재사용] 기준 실행 {reuse.base_job_id} / 상품 {len(reuse.index)}개 / 표본 {args.refresh_sample}개"
                       if reuse.base else f"[상세 재사용] 기준 실행이 정리되어 남은 상세를 모두 요청합니다: {reuse.base_missing}"
                       if reuse.base_missing else "[상세 재사용] 완료된 이전 실행이 없어 모든 상세를 요청합니다", flush=True)
+            images = ImageResources()
+
+            def image_options():
+                """Settings, history and clients of the image step, made when it starts."""
+                if images.options is None:
+                    index, sources = image_index(args.output, destination, RETRY_POLICY_VERSION, store_config)
+                    images.fetcher = ImageFetcher(args.interval, args.timeout)
+                    images.object_store = S3ImageStore(store_config) if store_config else None
+                    images.options = dict(retry_failed=args.retry_failed, retry_transient=True, index_dir=index,
+                                          object_store=images.object_store, import_from=sources)
+                return images.options
+
+            def start_overlap():
+                # Started with the first finished product, so a stop while listing leaves no image step.
+                if images.worker is None:
+                    images.step = ImageStep(destination / "media", None, args.max_image_requests,
+                                            **image_options()).open()
+                    images.step.fetcher = images.fetcher
+                    images.fetcher.cancel = images.step.cancel
+                    images.step.begin()
+                    images.worker = ImageWorker(images.step)
+                return images.worker
+
             try:
+                on_product = None
+                if args.download_images and args.image_overlap == "on":
+                    # Galleries are downloaded while details are fetched: another host, its own interval.
+                    on_product = lambda key: start_overlap().offer(checkpoint.load_normalized(key))
                 raw, normalized, report = collect(adapter, client, categories, args.total_limit,
                     collect_details=not args.listing_only, progress=show_progress, checkpoint=checkpoint,
-                    listing_interval=args.listing_interval, workers=args.workers, detail_reuse=reuse)
+                    listing_interval=args.listing_interval, workers=args.workers, detail_reuse=reuse,
+                    on_product=on_product)
                 checkpoint.save([], report, client.attempts)
                 checkpoint.export()  # products.jsonl for the image step; the status stays running until delivery is decided
                 if args.download_images:
-                    index, sources = image_index(args.output, destination, RETRY_POLICY_VERSION, store_config)
-                    fetcher = ImageFetcher(args.interval, args.timeout)
-                    object_store = S3ImageStore(store_config) if store_config else None
-                    try:
-                        media_report = localize_images(destination / "products.jsonl", destination / "media", fetcher,
-                                                       args.max_image_requests, retry_failed=args.retry_failed,
-                                                       retry_transient=True, index_dir=index,
-                                                       object_store=object_store, import_from=sources)
-                    finally:
-                        fetcher.close()
-                        if object_store:
-                            object_store.close()
+                    if on_product:
+                        start_overlap().close()
+                        media_report = images.step.finish(destination / "products.jsonl",
+                                                          images.worker.digest.hexdigest())
+                        images.close(completed=True)
+                    else:
+                        options = image_options()
+                        media_report = localize_images(destination / "products.jsonl", destination / "media",
+                                                       images.fetcher, args.max_image_requests, **options)
+                    images.close()
                     verified = verify_assets(destination / "media/products_with_local_images.jsonl", destination / "media")
                     report["image_download"] = {"result": media_report["result"], "verification": verified["result"],
                                                 **{k: media_report[k] for k in ("downloaded", "stored", "failed", "gave_up",
@@ -229,12 +283,18 @@ def main() -> int:
                 checkpoint.state(report['result'])
                 checkpoint.export()
             except KeyboardInterrupt:
+                images.close()  # the image thread stops before the run's lock is released
                 checkpoint.interrupt(client.attempts)
                 print(f"[중단·저장 완료] {destination.resolve()}", flush=True)
                 return 130
             except Exception as exc:
-                checkpoint.interrupt(client.attempts, 'failed', str(exc))
+                try:
+                    images.close()
+                finally:
+                    checkpoint.interrupt(client.attempts, 'failed', str(exc))
                 raise
+            finally:
+                images.close()
     finally:
         client.close()
     show_quality(report)

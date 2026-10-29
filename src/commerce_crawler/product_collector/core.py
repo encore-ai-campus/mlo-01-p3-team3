@@ -349,7 +349,9 @@ class Adapter(Protocol):
 def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             total_limit: int | None = 10, collect_details: bool = True, progress=None, checkpoint=None,
             listing_interval: float | None = None, workers: int = 1,
-            detail_reuse=None) -> tuple[list[dict], list[dict], dict]:
+            detail_reuse=None, on_product=None) -> tuple[list[dict], list[dict], dict]:
+    """on_product(key): called once for every product, in order, when its detail step is over and
+    saved (also for products a resumed run skips), so the image step can follow the details."""
     if total_limit is not None and (type(total_limit) is not int or total_limit < 1):
         raise ValueError("total_limit must be a positive integer")
     if listing_interval is not None and (not math.isfinite(listing_interval) or listing_interval < 0):
@@ -519,18 +521,24 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             if progress:
                 progress({"stage": "detail", "index": detail_index, "total": len(keys),
                           "product_id": key[1], "status": status, "cached": True})
+            if on_product:
+                on_product(key)
             continue
         if not collect_details:
             if status != 'disabled':
                 record = records.load(key)
                 record['detail_status'] = 'disabled'
                 persist([record])
+            if on_product:
+                on_product(key)
             continue
         record = records.load(key)
         listing = record["payload"]["listings"][0]
         if not adapter.needs_detail(listing):
             record["detail_status"] = "not_needed"
             persist([record])
+            if on_product:
+                on_product(key)
             continue
         # Recorded in every mode so the next run can tell whether this product changed.
         fingerprint = record["listing_fingerprint"] = adapter.listing_fingerprint(record["payload"]["listings"])
@@ -541,6 +549,8 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             record["detail_status"], record["detail_error"] = "ok", None
             record["detail_reused_from"] = {"job_id": detail_reuse.base_job_id, "collected_at": reused["collected_at"]}
             persist([record])
+            if on_product:
+                on_product(key)
             if progress:
                 progress({"stage": "detail", "index": detail_index, "total": len(keys),
                           "product_id": record["product_id"], "status": "ok", "reused": True})
@@ -574,6 +584,8 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             record["detail_error"] = str(exc)
             report["errors"].append({"stage": "detail", "url": listing["product_url"], "reason": str(exc)})
         persist([record])
+        if on_product:
+            on_product(key)
         if progress:
             progress({"stage": "detail", "index": detail_index, "total": len(keys),
                       "product_id": record["product_id"], "status": record["detail_status"]})

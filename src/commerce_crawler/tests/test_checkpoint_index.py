@@ -15,7 +15,7 @@ from product_collector import quality
 from product_collector.checkpoint import CollectionCheckpoint, encoded, open_collection
 from product_collector.core import AttemptLog, Category, RequestClient, collect
 from product_collector.danawa import DanawaAdapter
-from product_collector.media import localize_images
+from product_collector.media import ImageStep, ImageWorker, localize_images
 from test_gallery_assets import gallery
 from test_media import FakeFetcher, png
 from test_pagination_gallery import PagingSession, product, templates
@@ -35,8 +35,10 @@ def big(code, size):
     return value
 
 
-def listed(root, count, page_size=50, size=0, collect_details=False):
-    """A listing-only collection of count products in pages of page_size, saved and exported."""
+def listed(root, count, page_size=50, size=0, collect_details=False, overlap=False):
+    """A listing-only collection of count products in pages of page_size, saved and exported.
+
+    overlap: the image step follows the products as the CLI's --image-overlap on does."""
     adapter = DanawaAdapter(templates())
     codes = [str(10000 + i) for i in range(count)]
 
@@ -48,10 +50,25 @@ def listed(root, count, page_size=50, size=0, collect_details=False):
     pages = Pages()
     with open_collection(Path(root), adapter, {}) as store:
         client = RequestClient(None, interval=0, session=PagingSession(pages))
-        raw, normalized, report = collect(adapter, client, [Category(CATEGORY, limit=None, max_pages=None)],
-                                          total_limit=None, collect_details=collect_details, checkpoint=store)
-        store.save([], report, client.attempts)
-        store.export()
+        step = worker = None
+        if overlap:
+            step = ImageStep(store.directory / 'media', FakeFetcher({})).open()
+            step.begin()
+            worker = ImageWorker(step)
+        try:
+            raw, normalized, report = collect(
+                adapter, client, [Category(CATEGORY, limit=None, max_pages=None)], total_limit=None,
+                collect_details=collect_details, checkpoint=store,
+                on_product=(lambda key: worker.offer(store.load_normalized(key))) if overlap else None)
+            store.save([], report, client.attempts)
+            store.export()
+            if overlap:
+                worker.close()
+                step.finish(store.directory / 'products.jsonl', worker.digest.hexdigest())
+        finally:
+            if overlap:
+                worker.stop()
+                step.close(completed=True)
     return store.directory, raw, normalized, report
 
 
@@ -260,6 +277,17 @@ class MemoryTests(unittest.TestCase):
         added = results[800] - results[400]
         # Holding the records would add at least 400 x 20 KB = 8 MB (several copies in the old collector).
         self.assertLess(added, 400 * size * 0.25, results)
+
+    def test_overlap_holds_galleries_not_records(self):
+        size, results = 20_000, {}
+        for count in (400, 800):
+            with tempfile.TemporaryDirectory() as root:
+                def run():
+                    directory, raw, normalized, report = listed(root, count, page_size=40, size=size, overlap=True)
+                    self.assertTrue((directory / 'media/products_with_local_images.jsonl').is_file())
+                    quality.apply(report, normalized.projection, 'warn')
+                results[count] = peak(run)
+        self.assertLess(results[800] - results[400], 400 * size * 0.25, results)
 
 
 if __name__ == '__main__':

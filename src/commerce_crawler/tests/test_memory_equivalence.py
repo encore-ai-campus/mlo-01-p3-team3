@@ -124,8 +124,9 @@ def uploaded(run):
 
 
 class Harness:
-    def __init__(self, root: Path):
-        self.root = root
+    def __init__(self, root: Path, overlap='off'):
+        self.root, self.overlap = root, overlap
+        root.mkdir(parents=True, exist_ok=True)
         self.ids = itertools.count(1)
         self.media_ids = itertools.count(1)
         template = {'payload': [{'categoryCode': '3647', 'page': 1, 'listCount': 30, 'physicsCate1': '1826',
@@ -146,7 +147,7 @@ class Harness:
         session = Session(posts, gets, stop)
         argv = ['product_collector', '--categories', str(self.categories), '--output', str(self.root / output),
                 '--interval', '0', '--workers', '1', '--pagination-template', str(self.templates),
-                '--download-images', *options]
+                '--download-images', '--image-overlap', self.overlap, *options]
         if objects is not None:
             argv += ['--image-store-config', str(self.store_config)]
         with patch('sys.argv', argv), patch('requests.Session', return_value=session), \
@@ -224,8 +225,8 @@ def first_pages():
     return {**details, **files}
 
 
-def scenarios(root: Path) -> dict:
-    harness = Harness(root)
+def scenarios(root: Path, overlap='off') -> dict:
+    harness = Harness(root, overlap)
     results = {}
 
     # 1. Complete run, then a changed-only run that reuses details and finds images in storage.
@@ -283,6 +284,66 @@ class MemoryEquivalenceTests(unittest.TestCase):
                 for path, digest in expected[name]['files'].items():
                     self.assertEqual(recorded[name]['files'][path], digest, path)
                 self.assertEqual(recorded[name]['gets'], expected[name]['gets'])
+
+    def test_overlap_keeps_the_results_of_the_sequential_step(self):
+        """--image-overlap on: same data and requests per host; the image history only in another order."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            off, on = scenarios(root / 'off', 'off'), scenarios(root / 'on', 'on')
+            # Stopped while details were fetched, overlap had already downloaded some images: the attempts
+            # differ, so those two compare products here and images in the test below.
+            stopped_in_details = {'resume_detail', 'resume_images'}
+            for name in off:
+                with self.subTest(scenario=name):
+                    for path, value in off[name][0].items():
+                        if name in stopped_in_details:
+                            if path.endswith(('products.jsonl', 'product_raw.jsonl')):
+                                self.assertEqual(on[name][0][path], value, path)
+                        elif Path(path).name == 'image_downloads.jsonl':
+                            self.assertEqual(download_history(self.located(root / 'on', name, path)),
+                                             download_history(self.located(root / 'off', name, path)), path)
+                        else:
+                            self.assertEqual(on[name][0][path], value, path)
+            gets = {mode: [url for url in result['reuse'][1]] for mode, result in (('off', off), ('on', on))}
+            for host in ('prod.danawa.com', 'img.example'):
+                self.assertEqual([u for u in gets['on'] if host in u], [u for u in gets['off'] if host in u], host)
+            # Images of the first products were fetched while later details were still to come.
+            order = gets['on']
+            self.assertLess(min(i for i, u in enumerate(order) if 'img.example' in u),
+                            max(i for i, u in enumerate(order) if 'prod.danawa.com' in u))
+
+    @staticmethod
+    def located(base, output, path):
+        """The file a fingerprint path names (run labels are run0, run1 in directory order)."""
+        runs = sorted(p for p in (base / output).iterdir() if (p / 'run_config.json').is_file())
+        parts = Path(path).parts
+        if parts[0].startswith('run') and parts[0][3:].isdigit():
+            return runs[int(parts[0][3:])].joinpath(*parts[1:])
+        return base / output / path
+
+    def test_an_overlapped_run_stopped_during_details_has_no_manifest_and_resumes_to_the_same_images(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            results = {}
+            for mode in ('off', 'on'):
+                harness = Harness(root / mode, mode)
+                code, _ = harness.run('stopped', FIRST, first_pages(), stop=('GET', page('13')))
+                self.assertEqual(code, 130)
+                run = harness.runs('stopped')[0]
+                if mode == 'on':
+                    self.assertFalse((run / 'media/products_with_local_images.jsonl').exists())
+                    report = json.loads((run / 'media/download_report.json').read_text(encoding='utf-8'))
+                    self.assertNotIn('finished_at', report)
+                    self.assertGreater(report['downloaded'], 0)  # images of 11 and 12 came during details
+                code, _ = harness.run('stopped', FIRST, first_pages())
+                self.assertEqual(code, 0)
+                rows = [json.loads(line) for line in
+                        (run / 'media/products_with_local_images.jsonl').read_text(encoding='utf-8').splitlines()]
+                for row in rows:
+                    for image in row['images']:
+                        image.pop('run_id')
+                results[mode] = (rows, (run / 'products.jsonl').read_bytes())
+            self.assertEqual(results['on'], results['off'])
 
 
 if __name__ == '__main__':
