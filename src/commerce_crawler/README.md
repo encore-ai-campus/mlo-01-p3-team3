@@ -29,7 +29,7 @@ flowchart LR
 
 ## 설치와 실행
 
-명령은 `src/Commerce_crawler` 디렉터리를 기준으로 한다. Python 3.10 이상과 `requirements-collector.txt`가 필요하다. 프로젝트 루트의 기존 가상환경을 사용한다면 먼저 활성화하거나 그 Python의 전체 경로로 아래 명령을 실행한다. Windows 가상환경은 Linux 서버에 복사하지 않고 서버에서 재생성한다.
+명령은 `src/commerce_crawler` 디렉터리를 기준으로 한다. Python 3.10 이상과 `requirements-collector.txt`가 필요하다. 프로젝트 루트의 기존 가상환경을 사용한다면 먼저 활성화하거나 그 Python의 전체 경로로 아래 명령을 실행한다. Windows 가상환경은 Linux 서버에 복사하지 않고 서버에서 재생성한다.
 
 ```powershell
 # 새 환경이 필요한 경우에만 이 폴더에 생성

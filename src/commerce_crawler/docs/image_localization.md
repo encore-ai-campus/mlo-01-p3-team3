@@ -6,7 +6,7 @@
 
 다운로드 대상은 상세의 대표·추가 상품 갤러리 `images[]`다. 사진은 1~4장으로 제한하지 않는다. 상세설명 이미지와 목록 썸네일은 제외하고 `listing_image_url`은 참조로만 남긴다. 관측되지 않은 원본 해상도 URL을 만들지 않는다.
 
-아래 명령은 Commerce_crawler 기준이며 해당 Python 환경에 requirements-collector.txt를 설치해야 한다. `run_collector.py`의 로컬 의존성 경로 보완은 `python -m product_collector.media`에 자동 적용되지 않는다. Pillow의 import 이름은 PIL이다.
+아래 명령은 commerce_crawler 기준이며 해당 Python 환경에 requirements-collector.txt를 설치해야 한다. `run_collector.py`의 로컬 의존성 경로 보완은 `python -m product_collector.media`에 자동 적용되지 않는다. Pillow의 import 이름은 PIL이다.
 
 ```powershell
 python -m pip install -r requirements-collector.txt

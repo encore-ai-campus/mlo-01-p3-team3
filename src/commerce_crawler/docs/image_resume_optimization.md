@@ -16,7 +16,7 @@
 
 ## 실행 방법
 
-프로젝트의 `src/Commerce_crawler`에서 실행한다. 아래는 명령 안내이며 문서 작성 때 실행하지 않았다.
+프로젝트의 `src/commerce_crawler`에서 실행한다. 아래는 명령 안내이며 문서 작성 때 실행하지 않았다.
 
 ```powershell
 ..\..\.venv\Scripts\python.exe -m product_collector.media `

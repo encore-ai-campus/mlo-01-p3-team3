@@ -41,7 +41,7 @@ POST 테스트에서는 이미 확보한 5개 HTML을 사용했다. 그러므로
 
 ## 재실행
 
-`Commerce_crawler`에서 실행한다. 기본 전체 테스트는 네트워크를 사용하지 않으며 실사이트 테스트 6개는 건너뛴다. 이번 기본 실행은 오프라인 40개 통과, 실사이트 6개 skip이었다.
+`commerce_crawler`에서 실행한다. 기본 전체 테스트는 네트워크를 사용하지 않으며 실사이트 테스트 6개는 건너뛴다. 이번 기본 실행은 오프라인 40개 통과, 실사이트 6개 skip이었다.
 
 ```powershell
 python -m unittest discover -s tests -p 'test_*.py' -v

@@ -14,7 +14,7 @@ Garage 2.4.1의 객체 쓰기는 [내용 주소 프로필](garage_v241_profile.m
 
 | 담당 | 읽는 입력 | 쓰는 결과·책임 | 이번 범위 |
 |---|---|---|---|
-| Commerce_crawler | 다나와 목록/상세·이미지 응답 | raw/products/media·수집 checkpoint·관측 시각·파서 provenance | 기존 기능 유지. 요청·재수집·파서 변경 제외 |
+| commerce_crawler | 다나와 목록/상세·이미지 응답 | raw/products/media·수집 checkpoint·관측 시각·파서 provenance | 기존 기능 유지. 요청·재수집·파서 변경 제외 |
 | 파이프라인 스냅샷/적재 | 확정 export·이미지 manifest/파일 | snapshot·Mongo raw/보조 운영 원장·이미지 객체·Kafka 원천 이벤트 | 포함 |
 | Spark 상품 ETL | 원천 ID·고정 raw·업로드 확인·버전별 매핑/검수 결과 | Delta Bronze/Silver/Gold·quality_issues·자체 checkpoint | 포함 |
 | 파이프라인 게시 | 고정 Gold 버전·검수 입력·실제 DDL | 상품·자산·이미지 연결·판매·가격 이력의 허용 영역, pipeline/publishing 실행 이력 | 포함 |
