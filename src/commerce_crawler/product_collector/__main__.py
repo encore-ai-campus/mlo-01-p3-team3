@@ -125,16 +125,21 @@ def show_quality(report):
         print(f"[품질 경보] {item['signal']} 카테고리 {item.get('category_id')}", flush=True)
 
 
-def image_index(output: Path, destination: Path, policy_version: int, store_config: dict | None):
+def image_index(output: Path, destination: Path, policy_version: int, store_config: dict | None,
+                replacement_sample: int | None = None):
     """Shared download history of the output root (no image bytes) and the runs to seed it from.
 
     The settings are fixed in the run's media/ so a resumed image step uses the same history,
-    the same object storage (endpoint and bucket, never the keys) and the same retry rules."""
+    the same object storage (endpoint and bucket, never the keys) and the same retry rules.
+    With storage, the image key rules and the replacement sample are fixed too."""
     from .image_store import describe
+    from .media import IMAGE_KEY_VERSION
     from .storage import atomic_json
     index = (Path(output) / "_image_index").resolve()
     settings = {"index_dir": str(index), "object_store": describe(store_config) if store_config else None,
                 "retry_policy_version": policy_version}
+    if store_config:
+        settings.update(image_key_version=IMAGE_KEY_VERSION, replacement_sample=replacement_sample)
     path = destination / "media" / "image_settings.json"
     if path.is_file():
         saved = json.loads(path.read_text(encoding="utf-8"))
@@ -213,6 +218,8 @@ def main() -> int:
                         help="on은 상세가 끝난 상품의 사진을 상세 수집과 함께 받음, off는 상세 전체 뒤에 사진 전체")
     parser.add_argument("--image-store-config", type=Path,
                         help="이미지 버킷 읽기 전용 접속 설정(Git 밖 파일). 있으면 이미 저장된 사진은 다시 받지 않음")
+    parser.add_argument("--image-replacement-sample", type=int, default=None,
+                        help="저장소 설정이 있을 때 주소의 _v만 다른 사진 중 매 실행 다시 받아 교체 여부를 볼 수. 기본 1000")
     parser.add_argument("--resume-from", type=Path, help="지정한 작업의 저장 지점에서 재개")
     parser.add_argument("--new-run", action="store_true", help="미완료 작업 재개 대신 새 작업 시작")
     parser.add_argument("--repair-files", action="store_true", help="개별 상품 JSON 전체 검사·복구. 외부 삭제·손상 시 사용하며 재개 준비가 오래 걸릴 수 있음")
@@ -242,10 +249,15 @@ def main() -> int:
         parser.error("--download-images requires live detail collection; use gallery_assets for saved runs")
     if args.image_store_config and not args.download_images:
         parser.error("--image-store-config requires --download-images")
+    if args.image_replacement_sample is not None and not args.image_store_config:
+        parser.error("--image-replacement-sample requires --image-store-config")
+    if args.image_replacement_sample is not None and args.image_replacement_sample < 0:
+        parser.error("--image-replacement-sample must be nonnegative")
     store_config = None
     if args.download_images:
         try:
-            from .media import ImageFetcher, ImageStep, ImageWorker, RETRY_POLICY_VERSION, localize_images
+            from .media import (ImageFetcher, ImageStep, ImageWorker, REPLACEMENT_SAMPLE, RETRY_POLICY_VERSION,
+                                localize_images)
             from .validation import verify_assets
             from .image_store import S3ImageStore, read_store_config
             if args.image_store_config:
@@ -314,11 +326,14 @@ def main() -> int:
             def image_options():
                 """Settings, history and clients of the image step, made when it starts."""
                 if images.options is None:
-                    index, sources = image_index(args.output, destination, RETRY_POLICY_VERSION, store_config)
+                    sample = (REPLACEMENT_SAMPLE if args.image_replacement_sample is None
+                              else args.image_replacement_sample) if store_config else None
+                    index, sources = image_index(args.output, destination, RETRY_POLICY_VERSION, store_config, sample)
                     images.fetcher = ImageFetcher(args.interval, args.timeout)
                     images.object_store = S3ImageStore(store_config) if store_config else None
                     images.options = dict(retry_failed=args.retry_failed, retry_transient=True, index_dir=index,
-                                          object_store=images.object_store, import_from=sources)
+                                          object_store=images.object_store, import_from=sources,
+                                          identity_keys=bool(store_config), replacement_sample=sample or 0)
                 return images.options
 
             def start_overlap():

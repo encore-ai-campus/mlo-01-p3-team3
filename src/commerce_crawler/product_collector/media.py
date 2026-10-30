@@ -1,6 +1,7 @@
 """Download observed product galleries; preserve identity, bytes and resume history."""
 import argparse
 import hashlib
+import io
 import json
 import math
 import queue
@@ -11,11 +12,11 @@ from collections import deque
 from contextlib import ExitStack
 from uuid import uuid4
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
-from PIL import UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 
 from .core import utc_now, limit_reached, parse_limit
 from .storage import atomic_json, append_record, history, images_pruned, link_file, read_jsonl, write_jsonl
@@ -48,6 +49,35 @@ FAILURE_LIMIT = 0.01         # transient and internal failures left among the ru
 FAILURE_MIN_SAMPLE = 50      # fewer URLs: any such failure leaves the step partial
 EXTERNAL_ALERT_LIMIT = 0.05  # images the site no longer serves: recorded, an alert above this rate
 UNFINISHED = {"pending", "budget_exhausted", "stopped_after_block"}  # never tried: the step is partial
+# Image key rules, fixed per run in image_settings.json with the replacement sample
+# (crawler-optimization/image-cache.md, stage 2). 2: catalog images are matched without _v.
+IMAGE_KEY_VERSION = 2
+REPLACEMENT_SAMPLE = 1000         # images matched without _v fetched again per run to catch replacements
+REPLACEMENT_ALERT_LIMIT = 0.01    # share of the checked sample that turned out another picture
+REENCODE_LIMIT = 2.0              # mean difference (0-255) of 32x32 grayscale copies of a re-encoding
+MATCH_FIELDS = ("matched_url", "identity", "replaced_sha256")  # how an image was matched, run journal only
+CATALOG_IMAGE = re.compile(r"/catalog-image/\d{3}/\d{3}/\d{3}/[0-9a-f]{32}\.(?:jpg|jpeg|png|webp|gif)")
+
+
+def image_identity(url: str) -> str | None:
+    """Path and query without _v of an img.danuri.io catalog image; None for any other URL.
+
+    _v is when the site last re-published the picture: it changes between runs and may
+    re-encode the same picture. Other hosts keep the whole URL as the key (names may be reused)."""
+    parsed = urlparse(url)
+    if parsed.hostname != "img.danuri.io" or not CATALOG_IMAGE.fullmatch(parsed.path):
+        return None
+    query = sorted((k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k != "_v")
+    return parsed.path + ("?" + urlencode(query) if query else "")
+
+
+def same_picture(old: bytes, new: bytes) -> bool:
+    """A re-encoding: same format and pixel size, and small grayscale copies nearly equal."""
+    with Image.open(io.BytesIO(old)) as first, Image.open(io.BytesIO(new)) as second:
+        if first.format != second.format or first.size != second.size:
+            return False
+        small = [image.convert("L").resize((32, 32), Image.Resampling.BOX).tobytes() for image in (first, second)]
+    return sum(abs(a - b) for a, b in zip(*small)) / len(small[0]) <= REENCODE_LIMIT
 
 
 class ImageTooLarge(ValueError):
@@ -152,7 +182,7 @@ def localize_images(products_path: Path, destination: Path, fetcher, max_request
                     progress=None, cache_dir: Path | None = None, *,
                     retry_failed=False, verify_cache=False, progress_every=25,
                     export_interval=300.0, retry_transient=False, index_dir: Path | None = None,
-                    object_store=None, import_from=()) -> dict:
+                    object_store=None, import_from=(), identity_keys=False, replacement_sample=0) -> dict:
     """cache_dir: a local blob store shared by runs (saved-run tools).
     index_dir: the collector CLI's shared download history without image bytes. A URL whose
     last verified download is already in object_storage (HEAD size and sha256 metadata) is
@@ -160,12 +190,15 @@ def localize_images(products_path: Path, destination: Path, fetcher, max_request
     retry_transient: retry a failed URL once per run unless it failed permanently
     GIVE_UP_AFTER times in a row.
     import_from: other runs' media directories whose downloads seed a new index.
+    identity_keys: with object_store, a catalog image whose URL differs only in _v stands for the
+    earlier download; replacement_sample of those are fetched again (image_identity).
 
     Batch order: every product is checked and every URL judged before the first download."""
     step = ImageStep(destination, fetcher, max_requests, progress, cache_dir, retry_failed=retry_failed,
                      verify_cache=verify_cache, progress_every=progress_every, export_interval=export_interval,
                      retry_transient=retry_transient, index_dir=index_dir, object_store=object_store,
-                     import_from=import_from).open()
+                     import_from=import_from, identity_keys=identity_keys,
+                     replacement_sample=replacement_sample).open()
     completed = False
     try:
         report = step.run_batch(Path(products_path))
@@ -238,7 +271,8 @@ class ImageStep:
     def __init__(self, destination: Path, fetcher, max_requests=None, progress=None,
                  cache_dir: Path | None = None, *, retry_failed=False, verify_cache=False,
                  progress_every=25, export_interval=300.0, retry_transient=False,
-                 index_dir: Path | None = None, object_store=None, import_from=()):
+                 index_dir: Path | None = None, object_store=None, import_from=(),
+                 identity_keys=False, replacement_sample=0):
         if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
             raise ValueError("max_requests must be positive")
         if type(progress_every) is not int or progress_every < 1:
@@ -249,12 +283,17 @@ class ImageStep:
             raise ValueError("index_dir and cache_dir cannot be combined")
         if object_store is not None and index_dir is None:
             raise ValueError("object_store requires index_dir")
+        if type(replacement_sample) is not int or replacement_sample < 0:
+            raise ValueError("replacement_sample must be a nonnegative integer")
         self.destination = Path(destination)
         self.store = Path(cache_dir) if cache_dir is not None else self.destination
         self.fetcher, self.max_requests, self.progress = fetcher, max_requests, progress
         self.retry_failed, self.verify_cache, self.progress_every = retry_failed, verify_cache, progress_every
         self.export_interval, self.retry_transient = export_interval, retry_transient
         self.index_dir, self.object_store, self.import_from = index_dir, object_store, import_from
+        # Matching without _v needs storage: an image is only reused when its object is there.
+        self.identity_keys = identity_keys and object_store is not None
+        self.replacement_sample = replacement_sample
         self.index = None
         self.stack = ExitStack()
         self.cancel = threading.Event()
@@ -326,6 +365,10 @@ class ImageStep:
                        if store.resolve() != destination.resolve() else self.previous)
         self.shared_journal = self.index / "image_downloads.jsonl" if self.index is not None else None
         self.shared = download_history(self.shared_journal) if self.index is not None else {}
+        self.by_identity = {}  # identity -> newest real download; matches made in a run are never added
+        if self.identity_keys:
+            for entry in self.shared.values():
+                self.remember(success_part(entry))
         self.current = {url: {"url": url, "status": "pending", "local_path": None} for url in urls}
         self.product_count, self.without_gallery = product_count, without_gallery
         self.input_hash, self.products_path = input_hash, products_path
@@ -337,7 +380,8 @@ class ImageStep:
                       full_exports=0, retry_failed=self.retry_failed, retry_transient=self.retry_transient,
                       index=str(self.index) if self.index is not None else None,
                       object_store=self.object_store is not None,
-                      stored=0, store_checks=0, store_missing=0, store_mismatch=0, store_errors=0)
+                      stored=0, store_checks=0, store_missing=0, store_mismatch=0, store_errors=0,
+                      stored_by_identity=0)
         self.report = report
         self.store_errors_in_row = 0
         self.storage_checks = {}  # url -> found/missing/mismatch/error, this attempt's HEAD answers
@@ -440,6 +484,31 @@ class ImageStep:
             # Paths belong to this run's media/; the index keeps what can be asked of storage.
             self.shared[entry['url']] = {k: v for k, v in entry.items() if k != 'local_path'}
             append_record(self.shared_journal, self.shared[entry['url']])
+            if self.identity_keys and entry.get('status') == 'downloaded':
+                self.remember(self.shared[entry['url']])
+
+    def remember(self, entry):
+        key = image_identity(entry['url']) if stored_metadata(entry) and entry.get('url') else None
+        if key and (entry.get('downloaded_at') or '') >= (self.by_identity.get(key, {}).get('downloaded_at') or ''):
+            self.by_identity[key] = entry
+
+    def match_identity(self, url):
+        """Same catalog path and query but another _v: the earlier download stands if storage has it.
+
+        The match is kept in this run's journal only (with matched_url); the shared history keeps
+        real downloads, so aliases do not pile up per _v."""
+        key = image_identity(url) if self.identity_keys else None
+        match = self.by_identity.get(key) if key else None
+        meta = stored_metadata(match)
+        if not meta or match['url'] == url or not self.in_storage(meta, url):
+            return False
+        self.current[url] = dict(url=url, status='stored', **meta, local_path=None,
+                                 downloaded_at=match.get('downloaded_at'), checked_at=utc_now(),
+                                 run_id=self.run_id, matched_url=match['url'], identity=key)
+        append_record(self.journal, self.current[url])
+        self.report['stored'] += 1
+        self.report['stored_by_identity'] += 1
+        return True
 
     def judge(self, url):
         memo, store, destination, report = self.memo, self.store, self.destination, self.report
@@ -469,6 +538,7 @@ class ImageStep:
         elif self.store_configured and entry.get('status') == 'stored' and stored_metadata(entry):
             current[url] = entry.copy()  # this run already found it in storage (resume)
             report['stored'] += 1
+            report['stored_by_identity'] += bool(entry.get('matched_url'))
         elif entry.get('status') == 'failed' and not self.retry_failed and (
                 not self.retry_transient or entry.get('gave_up') or index is not None):
             # With an index, a failure of this run is retried in the next run, not on resume.
@@ -490,7 +560,7 @@ class ImageStep:
                 current[url]['local_path'] = None
                 report['skipped_failed'] += 1
                 report['gave_up'] += 1
-            else:
+            elif not self.match_identity(url):
                 self.queue.append(url)
         else:
             self.queue.append(url)
@@ -530,12 +600,7 @@ class ImageStep:
         try:
             data = fetcher.fetch(url)
             info = verified_image(data)
-            relative = f"images/{info['sha256']}.{info['extension']}"
-            target = store / relative
-            if not memo.valid({'status': 'downloaded', 'local_path': relative, **info}):
-                temporary = target.with_suffix(target.suffix + '.tmp')
-                temporary.write_bytes(data)
-                temporary.replace(target)
+            relative = self.keep(data, info)
             entry = dict(url=url, status='downloaded', local_path=relative,
                          downloaded_at=utc_now(), run_id=self.run_id, attempts=attempts,
                          response_headers=getattr(fetcher, 'last_headers', None), **info)
@@ -567,12 +632,23 @@ class ImageStep:
         self.record(entry)
         self.current[url] = entry
 
+    def keep(self, data, info):
+        """Write verified bytes into the blob store under their sha256; the relative path."""
+        relative = f"images/{info['sha256']}.{info['extension']}"
+        target = self.store / relative
+        if not self.memo.valid({'status': 'downloaded', 'local_path': relative, **info}):
+            temporary = target.with_suffix(target.suffix + '.tmp')
+            temporary.write_bytes(data)
+            temporary.replace(target)
+        return relative
+
     def settle(self):
         """Normal end of the downloads, before the final manifest: retry this run's transient
         failures, then let an unconfirmed but earlier stored image stand in for a failed one.
 
         Never on an exception or a stop: end() then publishes what there is."""
         self.retry_passes()
+        self.replacement_check()
         self.unverified_stand_ins()
         self.settled = True
 
@@ -611,6 +687,109 @@ class ImageStep:
                 self.download(url, retry_round=number)
                 done['attempted'] += 1
                 done['recovered'] += current[url]['status'] == 'downloaded'
+
+    def replacement_check(self):
+        """Fetch a sample of the images matched without _v again. Same bytes or a re-encoding of
+        the same picture keep the earlier sha256; another picture is recorded as this run's
+        download (new sha256) and counted, with an alert above REPLACEMENT_ALERT_LIMIT.
+
+        Half the sample is the matches confirmed longest ago, half random. The targets and the
+        verdicts are kept in image_replacement.json, so a resume goes on with the same sample.
+        A failed check leaves the image stored and is not an image failure; 403/429 stops as usual."""
+        if not self.identity_keys or not self.replacement_sample:
+            return
+        report, path = self.report, self.destination / 'image_replacement.json'
+        state = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else {}
+        if state.get('image_key_version') != IMAGE_KEY_VERSION or state.get('size') != self.replacement_sample:
+            state = dict(image_key_version=IMAGE_KEY_VERSION, size=self.replacement_sample,
+                         targets=self.sample_targets(), done={})
+            if state['targets']:  # nothing matched: no file, a resume finds the same nothing
+                atomic_json(path, state)
+        summary = report['replacement_check'] = dict(size=self.replacement_sample, targets=len(state['targets']),
+                                                     limit=REPLACEMENT_ALERT_LIMIT)
+        for url in state['targets']:
+            if url in state['done']:
+                continue
+            self.check_cancel()
+            if self.stopped or limit_reached(report['requests'], self.max_requests) or self.object_store is None:
+                summary['stopped'] = report.get('stop_reason') or ('budget' if self.object_store else 'store_disabled')
+                break
+            entry = self.current.get(url) or {}
+            if entry.get('status') == 'downloaded' and entry.get('replaced_sha256'):
+                verdict = 'changed'  # journaled before a stop, the verdict was not saved yet
+            elif entry.get('matched_url') and entry.get('status') == 'stored':
+                verdict = self.check_again(url, entry)
+            else:
+                verdict = 'skipped'
+            if verdict is None:
+                summary['stopped'] = report['stop_reason']
+                break
+            state['done'][url] = verdict
+            atomic_json(path, state)
+        verdicts = list(state['done'].values())
+        counts = {verdict: verdicts.count(verdict) for verdict in ('same', 'reencoded', 'changed', 'failed', 'skipped')}
+        checked = counts['same'] + counts['reencoded'] + counts['changed']
+        summary.update(counts, checked=checked, rate=round(counts['changed'] / checked, 6) if checked else 0.0)
+
+    def sample_targets(self):
+        matched = [url for url, entry in self.current.items()
+                   if entry.get('status') == 'stored' and entry.get('matched_url')]
+
+        def confirmed(url):
+            entry = self.current[url]
+            return self.shared.get(entry['matched_url'], {}).get('confirmed_at') or entry.get('downloaded_at') or ''
+        oldest = sorted(matched, key=lambda url: (confirmed(url), url))[:self.replacement_sample // 2]
+        chosen = set(oldest)
+        rest = sorted((url for url in matched if url not in chosen),
+                      key=lambda url: hashlib.sha256(f"{self.run_id}:{url}".encode()).hexdigest())
+        return oldest + rest[:self.replacement_sample - len(oldest)]
+
+    def check_again(self, url, entry):
+        report = self.report
+        report['requests'] += 1
+        try:
+            data = self.fetcher.fetch(url)
+            info = verified_image(data)
+            if info['sha256'] == entry['sha256']:
+                verdict = 'same'
+            else:
+                verdict = 'reencoded' if same_picture(self.earlier_bytes(entry), data) else 'changed'
+        except StepCancelled:
+            report['requests'] -= 1
+            raise
+        except Exception as exc:  # a check that cannot finish only leaves the earlier image
+            response = exc.response if isinstance(exc, requests.HTTPError) else None
+            if response is not None and response.status_code in {403, 429}:
+                self.stopped = True
+                report['stop_reason'] = f'http_{response.status_code}'
+                return None  # blocked: not a verdict, a resume asks again
+            return 'failed'
+        if verdict != 'changed':
+            # The earlier bytes stand either way; only when they were last confirmed changes.
+            matched = self.shared.get(entry['matched_url'])
+            if matched is not None:
+                matched['confirmed_at'] = utc_now()
+                append_record(self.shared_journal, matched)
+            return verdict
+        replaced = dict(url=url, status='downloaded', local_path=self.keep(data, info), downloaded_at=utc_now(),
+                        run_id=self.run_id, attempts=1, response_headers=getattr(self.fetcher, 'last_headers', None),
+                        replaced_sha256=entry['sha256'], matched_url=entry['matched_url'], **info)
+        if not self.memo.valid(replaced):
+            return 'failed'
+        self.record(replaced)
+        self.current[url] = replaced
+        report['downloaded'] += 1
+        report['stored'] -= 1
+        report['stored_by_identity'] -= 1
+        return verdict
+
+    def earlier_bytes(self, entry):
+        """The bytes the match stands for: this store's copy, or the object in storage."""
+        local = self.store / f"images/{entry['sha256']}.{entry['extension']}"
+        data = local.read_bytes() if local.is_file() else self.object_store.get(object_key(entry))
+        if hashlib.sha256(data).hexdigest() != entry['sha256']:
+            raise ValueError('earlier image bytes do not match their sha256')
+        return data
 
     def own(self, entry):
         """A failure of this run directory, not one a shared cache keeps from another run."""
@@ -673,6 +852,10 @@ class ImageStep:
         alerts = ([{'signal': 'image_permanent_failures', 'count': kinds['external'], 'total': total,
                     'rate': round(external_rate, 6), 'limit': EXTERNAL_ALERT_LIMIT}]
                   if external_rate > EXTERNAL_ALERT_LIMIT else [])
+        check = report.get('replacement_check') or {}
+        if check.get('rate', 0) > REPLACEMENT_ALERT_LIMIT:
+            alerts.append({'signal': 'image_replaced_at_same_path', 'count': check['changed'],
+                           'total': check['checked'], 'rate': check['rate'], 'limit': REPLACEMENT_ALERT_LIMIT})
         return summary, alerts
 
     def end(self):
@@ -759,6 +942,8 @@ class ImageStep:
             image = {**observed, **entry, "source": product["source"], "product_id": product["product_id"],
                      "filename": None, "local_path": None, "category_paths": {}}
             image.pop("storage_path", None)  # compatibility input must not duplicate output paths
+            for key in MATCH_FIELDS:  # journal only, until the pipeline contract (policy 2) wants them
+                image.pop(key, None)
             if entry["status"] == "downloaded":
                 key = hashlib.sha256(entry["url"].encode()).hexdigest()[:12]
                 name = f"{product['source']}_{product['product_id']}_{ordinal:03d}_{key}.{entry['extension']}"

@@ -1,7 +1,8 @@
 """Read-only check that a collected image is already in the pipeline's object storage.
 
 The collector only decides whether to download again: a HEAD with the object's size and
-its sha256 metadata. The pipeline's ingestion still reads the object and verifies its full
+its sha256 metadata. The replacement check of images matched without _v also reads a sampled
+object (GET) to compare it with a new response. The pipeline's ingestion still reads the object and verifies its full
 sha256 before the image becomes AVAILABLE, so this check never vouches for integrity.
 
 The settings file is a Java-properties style key=value file kept outside Git:
@@ -81,6 +82,12 @@ class S3ImageStore:
         # Garage answers the user metadata key as "Sha256": match it without case.
         metadata = {str(key).lower(): value for key, value in (response.get("Metadata") or {}).items()}
         return {"bytes": response.get("ContentLength"), "sha256": metadata.get("sha256")}
+
+    def get(self, key: str) -> bytes:
+        """The object's bytes: the replacement check compares a sampled image with them."""
+        response = self.client.get_object(Bucket=self.bucket, Key=key)
+        with response["Body"] as body:
+            return body.read()
 
     def close(self):
         close = getattr(self.client, "close", None)

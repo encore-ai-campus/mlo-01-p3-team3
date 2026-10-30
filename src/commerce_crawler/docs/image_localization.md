@@ -105,6 +105,7 @@ URL 처리 이력은 이미지마다 append한다. 전체 상품 manifest와 다
 - 준비 미완료, 403/429 차단, 예산 때문에 시도하지 못한 URL, 중단은 비율과 관계없이 partial이다.
 - 갤러리 없는 상품은 이 판정을 막지 않는다. 갤러리 확보율은 품질 관문이 판정한다.
 - 저장소 확인이 오류였고 이전 성공 기록이 있는 사진이 재시도 뒤에도 일시 실패면, manifest에만 마지막 성공 메타데이터로 stored를 쓰고 `storage_unverified: true`를 붙인다.
+- 저장소 확인을 켠 실행에서 `img.danuri.io/catalog-image/` 사진은 `_v`만 다른 주소를 같은 사진으로 보고 처음 받은 sha256의 stored로 쓴다(키 규칙 버전 2). 교체 감시 표본의 실패는 이 판정에 들어가지 않는다. 표본에서 다른 사진이 확인된 비율이 1%를 넘으면 경보(`image_replaced_at_same_path`)를 남긴다. 상세는 README의 "사진 재다운로드 방지"와 루트 `crawler-optimization/image-cache.md` 2단계다.
 
 규칙은 `RETRY_POLICY_VERSION` 2로 묶여 `image_settings.json`에 고정된다. 이전 버전으로 시작한 실행은 재개를 거부한다(종료 코드 3). 설계 근거는 루트 `crawler-optimization/image-retry.md`다.
 
