@@ -272,16 +272,18 @@ class SettingsTests(unittest.TestCase):
                 self.response = {'Error': {'Code': code}}
 
         class Client:
-            def __init__(self, error=None):
-                self.error = error
+            def __init__(self, error=None, name='sha256'):
+                self.error, self.name = error, name
 
             def head_object(self, Bucket, Key):
                 if self.error:
                     raise self.error
-                return {'ContentLength': 10, 'Metadata': {'sha256': 'a' * 64}}
+                return {'ContentLength': 10, 'Metadata': {self.name: 'a' * 64}}
 
         config = {'bucket': 'images'}
         self.assertEqual(S3ImageStore(config, Client()).head('k'), {'bytes': 10, 'sha256': 'a' * 64})
+        # Garage capitalises the metadata key.
+        self.assertEqual(S3ImageStore(config, Client(name='Sha256')).head('k'), {'bytes': 10, 'sha256': 'a' * 64})
         self.assertIsNone(S3ImageStore(config, Client(Error('404'))).head('k'))
         with self.assertRaises(Error):
             S3ImageStore(config, Client(Error('403'))).head('k')

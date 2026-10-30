@@ -78,8 +78,9 @@ class S3ImageStore:
             if code in NOT_FOUND:
                 return None
             raise
-        return {"bytes": response.get("ContentLength"),
-                "sha256": (response.get("Metadata") or {}).get("sha256")}
+        # Garage answers the user metadata key as "Sha256": match it without case.
+        metadata = {str(key).lower(): value for key, value in (response.get("Metadata") or {}).items()}
+        return {"bytes": response.get("ContentLength"), "sha256": metadata.get("sha256")}
 
     def close(self):
         close = getattr(self.client, "close", None)
