@@ -57,7 +57,8 @@ REQUIRED = {
     'handoff_since': str, 'schedule': dict, 'disk': dict, 'backoff_hours': dict,
 }
 # Fixed for a run once it starts: a change applies from the next new run (operations.md 6).
-FIXED = ('categories', 'output', 'detail_refresh', 'refresh_sample', 'image_store_config', 'quality_gate')
+FIXED = ('categories', 'output', 'detail_refresh', 'refresh_sample', 'image_store_config', 'image_replacement_sample',
+         'quality_gate')
 
 
 class ConfigError(ValueError):
@@ -149,6 +150,16 @@ def blocking_lock(path: Path, seconds: float = 30.0):
             time.sleep(0.05)
 
 
+def child_peak_rss() -> int | None:
+    """Peak RSS in bytes of the largest child this process waited for: the collector. None on Windows."""
+    try:
+        import resource
+    except ImportError:
+        return None
+    peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    return peak * (1 if sys.platform == 'darwin' else 1024) or None  # Linux counts kB
+
+
 def load_control(path: Path) -> dict:
     control = read_json(path)
     if not isinstance(control, dict):
@@ -161,6 +172,10 @@ def load_control(path: Path) -> dict:
             raise ConfigError(f'control key {key} is missing or has the wrong type')
     if 'image_store_config' not in control or not isinstance(control['image_store_config'], (str, type(None))):
         raise ConfigError('control key image_store_config must be a path or null (null keeps it off)')
+    # Optional: absent or null leaves the collector default (1,000 a run).
+    sample = control.get('image_replacement_sample')
+    if sample is not None and (not isinstance(sample, int) or isinstance(sample, bool) or sample < 0):
+        raise ConfigError('control key image_replacement_sample must be a nonnegative integer or null')
     if control['image_overlap'] not in ('on', 'off') or control['detail_refresh'] not in ('all', 'changed'):
         raise ConfigError('image_overlap must be on|off and detail_refresh all|changed')
     if control['quality_gate'] not in ('warn', 'enforce') or control['prune_keep'] < 1 or control['workers'] < 1:
@@ -701,7 +716,8 @@ class Launcher:
                 state['operator_wait'] = {'reason': 'max_run_days', 'at': iso(now), 'target': job}
                 return {'action': 'operator_wait', 'reason': 'max_run_days', 'job_id': job}
             fixed = entry.get('fixed')
-            if fixed and fixed != self.fixed_options():
+            # A key added by a later release counts as unset (null) for a run fixed before it.
+            if fixed and {k: fixed.get(k) for k in FIXED} != self.fixed_options():
                 state['operator_wait'] = {'reason': 'fixed_options_changed', 'at': iso(now), 'target': job}
                 return {'action': 'operator_wait', 'reason': 'fixed_options_changed', 'job_id': job}
             for hold in (entry.get('next_at'), pre.get('next_at')):
@@ -829,6 +845,8 @@ class Launcher:
                 '--quality-gate', c['quality_gate']]
         if c.get('image_store_config'):
             argv += ['--image-store-config', c['image_store_config']]
+            if c.get('image_replacement_sample') is not None:
+                argv += ['--image-replacement-sample', str(c['image_replacement_sample'])]
         if kind == 'new':
             argv.append('--new-run')
         return argv
@@ -888,6 +906,7 @@ class Launcher:
                 if previous_handler is not None:
                     signal.signal(signal.SIGTERM, previous_handler)
         ended = self.now()
+        peak_rss = child_peak_rss()  # logic 5: the VM has 4 GB
         self.note_run(kind, attempt, previous)
         line = self.result_line(log)
         with self.state() as state:
@@ -906,9 +925,9 @@ class Launcher:
             action = self.apply_outcome(state, job, outcome, detail, ended, directory)
             record.update(done=True, ended_at=iso(ended), exit_code=code, outcome=outcome, job_id=job,
                           run_dir=str(directory) if directory else None, stop_requested=stop['requested'],
-                          action=action.get('action'))
+                          action=action.get('action'), peak_rss_bytes=peak_rss)
             state['attempt'] = record
-        return self.finish('supervise', outcome.upper(), job_id=job, exit_code=code, **{
+        return self.finish('supervise', outcome.upper(), job_id=job, exit_code=code, peak_rss_bytes=peak_rss, **{
             k: v for k, v in action.items() if k not in ('outcome',)})
 
     def note_run(self, kind: str, attempt: str, previous: Path | None) -> None:

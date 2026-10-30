@@ -14,6 +14,7 @@
   "detail_refresh": "all",
   "refresh_sample": 1000,
   "image_store_config": null,
+  "image_replacement_sample": null,
   "quality_gate": "warn",
   "prune_keep": 2,
   "prune_abandoned": false,

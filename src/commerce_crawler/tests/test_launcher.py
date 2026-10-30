@@ -13,6 +13,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from product_collector import launcher as launcher_module
@@ -169,6 +170,19 @@ class ConfigTests(unittest.TestCase):
             h.write_control(control)
             self.assertEqual(h.tick()[0], 3)
             self.assertEqual(h.calls(), [])
+
+    def test_the_replacement_sample_goes_to_the_collector_only_with_the_store(self):
+        with tempfile.TemporaryDirectory() as root:
+            h = Harness(root)
+            h.write_control({**h.control, 'image_replacement_sample': 200})
+            launcher = h.launcher(); launcher.load()
+            self.assertNotIn('--image-replacement-sample', launcher.collector_argv('new'))
+            h.write_control({**h.control, 'image_store_config': str(h.root / 'store.properties')})
+            launcher = h.launcher(); launcher.load()
+            argv = launcher.collector_argv('new')
+            self.assertEqual(argv[argv.index('--image-replacement-sample') + 1], '200')
+            h.write_control({**h.control, 'image_replacement_sample': -1})
+            self.assertEqual(h.tick()[0], 3)
 
     def test_disabled_does_nothing(self):
         with tempfile.TemporaryDirectory() as root:
@@ -372,6 +386,23 @@ class OutcomeTests(unittest.TestCase):
             h.tick()
             self.assertEqual(h.tick()[1]['reason'], 'failed_twice_same_error')
 
+    def test_the_collector_peak_memory_reaches_the_state_and_the_supervise_line(self):
+        with tempfile.TemporaryDirectory() as root:
+            h = Harness(root)
+            with patch.object(launcher_module, 'child_peak_rss', return_value=123), patch('builtins.print') as printed:
+                h.launcher().tick()
+            lines = [json.loads(call.args[0]) for call in printed.call_args_list]
+            self.assertEqual(next(line for line in lines if line['command'] == 'supervise')['peak_rss_bytes'], 123)
+            self.assertEqual(h.state()['attempt']['peak_rss_bytes'], 123)
+        fake = SimpleNamespace(RUSAGE_CHILDREN=-1, getrusage=lambda who: SimpleNamespace(ru_maxrss=2048))
+        with patch.dict(sys.modules, {'resource': fake}):
+            with patch.object(launcher_module.sys, 'platform', 'linux'):
+                self.assertEqual(launcher_module.child_peak_rss(), 2048 * 1024)  # Linux reports kB
+            with patch.object(launcher_module.sys, 'platform', 'darwin'):
+                self.assertEqual(launcher_module.child_peak_rss(), 2048)
+        with patch.dict(sys.modules, {'resource': None}):
+            self.assertIsNone(launcher_module.child_peak_rss())  # Windows has no resource module
+
     def test_lost_supervisor_attempt_is_judged_from_its_log_and_files(self):
         with tempfile.TemporaryDirectory() as root:
             h = Harness(root)
@@ -435,6 +466,17 @@ class OutcomeTests(unittest.TestCase):
             self.interrupted_run(h, status='interrupted', result='interrupted', exit=130)
             Path(h.control['categories']).write_text('[{"category_id": "2"}]')
             self.assertEqual(h.tick()[1]['reason'], 'fixed_options_changed')
+
+    def test_a_run_fixed_before_a_new_option_key_still_resumes(self):
+        with tempfile.TemporaryDirectory() as root:
+            h = Harness(root)
+            self.interrupted_run(h, status='interrupted', result='interrupted', exit=130)
+            path = h.root / 'launcher' / 'state.json'
+            state = h.state()
+            state['runs']['r1']['fixed'].pop('image_replacement_sample')
+            path.write_text(json.dumps(state), encoding='utf-8')
+            h.scenario({'collector': {}})
+            self.assertEqual(h.tick()[1]['kind'], 'resume')
 
     def test_fixed_options_change_and_ten_days_wait_for_the_operator(self):
         with tempfile.TemporaryDirectory() as root:
