@@ -363,6 +363,17 @@ def open_collection(output, adapter, config, resume_from=None, new_run=False, pr
 ABANDONED = 'abandoned'
 
 
+HANDOFF_DIR = 'handoff'
+LOADED_MARKER = 'pipeline_loaded.json'
+
+
+def handoff_pending(output, directory, job):
+    """The launcher handed this run to the pipeline (handoff/<job_id>.json) and no load is marked yet."""
+    if not isinstance(job, str) or not job:
+        return False
+    return (Path(output) / HANDOFF_DIR / f'{job}.json').is_file() and not (Path(directory) / LOADED_MARKER).is_file()
+
+
 def abandon_run(output, directory=None, reason=None):
     """Mark a run that will not be resumed as abandoned and stop it being the active run.
 
@@ -385,6 +396,10 @@ def abandon_run(output, directory=None, reason=None):
             if not (target / 'run_config.json').is_file() or not path.is_file():
                 raise ValueError(f'파일 체크포인트가 없습니다: {target}')
             state = json.loads(path.read_text(encoding='utf-8'))
+            job = json.loads((target / 'run_config.json').read_text(encoding='utf-8')).get('job_id')
+            if handoff_pending(output, target, job):
+                # The pipeline may be reading this run: it removes the hand-off file first.
+                raise ValueError(f'적재 인계 중인 실행은 포기할 수 없습니다: {target}')
             if state.get('status') == 'completed':
                 raise ValueError(f'완료된 실행은 포기할 수 없습니다: {target}')
             previous = state.get('status')

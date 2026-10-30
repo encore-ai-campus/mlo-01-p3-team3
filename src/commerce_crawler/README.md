@@ -129,7 +129,7 @@ python run_collector.py --categories config/my_categories.json --workers 3 --dow
 
 ### 상세 HTML 보관 정책
 
-`details/`가 있는 수집 실행 디렉터리는 **완료·적재 확인된 최근 2회 수집분**까지 보관한다. 수집기 자체는 지우지 않으며, 정리는 `product_collector.prune`이 맡는다. 운영 자동 실행(NiFi가 서버 실행기를 깨우고 실행기가 수집·인계·정리를 판단)은 **예정**이며, 설계는 상위 저장소 `crawler-optimization/operations.md`에 있다. 지금은 사람이 적재 확인 뒤 `--apply`로 실행한다.
+`details/`가 있는 수집 실행 디렉터리는 **완료·적재 확인된 최근 2회 수집분**까지 보관한다. 수집기 자체는 지우지 않으며, 정리는 `product_collector.prune`이 맡는다. 운영 자동 실행에서는 [서버 실행기](#서버-실행기)가 매 주기 `prune --apply`를 돈다. 수동으로 돌릴 때는 적재 확인 뒤 `--apply`로 실행한다.
 
 ```bash
 python -m product_collector.prune --output <수집기 --output 경로>            # 삭제 대상만 출력
@@ -241,7 +241,7 @@ python run_collector.py --export-from "data/danawa/<job_id>"
 | 1 | 수집 중 예외 | failed. 보고서 `result`가 있으면 `failed`로 바뀐다 |
 | 2 | partial 또는 quality_failed(`run_report.result`로 구분) | 같은 값 |
 | 3 | 시작 전 실패: 명령행·설정 오류, 재개 설정 불일치, 다른 프로세스가 수집 중, 포기한 실행 재개 | 실행 상태를 바꾸지 않음 |
-| 130 | Ctrl+C 중단 | interrupted. 보고서 `result`가 있으면 `interrupted`로 바뀐다 |
+| 130 | Ctrl+C 또는 SIGTERM 중단 | interrupted. 보고서 `result`가 있으면 `interrupted`로 바뀐다 |
 
 어느 경우든 마지막 표준 출력 줄은 JSON(`result`, `exit_code`, 있으면 `output`·`job_id`·`error`)이다. 준비 중 Ctrl+C·강제 종료처럼 이 줄이 없으면 실행기는 `checkpoint_state.json`의 상태가 running으로 남은 것으로 판단한다. 사진 단계가 403/429로 멈추면 `run_report.image_download.stop_reason`에 `http_403`·`http_429`가 남는다. 이전 시도의 목록 실패(요청 실패·해석 실패·형식 불일치 빈 응답)가 재개 뒤에도 남은 카테고리는 partial이다. 형식 불일치 빈 응답 카테고리는 재개할 때 그 페이지를 다시 요청한다. completed는 모든 필드 확보나 추천 승인을 뜻하지 않는다.
 
@@ -252,6 +252,33 @@ python run_collector.py --check-pagination --pagination-template config/danawa_p
 ```
 
 종료 코드 0 정상, 4 차단(403/429), 5 통신 실패, 6 응답 해석 실패(템플릿 만료 의심), 3 템플릿 없음·형식 오류이고, 결과 JSON 한 줄(`status`, `category_id`, `http_status`, `products`, `error`)을 출력한다. 헤더 값은 출력하지 않는다.
+
+## 서버 실행기
+
+수집 VM(nifi-01)에서는 NiFi가 60분마다 실행기를 깨운다(`/opt/pj3/danawa-collector/collector_launcher.py;tick`). 실행기는 몇 초 안에 할 일 하나를 정하고 끝난다. 새 실행 시작·재개는 분리된 감독 프로세스(`supervise`)가 맡아 수집기를 돌리고 결과를 판정한다. 규칙의 근거는 상위 저장소 `crawler-optimization/operations.md`(정책 4)와 `launcher.md`다.
+
+- **판단 로직:** `product_collector/launcher.py`. **고정 진입점:** `deploy/collector_launcher.py`(설치 스크립트가 서버 위치로 복사. 제어 파일의 `source` 릴리스를 불러 쓰므로 릴리스가 바뀌어도 그대로다).
+- **제어 파일:** `<root>/config/collector-control.json`, contract_version 2. 예시는 `deploy/collector-control.example.json`(비밀값 없음). 버전 1은 거부한다(종료 3).
+  - 실행에 고정: `categories`, `output`, `detail_refresh`, `refresh_sample`, `image_store_config`(null이면 끔), `quality_gate`. 진행 중인 실행이 있는데 바뀌면 운영자 대기.
+  - 재개에 바로 적용: `workers`, `listing_interval`, `interval`, `image_overlap`.
+  - 그 밖: `enabled`, `source`, `source_commit`, `python`, `pagination_template`, `prune_keep`, `prune_abandoned`, `handoff_since`, `schedule`(`period_days`·`rest_hours`·`max_run_days`), `disk`(`new_run_free_gb`·`resume_free_gb`), `backoff_hours`(`blocked` 목록·`retry`).
+
+```bash
+python -m product_collector.launcher --control <제어 파일> tick      # NiFi가 부름
+python -m product_collector.launcher --control <제어 파일> status    # 현재 상태(네트워크 요청 없음)
+python -m product_collector.launcher --control <제어 파일> release [--start-now]  # 운영자 대기 해제
+python -m product_collector.launcher --control <제어 파일> stop      # 수집을 interrupted로 멈춤. HOLD와 함께
+python -m product_collector.launcher --control <제어 파일> --check   # 설치 확인
+```
+
+tick 한 번의 순서: 완료됐는데 인계되지 않은 실행의 인계 파일 생성 → 인계 지연 경보 → 감독이 살아 있으면 `RUNNING`(감독 없이 수집 잠금만 잡혀 있으면 `ORPHAN_RUNNING`, 아무것도 건드리지 않음) → prune → `HOLD` 파일이 있으면 멈춤 → 감독이 판정 전에 죽은 시도를 로그·파일로 판정 → 결정(재개·새 실행·대기·운영자 대기) → 시작 전 점검(템플릿, 이미지 저장소 설정 권한, 디스크, `--check-pagination` 1회) → 감독 시작.
+
+- **새 실행:** 진행 중인 실행이 없고, 마지막 completed 실행 시작 + 7일과 그 완료 + 24시간이 모두 지났을 때. `release --start-now`는 이 조건을 한 번 건너뛴다.
+- **결과별 다음 동작:** interrupted는 다음 tick 재개. crashed(결과 줄 없음)·failed는 1시간 뒤 재개, 같은 원인이 연속 2회면 운영자 대기. 403/429 차단은 6시간 → 24시간 뒤 재개, 연속 3회면 운영자 대기. 목록 통신 오류·상세 실패율은 1시간 뒤 1회 재개. 템플릿 만료 의심, 사진 partial, quality_failed, 예산, 시작 거부(종료 3), 분류 안 됨은 바로 운영자 대기. 시작 후 10일이 지나도 운영자 대기(`release`가 3일 연장).
+- **인계:** completed 실행이 조건(checkpoint·report completed, `writer.lock` 해제, 사진 manifest와 `download_report.finished_at`, 운영자 대기·포기 아님, 상한 없는 운영 수집)을 모두 만족하면 `<output>/handoff/<job_id>.json`을 한 번만 만든다(임시 파일 fsync 뒤 `os.link`). 인계 파일이 있고 적재 표시(`pipeline_loaded.json`)가 없는 실행은 `abandon`이 거부하고 `prune --prune-abandoned`도 지우지 않는다(`handoff_pending`).
+- **상태 파일:** `<root>/launcher/state.json`(시도·백오프·운영자 대기·시작/완료 시각), `last.json`(마지막 결정, 모니터링용), 시도별 수집기 로그 `<root>/logs/<job_id|new>/<시각>-<시도>.log`.
+- **종료 코드(tick):** 0 판단 완료(대기·운영자 대기 포함, `last.json`의 `status`로 구분), 1 실행기 예외, 3 제어 파일·설치 오류. 모든 명령은 마지막 줄에 JSON 한 줄을 낸다.
+- **멈추기:** NiFi 서비스는 정지·재시작 때 감독과 수집기에 SIGTERM을 보낸다. 수집기는 SIGTERM을 Ctrl+C처럼 처리해 interrupted로 저장하고, 다음 tick이 재개한다. 사람이 멈출 때는 `HOLD` 파일을 두고 `stop`을 쓴다.
 
 ## 검증과 현재 한계
 

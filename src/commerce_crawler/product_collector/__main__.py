@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import signal
 import sys
 import threading
 from pathlib import Path
@@ -24,7 +25,7 @@ EXIT_COMPLETED = 0
 EXIT_FAILED = 1          # an exception during the run; checkpoint_state is "failed"
 EXIT_PARTIAL = 2         # partial or quality_failed; run_report.result tells which
 EXIT_NOT_STARTED = 3     # command line, settings or resume refused before collecting; no run state changed
-EXIT_INTERRUPTED = 130   # Ctrl+C; checkpoint_state is "interrupted"
+EXIT_INTERRUPTED = 130   # Ctrl+C or SIGTERM; checkpoint_state is "interrupted"
 # --check-pagination
 CHECK_OK, CHECK_BLOCKED, CHECK_REQUEST_FAILED, CHECK_PARSE_FAILED = 0, 4, 5, 6
 
@@ -176,7 +177,20 @@ class ImageResources:
                     setattr(self, client, None)
 
 
+def stop_on_signal(signum, frame):
+    """Ctrl+C, or SIGTERM from systemd stopping NiFi: save the run as interrupted.
+
+    Only the first signal counts. systemd signals the supervisor and the collector together and the
+    supervisor passes SIGINT on, so a second signal must not break the save that the first one started."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    raise KeyboardInterrupt
+
+
 def main() -> int:
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, stop_on_signal)
+        signal.signal(signal.SIGTERM, stop_on_signal)
     parser = Parser(description="다나와 카테고리·페이지 수집과 상품 갤러리 보강")
     parser.add_argument("--categories", type=Path, default=PROJECT_ROOT / "config/danawa_categories_71.json")
     parser.add_argument("--output", type=Path, default=PROJECT_ROOT / "data/danawa")

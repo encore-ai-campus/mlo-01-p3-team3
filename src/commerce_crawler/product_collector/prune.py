@@ -25,11 +25,10 @@ import os
 from pathlib import Path
 import shutil
 
-from .checkpoint import writer_lock
+from .checkpoint import HANDOFF_DIR, LOADED_MARKER, writer_lock
 from .core import utc_now
 from .storage import IMAGE_BYTE_DIRS, IMAGES_PRUNED, atomic_json
 
-LOADED_MARKER = 'pipeline_loaded.json'
 LOADED_SCHEMA = 1
 # The marker's target for the operating database (fixed by the loader). environment_id is for audit only.
 LOADED_TARGET = 'production'
@@ -74,6 +73,10 @@ def _ineligible(directory, original, active_dir, stale_before=None):
     if original == active_dir:
         return 'active', None
     job = config.get('job_id')
+    if (isinstance(job, str) and job and (directory.parent / HANDOFF_DIR / f'{job}.json').is_file()
+            and not _confirmed(marker, job)):
+        # Handed to the pipeline and not loaded yet: never deleted, --prune-abandoned included.
+        return 'handoff_pending', None
     if state.get('status') != 'completed':
         if (stale_before and state.get('status') in STALE and isinstance(job, str) and job
                 and state.get('job_id') == job and str(state.get('updated_at') or '') < stale_before):
