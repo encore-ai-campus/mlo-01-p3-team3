@@ -41,7 +41,11 @@ def writer_lock(path):
                 msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
         else:
             import fcntl
-            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                # Same error as on Windows: callers tell "held elsewhere" apart from I/O failures.
+                raise ValueError('이 작업은 다른 프로세스에서 수집 중입니다.') from exc
             try:
                 yield
             finally:

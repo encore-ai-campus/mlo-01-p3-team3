@@ -15,7 +15,8 @@ from product_collector.media import ImageFetcher, localize_images, product_image
 
 def png(color='red'):
     stream = io.BytesIO()
-    Image.new('RGB', (3, 2), color).save(stream, format='PNG')
+    # Uncompressed: zlib versions compress differently, and recorded hashes must hold on every machine.
+    Image.new('RGB', (3, 2), color).save(stream, format='PNG', compress_level=0)
     return stream.getvalue()
 
 

@@ -105,7 +105,7 @@ def fsync_dir(path: Path) -> None:
         os.close(descriptor)
 
 
-# writer_lock reports a held lock as ValueError on Windows and BlockingIOError (fcntl) on POSIX.
+# writer_lock reports a held lock as ValueError on every OS; BlockingIOError stays for an older checkout.
 LOCK_HELD = (ValueError, BlockingIOError)
 
 
