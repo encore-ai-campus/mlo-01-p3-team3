@@ -106,7 +106,7 @@ def validate_identity(html: str, code: str) -> None:
         raise ValueError(f"detail Product identity mismatch: {code}")
 
 
-FINGERPRINT_VERSION = 1
+FINGERPRINT_VERSION = 2
 
 
 def listing_fingerprint(listings: list[dict]) -> str | None:
@@ -128,7 +128,10 @@ def listing_fingerprint(listings: list[dict]) -> str | None:
             "name": {key: name.get(key) for key in ("full", "maker", "brand", "model", "product")},
             "description": {key: (description.get(key) or {}).get("raw") if isinstance(description.get(key), dict) else None
                             for key in ("pc", "mobile")},
-            "image": image.get("url"), "category": category.get("codes"),
+            # The image query (_v) is when the site last rebuilt the thumbnail: it changed on every product
+            # between two runs (measured 2026-10-30), so only the image path counts.
+            "image": image.get("url").split("?", 1)[0] if isinstance(image.get("url"), str) else image.get("url"),
+            "category": category.get("codes"),
             "dates": product.get("dates"), "productStatus": product.get("productStatus")},
             ensure_ascii=False, sort_keys=True))
     if not values:

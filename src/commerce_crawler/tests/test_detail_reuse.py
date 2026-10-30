@@ -80,10 +80,12 @@ class DetailReuseTests(unittest.TestCase):
     def test_fingerprint_ignores_prices_and_ranks_but_sees_names_images_and_other_listings(self):
         base = [{'api_product': api('11')}]
         same = [{'api_product': api('11', price={'min': 900}, stats={'shopCount': 9}, popularRank=7)}]
-        self.assertEqual(listing_fingerprint(base), listing_fingerprint(same))
-        self.assertTrue(listing_fingerprint(base).startswith('v1:'))
+        rebuilt = [{'api_product': api('11', image={'url': 'https://img.example/11/thumb.jpg?shrink=130:130&_v=9'})}]
+        for unchanged in (same, rebuilt):
+            self.assertEqual(listing_fingerprint(base), listing_fingerprint(unchanged))
+        self.assertTrue(listing_fingerprint(base).startswith('v2:'))
         renamed = [{'api_product': api('11', name={'full': '새 이름', 'maker': '제조사'})}]
-        reimaged = [{'api_product': api('11', image={'url': 'https://img.example/11/thumb.jpg?_v=2'})}]
+        reimaged = [{'api_product': api('11', image={'url': 'https://img.example/11/other.jpg?_v=1'})}]
         other = copy.deepcopy(base) + [{'api_product': api('11', description={'pc': {'raw': '바뀐 규격'}})}]
         for changed in (renamed, reimaged, other):
             self.assertNotEqual(listing_fingerprint(base), listing_fingerprint(changed))
