@@ -20,6 +20,7 @@ reference checks. Without a loaded run nothing of the kind is deleted.
 """
 import argparse
 from contextlib import ExitStack, contextmanager
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -54,6 +55,37 @@ def _confirmed(marker, job):
             and marker['failed'] == 0 and marker['raw_confirmed'] == marker['products'])
 
 
+# The loader's sealed inputs (snapshot name -> file in the run), hashed whole; absent files have no key.
+LOADED_INPUTS = {'product_raw.jsonl': 'product_raw.jsonl', 'products.jsonl': 'products.jsonl',
+                 'run_report.json': 'run_report.json', 'gallery_report.json': 'gallery_report.json',
+                 'media_manifest.jsonl': 'media/products_with_local_images.jsonl'}
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1 << 20), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _inputs_unchanged(directory, marker):
+    """The files the loader sealed are still the bytes it loaded: a run changed after loading
+    (a manual resume or image retry) is not loaded any more. Image bytes are not inputs."""
+    sealed = marker.get('inputs')
+    if not isinstance(sealed, dict) or not sealed:
+        return False
+    try:
+        return loaded_inputs(directory) == sealed
+    except OSError:
+        return False
+
+
+def loaded_inputs(directory):
+    """The inputs a loader would seal for this run now."""
+    return {name: _sha256(directory / path) for name, path in LOADED_INPUTS.items() if (directory / path).is_file()}
+
+
 def _evidence(directory):
     report = _read(directory / 'run_report.json')
     dirs = report.get('detail_evidence_dirs', []) if isinstance(report, dict) else []
@@ -85,6 +117,8 @@ def _ineligible(directory, original, active_dir, stale_before=None):
     # The loader confirms one specific job; a marker without that identity confirms nothing.
     if not (isinstance(job, str) and job and state.get('job_id') == job and _confirmed(marker, job)):
         return 'not_loaded', None
+    if not _inputs_unchanged(directory, marker):
+        return 'loaded_inputs_changed', None
     return None, str(state.get('updated_at') or '')
 
 

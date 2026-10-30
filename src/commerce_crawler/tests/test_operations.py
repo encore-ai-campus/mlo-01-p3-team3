@@ -17,7 +17,7 @@ from product_collector.prune import prune_runs
 from product_collector.media import localize_images
 from product_collector.validation import verify_assets
 from test_memory_equivalence import CATEGORIES, FIRST, Harness, Session, api, category_url, first_pages, listing_page
-from test_prune import marker, run as synthetic_run
+from test_prune import seal, run as synthetic_run
 
 
 def last_line(printed):
@@ -274,8 +274,21 @@ class PruneImagesTests(unittest.TestCase):
             self.assertEqual(harness.run('out', FIRST, first_pages(), '--new-run')[0], 0)
         runs = harness.runs('out')
         for directory in runs:
-            (directory / 'pipeline_loaded.json').write_text(json.dumps(marker(directory.name)), encoding='utf-8')
+            seal(directory)
         return harness, runs
+
+    def test_image_bytes_stay_when_the_manifest_changed_after_loading_and_pruning_keeps_the_seal(self):
+        with tempfile.TemporaryDirectory() as root:
+            harness, runs = self.loaded_runs(root)
+            changed, other = runs
+            manifest = changed / 'media' / 'products_with_local_images.jsonl'
+            manifest.write_text(manifest.read_text(encoding='utf-8') + '\n', encoding='utf-8')  # an image retry rewrote it
+            report = prune_runs(harness.root / 'out', keep=2, apply=True)
+            self.assertEqual(report['kept'][changed.name], 'loaded_inputs_changed')  # not a loaded run any more
+            self.assertTrue((changed / 'media/images').is_dir())
+            self.assertEqual([item['run'] for item in report['images_pruned']], [other.name])
+            # Image bytes are not loader inputs: the pruned run is still the run that was loaded.
+            self.assertEqual(prune_runs(harness.root / 'out', keep=2)['kept'][other.name], 'newest_loaded')
 
     def test_kept_loaded_runs_lose_only_their_image_bytes(self):
         with tempfile.TemporaryDirectory() as root:
@@ -329,7 +342,7 @@ class PruneImagesTests(unittest.TestCase):
             report = prune_runs(harness.root / 'out', keep=2, apply=True)  # no marker: nothing at all
             self.assertFalse({'images_pruned', 'images_prunable', 'images_kept'} & set(report))
             self.assertTrue((target / 'media/images').is_dir())
-            (target / 'pipeline_loaded.json').write_text(json.dumps(marker(target.name)), encoding='utf-8')
+            seal(target)
             with writer_lock(target / 'media' / '.image-download.lock'):
                 report = prune_runs(harness.root / 'out', keep=2, apply=True)
             self.assertEqual(report['images_kept'], {target.name: 'in_use'})

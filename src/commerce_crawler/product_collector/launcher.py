@@ -329,7 +329,7 @@ class Launcher:
             return 'exists'
         fixed = (state['runs'].get(job) or {}).get('fixed') or {k: self.control.get(k) for k in FIXED}
         value = {'schema_version': HANDOFF_SCHEMA, 'job_id': job, 'run_dir': str(directory.resolve()),
-                 'media_manifest': str((directory / 'media' / 'products_with_local_images.jsonl').resolve()),
+                 'media_manifest': 'media/products_with_local_images.jsonl',  # relative to run_dir
                  'created_at': iso(self.now()),
                  'checks': {'run_completed': True, 'writer_unlocked': True, 'media_finished': True,
                             'unrestricted': True},
@@ -375,6 +375,10 @@ class Launcher:
         limit = timedelta(hours=HANDOFF_ALERT_HOURS)
         for path in folder.glob('*.json'):
             job = path.stem
+            failed = read_json(path.with_suffix('.failed'))
+            if failed is not None:
+                # The hand-off step counts its failures here; past its limit it stops (EXHAUSTED).
+                self.alert('handoff_failed', job_id=job, failed=failed)
             claimed = path.with_suffix('.claimed')
             if claimed.exists():
                 since = datetime.fromtimestamp(claimed.stat().st_mtime, timezone.utc)
@@ -611,6 +615,11 @@ class Launcher:
         summary = {'ok': True, 'deleted': report.get('deleted', [])}
         if report.get('images_pruned'):
             summary['images_pruned'] = [p.get('run') for p in report['images_pruned']]
+        changed = sorted({run for key in ('kept', 'images_kept') for run, reason in (report.get(key) or {}).items()
+                          if reason == 'loaded_inputs_changed'})
+        if changed:
+            # Loaded, then changed by hand (resume, image retry): what is on disk now was never loaded.
+            self.alert('loaded_inputs_changed', runs=changed)
         return summary
 
     def close_lost_attempt(self, state: dict) -> None:

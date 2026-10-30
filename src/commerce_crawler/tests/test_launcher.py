@@ -19,7 +19,7 @@ from product_collector import launcher as launcher_module
 from product_collector.checkpoint import abandon_run, writer_lock
 from product_collector.launcher import Launcher, main as launcher_main
 from product_collector.prune import prune_runs
-from test_prune import marker, run as synthetic_run
+from test_prune import seal, run as synthetic_run
 
 FAKE_COLLECTOR = textwrap.dedent('''
     """Fake collector: does what scenario.json in the release folder says."""
@@ -80,7 +80,8 @@ FAKE_PRUNE = textwrap.dedent('''
     output = Path(args[args.index('--output') + 1])
     with (output.parent / 'prune_calls.jsonl').open('a', encoding='utf-8') as stream:
         stream.write(json.dumps(args) + '\\n')
-    print(json.dumps({'deleted': [], 'kept': {}}))
+    planned = output.parent / 'prune_report.json'
+    print(planned.read_text(encoding='utf-8') if planned.exists() else json.dumps({'deleted': [], 'kept': {}}))
 ''')
 
 START = datetime(2026, 11, 1, tzinfo=timezone.utc)
@@ -516,13 +517,16 @@ class HandoffTests(unittest.TestCase):
             self.completed_run(h, 'limited', total_limit=10)
             self.completed_run(h, 'locked')
             loaded = self.completed_run(h, 'loaded')
-            (loaded / 'pipeline_loaded.json').write_text(json.dumps(marker('loaded')))
+            seal(loaded, 'loaded')
             unfinished = self.completed_run(h, 'media')
             (unfinished / 'media' / 'download_report.json').write_text('{}')
             with writer_lock(h.output / 'locked' / 'writer.lock'):
                 line = h.tick()[1]
             self.assertEqual(line['handoffs_created'], ['ok'])
             first = (h.output / 'handoff' / 'ok.json').read_bytes()
+            handoff = json.loads(first)
+            self.assertEqual(handoff['media_manifest'], 'media/products_with_local_images.jsonl')  # under run_dir
+            self.assertEqual(Path(handoff['run_dir']), (h.output / 'ok').resolve())
             h.tick()
             self.assertEqual((h.output / 'handoff' / 'ok.json').read_bytes(), first)
             self.assertTrue(h.handoff('locked'))
@@ -541,8 +545,22 @@ class HandoffTests(unittest.TestCase):
                 self.assertEqual(launcher.write_handoff(state, directory), 'mismatch')
             self.assertEqual(json.loads((h.output / 'handoff' / 'ok.json').read_text())['run_dir'], '/elsewhere')
             (h.output / 'handoff' / 'ok.json').write_text(json.dumps({'job_id': 'ok', 'created_at': '2026-10-29T00:00:00+00:00'}))
+            (h.output / 'handoff' / 'ok.failed').write_text(json.dumps({'attempts': 3, 'state': 'EXHAUSTED'}))
             line = h.tick()[1]
-            self.assertIn('handoff_not_claimed', [a['code'] for a in line['alerts']])
+            codes = {a['code']: a for a in line['alerts']}
+            self.assertIn('handoff_not_claimed', codes)
+            self.assertEqual(codes['handoff_failed']['failed'], {'attempts': 3, 'state': 'EXHAUSTED'})
+
+    def test_a_loaded_run_changed_afterwards_is_reported_from_the_prune_report(self):
+        with tempfile.TemporaryDirectory() as root:
+            h = Harness(root)
+            (h.root / 'HOLD').write_text('')
+            (h.output.parent / 'prune_report.json').write_text(json.dumps(
+                {'deleted': [], 'kept': {'a': 'loaded_inputs_changed', 'b': 'not_loaded'},
+                 'images_kept': {'c': 'loaded_inputs_changed'}}))
+            line = h.tick()[1]
+            alert = [a for a in line['alerts'] if a['code'] == 'loaded_inputs_changed']
+            self.assertEqual(alert, [{'code': 'loaded_inputs_changed', 'runs': ['a', 'c']}])
 
 
 class CrawlerContractTests(unittest.TestCase):
@@ -557,7 +575,7 @@ class CrawlerContractTests(unittest.TestCase):
             report = prune_runs(root, keep=1, apply=True, prune_abandoned=True)
             self.assertEqual(report['kept']['r1'], 'handoff_pending')
             self.assertTrue(directory.is_dir())
-            (directory / 'pipeline_loaded.json').write_text(json.dumps(marker('r1')))
+            seal(directory, 'r1')
             self.assertEqual(abandon_run(root, directory)['status'], 'abandoned')
 
     def test_sigterm_is_handled_like_ctrl_c_and_only_the_first_signal_counts(self):

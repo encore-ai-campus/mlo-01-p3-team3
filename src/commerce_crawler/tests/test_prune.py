@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from product_collector.checkpoint import writer_lock
-from product_collector.prune import prune_runs
+from product_collector.prune import loaded_inputs, prune_runs
 
 
 def marker(job, **changes):
@@ -19,6 +19,14 @@ def marker(job, **changes):
     return value
 
 
+def seal(directory, job=None, **changes):
+    """Write the marker last, with the inputs the loader sealed from the run's files as they are now."""
+    directory = Path(directory)
+    value = marker(job or directory.name, inputs=loaded_inputs(directory), **changes)
+    (directory / 'pipeline_loaded.json').write_text(json.dumps(value), encoding='utf-8')
+    return value
+
+
 def run(root, name, finished, status='completed', loaded=True, evidence=None):
     directory = Path(root) / name
     (directory / 'details' / '11').mkdir(parents=True)
@@ -26,12 +34,12 @@ def run(root, name, finished, status='completed', loaded=True, evidence=None):
     (directory / 'run_config.json').write_text(json.dumps({'job_id': name}), encoding='utf-8')
     (directory / 'checkpoint_state.json').write_text(
         json.dumps({'job_id': name, 'status': status, 'updated_at': finished}), encoding='utf-8')
-    if loaded:
-        job = name if loaded is True else loaded
-        (directory / 'pipeline_loaded.json').write_text(json.dumps(marker(job)), encoding='utf-8')
+    (directory / 'products.jsonl').write_text('{"product_id": "11"}\n', encoding='utf-8')
     if evidence:
         (directory / 'run_report.json').write_text(
             json.dumps({'detail_evidence_dirs': [str((Path(root) / e).resolve()) for e in evidence]}), encoding='utf-8')
+    if loaded:
+        seal(directory, name if loaded is True else loaded)
     return directory
 
 
@@ -158,19 +166,38 @@ class PruneTests(unittest.TestCase):
 
 
 class LoadedMarkerTests(unittest.TestCase):
+    def test_a_run_changed_after_loading_or_without_sealed_inputs_is_not_loaded(self):
+        with tempfile.TemporaryDirectory() as root:
+            changed = run(root, 'changed', '2026-10-01T00:00:00+00:00')
+            (changed / 'products.jsonl').write_text('{"product_id": "12"}\n', encoding='utf-8')
+            added = run(root, 'added', '2026-10-02T00:00:00+00:00')
+            (added / 'media').mkdir()
+            (added / 'media' / 'products_with_local_images.jsonl').write_text('', encoding='utf-8')
+            unsealed = run(root, 'unsealed', '2026-10-03T00:00:00+00:00')
+            value = marker('unsealed')  # a marker from before the loader sealed its inputs
+            (unsealed / 'pipeline_loaded.json').write_text(json.dumps(value), encoding='utf-8')
+            same = run(root, 'same', '2026-10-04T00:00:00+00:00')
+            (same / 'details' / '11' / 'page.json.gz').write_bytes(b'other')  # not an input
+            run(root, 'newest', '2026-10-05T00:00:00+00:00')
+            report = prune_runs(root, keep=1, apply=True)
+            self.assertEqual(report['deleted'], ['same'])
+            self.assertEqual({k: report['kept'][k] for k in ('changed', 'added', 'unsealed')},
+                             {'changed': 'loaded_inputs_changed', 'added': 'loaded_inputs_changed',
+                              'unsealed': 'loaded_inputs_changed'})
+
     def test_only_a_complete_load_into_the_operating_database_confirms_a_run(self):
         variants = {'staging': {'target': 'validation'}, 'failed': {'failed': 1}, 'short': {'raw_confirmed': 2},
                     'schema': {'schema_version': 2}, 'text-schema': {'schema_version': '1'}}
         with tempfile.TemporaryDirectory() as root:
             for index, (name, changes) in enumerate(variants.items(), 1):
                 directory = run(root, name, f'2026-10-0{index}T00:00:00+00:00')
-                (directory / 'pipeline_loaded.json').write_text(json.dumps(marker(name, **changes)), encoding='utf-8')
+                seal(directory, name, **changes)
             missing = run(root, 'missing', '2026-10-07T00:00:00+00:00')
-            value = marker('missing')
+            value = marker('missing', inputs=loaded_inputs(missing))
             value.pop('gallery_missing')
             (missing / 'pipeline_loaded.json').write_text(json.dumps(value), encoding='utf-8')
             no_audit = run(root, 'no-audit', '2026-10-08T00:00:00+00:00')
-            value = marker('no-audit')
+            value = marker('no-audit', inputs=loaded_inputs(no_audit))
             value.pop('environment_id')  # audit only, not required
             (no_audit / 'pipeline_loaded.json').write_text(json.dumps(value), encoding='utf-8')
             run(root, 'newest', '2026-10-09T00:00:00+00:00')

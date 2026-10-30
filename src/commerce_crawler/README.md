@@ -140,6 +140,7 @@ python -m product_collector.prune --output <수집기 --output 경로> --apply  
 
 - `run_config.json`과 `checkpoint_state.json`이 있고 상태가 `completed`
 - 적재기가 운영 원본 DB 적재 성공 뒤 실행 디렉터리에 남긴 `pipeline_loaded.json`이 확인됨: `schema_version` 1, 정해진 필드(`job_id`, `snapshot_id`, `ingestion_run_id`, `target`, `loaded_at`, `result`, `products`, `raw_confirmed`, `failed`, `image_relations_unavailable`, `gallery_missing`)가 모두 있고, `job_id`가 `run_config.json`·`checkpoint_state.json`과 같고, `target`이 `production`, `failed`가 0, `raw_confirmed`가 `products`와 같음. 하나라도 아니면 `not_loaded`로 남긴다. 적재기가 이 파일을 쓰기 전까지는 아무것도 지우지 않는다
+- 표시의 `inputs`(적재기가 봉인한 원본 파일별 sha256: `product_raw.jsonl`, `products.jsonl`, `run_report.json`, 있으면 `gallery_report.json`, 사진 운영이면 `media/products_with_local_images.jsonl`)가 지금 파일과 같음. 적재 뒤 수동 재개·사진 재시도로 원본이 바뀌었거나 `inputs`가 없으면 `loaded_inputs_changed`로 남기고 사진도 지우지 않는다. 사진 바이트는 `inputs`가 아니라 사진 정리 뒤에도 대조는 그대로다
 - `active_run.json`이 가리키는 진행 중 실행이 아니고, 다른 실행 루트에서 `--resume-from`으로 재개 중이어서 실행의 `writer.lock`이 잡혀 있지도 않음(`in_use`)
 - 남는 실행(내보낸 스냅샷·재추출 결과)의 `run_report.detail_evidence_dirs`가 가리키지 않음. 같은 실행 루트 안의 참조만 확인한다
 
@@ -275,7 +276,7 @@ tick 한 번의 순서: 완료됐는데 인계되지 않은 실행의 인계 파
 
 - **새 실행:** 진행 중인 실행이 없고, 마지막 completed 실행 시작 + 7일과 그 완료 + 24시간이 모두 지났을 때. `release --start-now`는 이 조건을 한 번 건너뛴다.
 - **결과별 다음 동작:** interrupted는 다음 tick 재개. crashed(결과 줄 없음)·failed는 1시간 뒤 재개, 같은 원인이 연속 2회면 운영자 대기. 403/429 차단은 6시간 → 24시간 뒤 재개, 연속 3회면 운영자 대기. 목록 통신 오류·상세 실패율은 1시간 뒤 1회 재개. 템플릿 만료 의심, 사진 partial, quality_failed, 예산, 시작 거부(종료 3), 분류 안 됨은 바로 운영자 대기. 시작 후 10일이 지나도 운영자 대기(`release`가 3일 연장).
-- **인계:** completed 실행이 조건(checkpoint·report completed, `writer.lock` 해제, 사진 manifest와 `download_report.finished_at`, 운영자 대기·포기 아님, 상한 없는 운영 수집)을 모두 만족하면 `<output>/handoff/<job_id>.json`을 한 번만 만든다(임시 파일 fsync 뒤 `os.link`). 인계 파일이 있고 적재 표시(`pipeline_loaded.json`)가 없는 실행은 `abandon`이 거부하고 `prune --prune-abandoned`도 지우지 않는다(`handoff_pending`).
+- **인계:** completed 실행이 조건(checkpoint·report completed, `writer.lock` 해제, 사진 manifest와 `download_report.finished_at`, 운영자 대기·포기 아님, 상한 없는 운영 수집)을 모두 만족하면 `<output>/handoff/<job_id>.json`을 한 번만 만든다(임시 파일 fsync 뒤 `os.link`). 인계 파일이 있고 적재 표시(`pipeline_loaded.json`)가 없는 실행은 `abandon`이 거부하고 `prune --prune-abandoned`도 지우지 않는다(`handoff_pending`). 인계 파일의 `run_dir`는 절대경로, `media_manifest`는 `run_dir` 기준 상대경로다. 인계 단계의 실패 기록(`handoff/<job_id>.failed`)이 있으면 `handoff_failed`, prune이 `loaded_inputs_changed`로 남긴 실행이 있으면 같은 이름의 경보를 `last.json`에 남긴다.
 - **상태 파일:** `<root>/launcher/state.json`(시도·백오프·운영자 대기·시작/완료 시각), `last.json`(마지막 결정, 모니터링용), 시도별 수집기 로그 `<root>/logs/<job_id|new>/<시각>-<시도>.log`.
 - **종료 코드(tick):** 0 판단 완료(대기·운영자 대기 포함, `last.json`의 `status`로 구분), 1 실행기 예외, 3 제어 파일·설치 오류. 모든 명령은 마지막 줄에 JSON 한 줄을 낸다.
 - **멈추기:** NiFi 서비스는 정지·재시작 때 감독과 수집기에 SIGTERM을 보낸다. 수집기는 SIGTERM을 Ctrl+C처럼 처리해 interrupted로 저장하고, 다음 tick이 재개한다. 사람이 멈출 때는 `HOLD` 파일을 두고 `stop`을 쓴다.
