@@ -420,6 +420,22 @@ class OutcomeTests(unittest.TestCase):
             with launcher_module.try_lock(Path('unused')) as got:
                 self.assertFalse(got)
 
+    def test_a_new_release_with_the_same_categories_resumes_but_changed_categories_wait(self):
+        with tempfile.TemporaryDirectory() as root:
+            h = Harness(root)
+            self.interrupted_run(h, status='interrupted', result='interrupted', exit=130)
+            moved = h.root / 'release2' / 'config' / 'danawa_categories_71.json'
+            moved.parent.mkdir(parents=True)
+            moved.write_text('[]')
+            h.write_control({**h.control, 'categories': str(moved)})
+            h.scenario({'collector': {}})
+            self.assertEqual(h.tick()[1]['kind'], 'resume')
+        with tempfile.TemporaryDirectory() as root:
+            h = Harness(root)
+            self.interrupted_run(h, status='interrupted', result='interrupted', exit=130)
+            Path(h.control['categories']).write_text('[{"category_id": "2"}]')
+            self.assertEqual(h.tick()[1]['reason'], 'fixed_options_changed')
+
     def test_fixed_options_change_and_ten_days_wait_for_the_operator(self):
         with tempfile.TemporaryDirectory() as root:
             h = Harness(root)

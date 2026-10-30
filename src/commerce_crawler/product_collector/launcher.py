@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -255,6 +256,15 @@ class Launcher:
         job = config.get('job_id') if isinstance(config, dict) else None
         return job if isinstance(job, str) and job else None
 
+    def fixed_options(self) -> dict:
+        value = {k: self.control.get(k) for k in FIXED}
+        # The categories file moves with every release: compare what it says, not where it lies.
+        try:
+            value['categories'] = 'sha256:' + hashlib.sha256(Path(value['categories']).read_bytes()).hexdigest()
+        except (OSError, TypeError):
+            pass
+        return value
+
     @staticmethod
     def status_of(directory: Path) -> str | None:
         state = read_json(directory / 'checkpoint_state.json')
@@ -327,7 +337,7 @@ class Launcher:
                 self.alert('handoff_mismatch', job_id=job, handoff=str(final))
                 return 'mismatch'
             return 'exists'
-        fixed = (state['runs'].get(job) or {}).get('fixed') or {k: self.control.get(k) for k in FIXED}
+        fixed = (state['runs'].get(job) or {}).get('fixed') or self.fixed_options()
         value = {'schema_version': HANDOFF_SCHEMA, 'job_id': job, 'run_dir': str(directory.resolve()),
                  'media_manifest': 'media/products_with_local_images.jsonl',  # relative to run_dir
                  'created_at': iso(self.now()),
@@ -691,7 +701,7 @@ class Launcher:
                 state['operator_wait'] = {'reason': 'max_run_days', 'at': iso(now), 'target': job}
                 return {'action': 'operator_wait', 'reason': 'max_run_days', 'job_id': job}
             fixed = entry.get('fixed')
-            if fixed and fixed != {k: self.control.get(k) for k in FIXED}:
+            if fixed and fixed != self.fixed_options():
                 state['operator_wait'] = {'reason': 'fixed_options_changed', 'at': iso(now), 'target': job}
                 return {'action': 'operator_wait', 'reason': 'fixed_options_changed', 'job_id': job}
             for hold in (entry.get('next_at'), pre.get('next_at')):
@@ -887,7 +897,7 @@ class Launcher:
             if job:
                 # A collector that ended between two polls was never noted while it ran.
                 entry = state['runs'].setdefault(job, {})
-                entry.setdefault('fixed', {k: self.control.get(k) for k in FIXED})
+                entry.setdefault('fixed', self.fixed_options())
                 if kind == 'new' and not entry.get('started_at'):
                     entry['started_at'] = record.get('started_at')
             outcome, detail = self.classify(code, line, directory)
@@ -917,7 +927,7 @@ class Launcher:
             entry = state['runs'].setdefault(job, {})
             if kind == 'new' and not entry.get('started_at'):
                 entry['started_at'] = record['started_at']
-            entry.setdefault('fixed', {k: self.control.get(k) for k in FIXED})
+            entry.setdefault('fixed', self.fixed_options())
             if not entry.get('started_at'):
                 started = utc((read_json(directory / 'run_report.json') or {}).get('started_at'))
                 if started:
