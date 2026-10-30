@@ -60,7 +60,7 @@ python -m product_collector.audit_assets --run "data/danawa/<job_id>" --limit 3
 | source, product_id | 부모 상품과 일치하는 연결 키 |
 | filename, local_path, category_paths | 파일명·media 기준 상대 경로·카테고리별 경로 |
 | sha256, bytes, width, height, format, extension | 실제 받은 파일에서 측정한 값 |
-| status | downloaded/failed/pending/budget_exhausted/stopped_after_block 등 |
+| status | downloaded/stored/failed/pending/budget_exhausted/stopped_after_block 등. stored는 Object Storage에 이미 있는 사진으로 로컬 파일이 없다(`--image-store-config`를 켠 실행만) |
 | downloaded_at | 다운로드 성공 시각. 실패·대기에는 없을 수 있음 |
 | error | 실패 사유. 성공에는 없을 수 있음 |
 
@@ -72,6 +72,8 @@ media/
   categories/<category_id>/danawa/<product_id>/<filename>
   products_with_local_images.jsonl
   image_downloads.jsonl
+  image_settings.json      # 이미지 단계 설정·재시도 규칙 버전 고정
+  image_retry.json         # 실행 안 재시도 횟수
   download_report.json
   verification_report.json  # 검증 함수를 실행한 경우
 ```
@@ -86,13 +88,25 @@ media/
 - 캐시 파일에서 카테고리 경로로 하드링크를 시도하고 지원되지 않으면 복사한다. 둘은 같은 파일 내용이지만 물리 저장 방식이 다를 수 있다.
 - 캐시는 자동 만료하지 않는다. URL 내용 최신성이나 변경 여부를 HTTP 조건부 요청으로 확인하는 기능은 없다.
 
-기본 요청 시작 간격은 1초, 타임아웃 20초, 한 이미지 최대 20MiB다. 리다이렉트 추적·자동 재시도는 하지 않는다. HTTP 403/429 후 새 이미지 요청을 중단한다. 실패해도 URL·상품 연결과 사유를 남긴다.
+기본 요청 시작 간격은 1초, 타임아웃 20초, 한 이미지 최대 20MiB다. 리다이렉트는 추적하지 않는다. HTTP 403/429 후 새 이미지 요청을 중단한다. 실패해도 URL·상품 연결과 사유를 남긴다. 일시 실패의 재시도는 아래 '진행 저장과 실패 재시도'를 따른다.
 
 ## 진행 저장과 실패 재시도
 
 URL 처리 이력은 이미지마다 append한다. 전체 상품 manifest와 다운로드 집계는 25개 URL마다, 정상 종료 및 처리 가능한 중단의 finally에서 갱신한다. 강제 종료 직후에는 이력과 manifest의 갱신 시점이 다를 수 있으며, 같은 입력·출력·캐시로 다시 실행해 복구한다.
 
 다운로드된 파일이 전부 성공한 상품만 image_download_status=completed다. 하나라도 실패·대기이면 partial, 갤러리 자체가 없으면 gallery_missing이다. 실패 URL을 같은 media 명령으로 재실행하면 재시도하며 정상 파일은 재사용한다.
+
+메인 CLI는 본 다운로드가 정상으로 끝나면, 최종 manifest를 쓰기 전에 이번 실행의 일시 실패(타임아웃·연결·DNS·5xx) URL을 60초, 300초 뒤 최대 2회 더 시도한다. 시도 횟수는 `media/image_retry.json`에 남아 재개해도 2회를 넘지 않는다. 예외·중단 정리 경로에서는 재시도하지 않는다.
+
+이미지 단계 결과(`download_report.json`의 result)는 상품 단위 상태가 아니라 URL 비율로 판정한다.
+
+- 분모는 최종 입력 상품들의 고유 사진 URL 전체다. 일시 실패와 내부 무결성 오류가 1% 이하면 completed다. 분모가 50 미만이면 하나라도 남으면 partial이다.
+- 사이트에 사진이 없는 경우(403·408·429를 뺀 4xx, 이미지 아님, 크기 초과)는 판정에서 빼고 비율만 기록한다. 5%를 넘으면 경보(`image_permanent_failures`)를 남긴다.
+- 준비 미완료, 403/429 차단, 예산 때문에 시도하지 못한 URL, 중단은 비율과 관계없이 partial이다.
+- 갤러리 없는 상품은 이 판정을 막지 않는다. 갤러리 확보율은 품질 관문이 판정한다.
+- 저장소 확인이 오류였고 이전 성공 기록이 있는 사진이 재시도 뒤에도 일시 실패면, manifest에만 마지막 성공 메타데이터로 stored를 쓰고 `storage_unverified: true`를 붙인다.
+
+규칙은 `RETRY_POLICY_VERSION` 2로 묶여 `image_settings.json`에 고정된다. 이전 버전으로 시작한 실행은 재개를 거부한다(종료 코드 3). 설계 근거는 루트 `crawler-optimization/image-retry.md`다.
 
 메인 CLI의 수집 OS 잠금은 이미지 단계까지 유지되는 잠금이 아니다. standalone media에도 프로세스 중복 실행을 막는 자체 잠금은 없다. gallery_assets는 자신의 output/pipeline.lock을 별도로 사용하며 강제 종료 시 남을 수 있다. 이 lock은 체크포인트의 OS 잠금과 다르므로 프로세스 종료를 확인한 뒤 대응한다. 공유 캐시도 한 작성자만 사용한다.
 
