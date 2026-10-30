@@ -94,8 +94,11 @@ def field_coverage(rows) -> dict:
 
 def raw_projection(raw: dict) -> dict:
     """What run_result, detail_failures and the reuse summary read of a raw record."""
+    detail = raw["payload"].get("detail") or {}
     return {"product_id": raw["product_id"], "detail_status": raw["detail_status"],
-            "detail_reused_from": raw.get("detail_reused_from")}
+            "detail_reused_from": raw.get("detail_reused_from"), "listing_fingerprint": raw.get("listing_fingerprint"),
+            "extractor_version": raw.get("extractor_version"), "detail_at": detail.get("collected_at"),
+            "listed_at": raw.get("collected_at")}  # when this run first listed it: a resume does not move it
 
 
 class StoredRecords(Sequence):
@@ -557,11 +560,13 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
         # Recorded in every mode so the next run can tell whether this product changed.
         fingerprint = record["listing_fingerprint"] = adapter.listing_fingerprint(record["payload"]["listings"])
         record.pop("detail_reused_from", None)
-        reused = detail_reuse.reuse(record, fingerprint, checkpoint.directory if checkpoint else None) if detail_reuse else None
-        if reused is not None:
+        found = (detail_reuse.reuse_from(record, fingerprint, checkpoint.directory if checkpoint else None)
+                 if detail_reuse and detail_reuse.mode == "changed" else None)
+        if found is not None:
+            reused, provider = found
             record["payload"]["detail"] = reused
             record["detail_status"], record["detail_error"] = "ok", None
-            record["detail_reused_from"] = {"job_id": detail_reuse.base_job_id, "collected_at": reused["collected_at"]}
+            record["detail_reused_from"] = {"job_id": provider, "collected_at": reused["collected_at"]}
             persist([record])
             if on_product:
                 on_product(key)
@@ -623,7 +628,7 @@ def collect(adapter: Adapter, client: RequestClient, categories: list[Category],
             coverage.add(normalized[-1])
             raw_rows.append(raw_projection(record))
     if detail_reuse is not None:
-        report["detail_reuse"] = detail_reuse.summary(raw_rows)
+        report["detail_reuse"] = detail_reuse.summary(raw_rows, getattr(checkpoint, "output", None), utc_now())
     report.update(finished_at=utc_now(), product_count=len(keys), request_count=len(previous_requests) + len(client.attempts),
                   requests=previous_requests + list(client.attempts), field_coverage=coverage.result(),
                   result=run_result(report, raw_rows, categories_incomplete(report["categories"])))

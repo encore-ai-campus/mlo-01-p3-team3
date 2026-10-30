@@ -145,8 +145,10 @@ def reuse_summary(directory: Path, report) -> dict:
         if status in REQUESTED and not was_reused:
             requested[product_id] = fingerprint
     summary = {'detail_status': dict(statuses), 'reused': reused, 'detail_requested': len(requested),
-               **{k: v for k, v in (report.get('detail_reuse') or {}).items() if k in ('mode', 'base_job_id', 'sampled',
-                                                                                      'sample_size', 'base_missing')}}
+               **{k: v for k, v in (report.get('detail_reuse') or {}).items() if k in (
+                   'mode', 'base_job_id', 'sampled', 'sample_size', 'base_missing', 'other_job_ids', 'candidates',
+                   # Stage 1 of the follow-up (detail-refresh.md): what reuse would catch, and what the root had seen.
+                   'funnel', 'new_products')}}
     base = (report.get('detail_reuse') or {}).get('base_dir')
     if base and (Path(base) / 'product_raw.jsonl').is_file():
         # Why each requested product was asked for: absent from the base run, changed, or neither (sample,
@@ -234,6 +236,9 @@ KEY_VALUES = (('run', 'hours'), ('run', 'collect_hours'), ('run', 'products'), (
               ('images', 'external_rate'), ('images', 'stop_reason'), ('images', 'span_hours'),
               ('images', 'overlap_hours'), ('images', 'sequential_hours'), ('images', 'combined_hours'),
               ('reuse', 'detail_requested'), ('reuse', 'reused'), ('reuse', 'sampled'), ('reuse', 'requested_because'),
+              ('reuse', 'mode'), ('reuse', 'funnel', 'unchanged'), ('reuse', 'funnel', 'reused_from_other'),
+              ('reuse', 'new_products', 'new_to_base'), ('reuse', 'new_products', 'seen_before'),
+              ('reuse', 'new_products', 'same_fingerprint'), ('reuse', 'new_products', 'weeks_since_listed'),
               ('disk', 'run_gb'), ('disk', 'details_gb'), ('disk', 'media_images_gb'), ('disk', 'free_gb'),
               ('rss', 'peak_rss_mb'))
 

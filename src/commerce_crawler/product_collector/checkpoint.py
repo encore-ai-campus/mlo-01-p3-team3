@@ -355,6 +355,7 @@ def open_collection(output, adapter, config, resume_from=None, new_run=False, pr
             if resuming and saved.is_file() and json.loads(saved.read_text(encoding='utf-8')).get('status') == ABANDONED:
                 raise ValueError(f'포기한 실행은 재개하지 않습니다. 새 실행은 --new-run으로 시작해주세요: {directory}')
             store = CollectionCheckpoint(directory, adapter, config, progress=progress, repair_files=repair_files)
+            store.output = output  # shared files of the root (detail observation index) are written under the lock
             atomic_json(active, {'directory': str(directory.resolve())})
             try:
                 yield store

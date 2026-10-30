@@ -316,11 +316,15 @@ def main() -> int:
             print(f"[실시간 저장] {destination.resolve()}", flush=True)
             print(f"[재개] python run_collector.py --resume-from \"{destination.resolve()}\"", flush=True)
             reuse = None
-            if args.detail_refresh == "changed":
-                reuse = DetailReuse.open(destination, args.output, adapter.source, checkpoint.job_id, args.refresh_sample)
-                print(f"[상세 재사용] 기준 실행 {reuse.base_job_id} / 상품 {len(reuse.index)}개 / 표본 {args.refresh_sample}개"
-                      if reuse.base else f"[상세 재사용] 기준 실행이 정리되어 남은 상세를 모두 요청합니다: {reuse.base_missing}"
-                      if reuse.base_missing else "[상세 재사용] 완료된 이전 실행이 없어 모든 상세를 요청합니다", flush=True)
+            if args.detail_refresh == "changed" or not args.listing_only:
+                # "all" opens it too: nothing is reused, but the report counts what "changed" would reuse.
+                reuse = DetailReuse.open(destination, args.output, adapter.source, checkpoint.job_id, args.refresh_sample,
+                                         args.detail_refresh)
+                label = "상세 재사용" if args.detail_refresh == "changed" else "상세 재사용 측정(all: 재사용 안 함)"
+                print(f"[{label}] 기준 실행 {reuse.base_job_id} / 상품 {len(reuse.index)}개 / 이전 실행 {len(reuse.runs) - 1}개에서 "
+                      f"{len(reuse.fallback)}개 / 표본 {args.refresh_sample}개"
+                      if reuse.base else f"[{label}] 기준 실행이 정리되어 남은 상세를 모두 요청합니다: {reuse.base_missing}"
+                      if reuse.base_missing else f"[{label}] 완료된 이전 실행이 없어 모든 상세를 요청합니다", flush=True)
             images = ImageResources()
 
             def image_options():

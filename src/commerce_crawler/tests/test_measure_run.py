@@ -110,8 +110,13 @@ class MeasureRunTests(unittest.TestCase):
             run = Path(root) / 'new'
             rows = [raw('1', fingerprint='v2:a', reused=True), raw('2', fingerprint='v2:changed'),
                     raw('3', fingerprint='v2:c'), raw('4', status='request_failed'), raw('5', status='not_needed')]
-            write_run(run, report(detail_reuse={'mode': 'changed', 'base_dir': str(base), 'sampled': 1}), rows)
+            funnel = {'needed': 4, 'base_listed': 3, 'other_listed': 0, 'unchanged': 2, 'sampled': 1, 'reused': 1,
+                      'reused_from_other': 0}
+            write_run(run, report(detail_reuse={'mode': 'changed', 'base_dir': str(base), 'sampled': 1, 'funnel': funnel,
+                                                'new_products': {'new_to_base': 1, 'first_seen': 1}}), rows)
             reuse = measure_run.measure(run)['reuse']
+            self.assertEqual((reuse['funnel'], reuse['new_products']['first_seen']), (funnel, 1))
+            self.assertIn('reuse.funnel.unchanged	2', measure_run.table([measure_run.measure(run)]))
             self.assertEqual((reuse['reused'], reuse['detail_requested'], reuse['sampled']), (1, 3, 1))
             self.assertEqual(reuse['requested_because'], {'changed': 1, 'same_fingerprint': 1, 'new': 1})
             self.assertEqual(reuse['detail_status'], {'ok': 3, 'request_failed': 1, 'not_needed': 1})

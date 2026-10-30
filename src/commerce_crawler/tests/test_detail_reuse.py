@@ -11,7 +11,7 @@ from product_collector import quality
 from product_collector.checkpoint import open_collection
 from product_collector.core import Category, RequestClient, collect
 from product_collector.danawa import DanawaAdapter, listing_fingerprint
-from product_collector.detail_reuse import REUSE_FILE, DetailReuse, find_base
+from product_collector.detail_reuse import REUSE_FILE, SEEN_FILE, DetailReuse, find_base, observe
 from product_collector.reprocess import reprocess_run
 from product_collector.storage import detail_html_path
 from test_gallery_assets import gallery
@@ -52,8 +52,8 @@ class Interrupted(PagingSession):
 
 
 class DetailReuseTests(unittest.TestCase):
-    def run_once(self, root, products, details, sample=None, resume_from=None, stop=None):
-        """One collection as __main__ runs it; sample=None is the "all" mode."""
+    def run_once(self, root, products, details, sample=None, resume_from=None, stop=None, measure=False):
+        """One collection as __main__ runs it; sample=None is the "all" mode (measure: with its reuse counts)."""
         adapter = DanawaAdapter(templates())
         config = dict(CONFIG)
         if sample is not None:
@@ -63,7 +63,8 @@ class DetailReuseTests(unittest.TestCase):
         client = RequestClient(None, interval=0, session=session)
         with open_collection(Path(root), adapter, config, resume_from, new_run=resume_from is None) as store:
             reuse = (DetailReuse.open(store.directory, Path(root), 'danawa', store.job_id, sample)
-                     if sample is not None else None)
+                     if sample is not None else
+                     DetailReuse.open(store.directory, Path(root), 'danawa', store.job_id, 0, 'all') if measure else None)
             raw, normalized, report = collect(adapter, client, [CATEGORY], total_limit=None, checkpoint=store,
                                               detail_reuse=reuse)
             quality.apply(report, normalized, 'warn', {str(r['product_id']) for r in raw if r.get('detail_reused_from')})
@@ -181,6 +182,84 @@ class DetailReuseTests(unittest.TestCase):
             self.assertEqual(raw['11']['detail_reused_from']['job_id'], first.name)  # kept, with its own evidence
             self.assertEqual(report['detail_reuse']['base_missing'], str(first.resolve()))
             self.assertEqual(report['result'], 'completed')
+
+    def test_a_product_the_base_does_not_list_comes_from_an_older_run_but_a_turned_down_one_does_not(self):
+        with tempfile.TemporaryDirectory() as root:
+            # Runs in "all" mode still keep the observation index, as __main__ runs them.
+            oldest, *_ = self.run_once(root, [api(c) for c in ('11', '12', '13')],
+                                       {page(c): gallery(c, 2)[0] for c in ('11', '12', '13')}, measure=True)
+            # The base drops 13 (rank churn) and saw 12 under another name.
+            base, *_ = self.run_once(root, [api('11'), api('12', name={'full': '잠시 바뀐 이름'})],
+                                     {page(c): gallery(c, 2)[0] for c in ('11', '12')}, measure=True)
+            details = {page(c): gallery(c, 2)[0] for c in ('11', '12', '13')}
+            third, raw, report, requested = self.run_once(root, [api(c) for c in ('11', '12', '13')], details, sample=0)
+            self.assertEqual(requested, ['12'])  # the base turned 12 down: no fallback to the oldest run
+            self.assertEqual(raw['11']['detail_reused_from']['job_id'], base.name)
+            self.assertEqual(raw['13']['detail_reused_from']['job_id'], oldest.name)
+            self.assertTrue(detail_html_path(third, '13', raw['13']['detail_reused_from']['collected_at']).is_file())
+            saved = json.loads((third / REUSE_FILE).read_text(encoding='utf-8'))
+            self.assertEqual((saved['other_dirs'], saved['candidates']), ([str(oldest.resolve())], 3))
+            summary = report['detail_reuse']
+            self.assertEqual(summary['other_job_ids'], [oldest.name])
+            self.assertEqual(summary['funnel'], {'needed': 3, 'base_listed': 2, 'other_listed': 1, 'unchanged': 2,
+                                                 'sampled': 0, 'reused': 2, 'reused_from_other': 1})
+            # 13 was new to the base but listed (with its detail) by the oldest run.
+            self.assertEqual(summary['new_products']['new_to_base'], 1)
+            self.assertEqual((summary['new_products']['seen_before'], summary['new_products']['same_fingerprint']), (1, 1))
+
+    def test_the_sample_is_drawn_over_every_reuse_candidate_fixed_on_the_first_start(self):
+        with tempfile.TemporaryDirectory() as root:
+            first, *_ = self.first(root, plain=())
+            older = DetailReuse(first, 'job-a', 2)
+            both = DetailReuse(first, 'job-a', 2, candidates=10)
+            draws = [str(c) for c in range(2000)]
+            self.assertLess(sum(map(both.sampled, draws)), sum(map(older.sampled, draws)))
+            self.assertEqual(older.candidates, 5)
+
+    def test_all_mode_reuses_nothing_but_counts_what_changed_would_reuse_and_keeps_the_observation_index(self):
+        codes = ('11', '12', '13')
+        with tempfile.TemporaryDirectory() as root:
+            self.first(root, codes, plain=())
+            details = {page(c): gallery(c, 2)[0] for c in codes + ('16',)}
+            _, raw, report, requested = self.run_once(root, [api(c) for c in codes + ('16',)], details, measure=True)
+            self.assertEqual(requested, ['11', '12', '13', '16'])
+            self.assertFalse(any(r.get('detail_reused_from') for r in raw.values()))
+            summary = report['detail_reuse']
+            self.assertEqual((summary['mode'], summary['funnel']['unchanged'], summary['funnel']['reused']), ('all', 3, 0))
+            self.assertEqual((summary['new_products']['new_to_base'], summary['new_products']['first_seen']), (1, 1))
+            seen = [json.loads(line) for line in (Path(root) / SEEN_FILE).read_text(encoding='utf-8').splitlines()]
+            self.assertEqual(sorted(e['product_id'] for e in seen), ['11', '12', '13', '16'])
+            self.assertTrue(all(e['source'] == 'danawa' and e['detail_at'] and e['fingerprint'] for e in seen))
+
+    def test_the_observation_index_counts_the_same_when_a_job_repeats_it(self):
+        with tempfile.TemporaryDirectory() as root:
+            rows = [{'product_id': '1', 'detail_status': 'ok', 'listing_fingerprint': 'v2:a', 'detail_at': '2026-10-01T00:00:00+00:00'},
+                    {'product_id': '2', 'detail_status': 'request_failed', 'listing_fingerprint': 'v2:b', 'detail_at': None}]
+            observe(Path(root), 'danawa', rows, 'job-1', '2026-10-01T00:00:00+00:00', set())
+            later = [dict(rows[0], listing_fingerprint='v2:z'), rows[1],
+                     {'product_id': '3', 'detail_status': 'ok', 'listing_fingerprint': 'v2:c', 'detail_at': None}]
+            counts = observe(Path(root), 'danawa', later, 'job-2', '2026-10-22T00:00:00+00:00', {'1', '2', '3'})
+            # A newer run observes in between with a newer detail; the resumed job-2, a week later, still counts
+            # against its own start and does not move the index back.
+            newer = [dict(rows[0], listing_fingerprint='v2:n', detail_at='2026-10-24T00:00:00+00:00')]
+            observe(Path(root), 'danawa', newer, 'job-x', '2026-10-25T00:00:00+00:00', set())
+            again = observe(Path(root), 'danawa', later, 'job-2', '2026-11-05T00:00:00+00:00', {'1', '2', '3'})
+            self.assertEqual(counts, again)
+            seen = {e['product_id']: e for e in map(json.loads, (Path(root) / SEEN_FILE).read_text(encoding='utf-8').splitlines())}
+            self.assertEqual((seen['1']['detail_at'], seen['1']['fingerprint']), ('2026-10-24T00:00:00+00:00', 'v2:n'))
+            # The listing time is the record's own, not the time a resume ended.
+            observe(Path(root), 'danawa', [dict(rows[1], listed_at='2026-11-02T00:00:00+00:00')], 'job-4',
+                    '2026-11-20T00:00:00+00:00', set())
+            seen = {e['product_id']: e for e in map(json.loads, (Path(root) / SEEN_FILE).read_text(encoding='utf-8').splitlines())}
+            self.assertEqual(seen['2']['listed_at'], '2026-11-05T00:00:00+00:00')  # job-2's later one stays
+            observe(Path(root), 'danawa', [dict(rows[1], listed_at='2026-11-09T00:00:00+00:00')], 'job-5',
+                    '2026-11-30T00:00:00+00:00', set())
+            seen = {e['product_id']: e for e in map(json.loads, (Path(root) / SEEN_FILE).read_text(encoding='utf-8').splitlines())}
+            self.assertEqual(seen['2']['listed_at'], '2026-11-09T00:00:00+00:00')
+            self.assertEqual(counts, {'new_to_base': 3, 'first_seen': 1, 'seen_before': 2,
+                                      'weeks_since_listed': {'2_4': 2}, 'with_ok_detail': 1, 'same_fingerprint': 0})
+            # Another source in the same root is a different product.
+            self.assertEqual(observe(Path(root), 'other', rows[:1], 'job-3', '2026-10-23T00:00:00+00:00', {'1'})['first_seen'], 1)
 
     def test_base_is_the_newest_completed_detail_run_of_the_source(self):
         with tempfile.TemporaryDirectory() as root:
